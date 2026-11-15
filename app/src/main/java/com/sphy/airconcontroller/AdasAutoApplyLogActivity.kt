@@ -54,7 +54,7 @@ class AdasAutoApplyLogActivity : OpenDiKeyActivity() {
 
     private fun copyLog() {
         getSystemService(ClipboardManager::class.java)
-            .setPrimaryClip(ClipData.newPlainText("Open DiKey ADAS auto-apply log", currentText()))
+            .setPrimaryClip(ClipData.newPlainText("Sharktooth ADAS auto-apply log", currentText()))
         Snackbar.make(logText, R.string.adas_log_copied, Snackbar.LENGTH_LONG).show()
     }
 
@@ -66,7 +66,7 @@ class AdasAutoApplyLogActivity : OpenDiKeyActivity() {
         val send = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, "Open DiKey ADAS auto-apply log")
+            putExtra(Intent.EXTRA_SUBJECT, "Sharktooth ADAS auto-apply log")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         try {

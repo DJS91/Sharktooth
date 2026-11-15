@@ -1,6 +1,6 @@
 # Autostart on DiLink 5 — status and limitations
 
-Open DiKey restarts itself after DiLink force-stops it, using a system-bound
+Sharktooth restarts itself after DiLink force-stops it, using a system-bound
 `NotificationListenerService` as a wake hook. Once the app has been opened once
 with ADB available (so its local-ADB setup can approve the listener), no user
 action is needed to bring the process back.
@@ -16,7 +16,7 @@ cold boot.
 
 | Situation | What happens |
 | --- | --- |
-| User opens Open DiKey | `DiKeyListenService` starts; USB/BLE connect; local ADB setup re-approves the listener |
+| User opens Sharktooth | `DiKeyListenService` starts; USB/BLE connect; local ADB setup re-approves the listener |
 | App in background (same session) | Foreground service keeps listening |
 | Vehicle standby (CarPowerService force-stop) | system_server sees the listener binding die and immediately re-creates the process (~50 ms in tests); `OpenDiKeyApp.onCreate` restarts `DiKeyListenService` and `AdbKeepAlive` |
 | Cold boot | Expected: NotificationManagerService binds approved listeners after boot, starting the process. Needs a real reboot test |

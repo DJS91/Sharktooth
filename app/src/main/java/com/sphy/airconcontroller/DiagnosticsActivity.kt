@@ -105,7 +105,7 @@ class DiagnosticsActivity : OpenDiKeyActivity() {
 
     private fun copyToClipboard(text: String) {
         getSystemService(ClipboardManager::class.java)
-            .setPrimaryClip(ClipData.newPlainText("Open DiKey diagnostics", text))
+            .setPrimaryClip(ClipData.newPlainText("Sharktooth diagnostics", text))
     }
 
     private fun copyReport() {
@@ -120,7 +120,7 @@ class DiagnosticsActivity : OpenDiKeyActivity() {
         val send = Intent(Intent.ACTION_SEND).apply {
             type = "text/plain"
             putExtra(Intent.EXTRA_STREAM, uri)
-            putExtra(Intent.EXTRA_SUBJECT, "Open DiKey diagnostics")
+            putExtra(Intent.EXTRA_SUBJECT, "Sharktooth diagnostics")
             addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
         }
         try {

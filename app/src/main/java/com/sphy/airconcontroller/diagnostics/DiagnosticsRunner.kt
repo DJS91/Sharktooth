@@ -103,7 +103,7 @@ class DiagnosticsRunner(
             }
             line("(took ${SystemClock.elapsedRealtime() - start} ms)")
         }
-        return buildReport("Open DiKey diagnostics")
+        return buildReport("Sharktooth diagnostics")
     }
 
     /**
@@ -120,7 +120,7 @@ class DiagnosticsRunner(
             line("bind failed: ${ac.lastBindError}")
             check(Status.FAIL, "AC bind", ac.lastBindError ?: "unknown")
             acServiceWriteTest(onProgress)
-            return buildReport("Open DiKey climate write test")
+            return buildReport("Sharktooth climate write test")
         }
         val before = ac.snapshot()
         line("Before:")
@@ -176,7 +176,7 @@ class DiagnosticsRunner(
         line("After:")
         line(ac.snapshot().toDisplayString().prependIndent("  "))
         acServiceWriteTest(onProgress)
-        return buildReport("Open DiKey climate write test")
+        return buildReport("Sharktooth climate write test")
     }
 
     /**

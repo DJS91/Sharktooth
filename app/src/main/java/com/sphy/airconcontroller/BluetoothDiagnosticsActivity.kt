@@ -144,7 +144,7 @@ class BluetoothDiagnosticsActivity : OpenDiKeyActivity() {
 
     private fun refresh() {
         checks = buildString {
-            appendLine("Open DiKey ${AppUpdater.currentVersionName(this@BluetoothDiagnosticsActivity)}")
+            appendLine("Sharktooth ${AppUpdater.currentVersionName(this@BluetoothDiagnosticsActivity)}")
             appendLine("Report time: ${Date()}")
             appendLine("Android ${Build.VERSION.RELEASE}, SDK ${Build.VERSION.SDK_INT}")
             appendLine("Device: ${Build.MANUFACTURER} ${Build.MODEL}")
