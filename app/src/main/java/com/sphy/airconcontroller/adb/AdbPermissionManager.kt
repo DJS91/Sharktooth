@@ -81,6 +81,7 @@ object AdbPermissionManager {
         "android.permission.BYDAUTO_ENERGY_GET",
         "android.permission.BYDAUTO_INSTRUMENT_COMMON",
         "android.permission.BYDAUTO_INSTRUMENT_GET",
+        "android.permission.BYDAUTO_INSTRUMENT_SET",
     )
 
     private val BACKGROUND_LAUNCH_GRANTS = listOf(

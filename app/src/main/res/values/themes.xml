@@ -94,6 +94,7 @@
         <item name="android:clickable">false</item>
         <item name="android:focusable">false</item>
         <item name="android:minHeight">36dp</item>
+        <item name="android:paddingEnd">8dp</item>
         <item name="android:textColor">?attr/dkTextPrimary</item>
     </style>
 

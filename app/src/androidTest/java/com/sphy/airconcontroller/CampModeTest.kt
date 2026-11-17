@@ -6,7 +6,7 @@ import android.media.AudioManager
 import android.os.Build
 import android.widget.CheckBox
 import android.widget.Button
-import android.widget.LinearLayout
+import android.view.ViewGroup
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.sphy.airconcontroller.byd.BydAcController
@@ -77,8 +77,11 @@ class CampModeTest {
                 assertEquals(stop.currentTextColor, enable.currentTextColor)
                 assertEquals(stop.backgroundTintList, enable.backgroundTintList)
                 assertEquals(stop.textSize, enable.textSize, 0f)
-                val list = activity.findViewById<LinearLayout>(R.id.campModeChecklist)
-                val rows = (0 until list.childCount).map { list.getChildAt(it) as CheckBox }
+                val list = activity.findViewById<ViewGroup>(R.id.campModeChecklist)
+                val rows = (0 until list.childCount).flatMap { column ->
+                    val group = list.getChildAt(column) as ViewGroup
+                    (0 until group.childCount).map { group.getChildAt(it) as CheckBox }
+                }
                 val ids = listOf(R.id.campStepDikey, R.id.campStepBluetooth, R.id.campStepClimate, R.id.campStepWindows, R.id.campStepHeadlights,
                     R.id.campStepDrls, R.id.campStepMedia, R.id.campStepScreen)
                 assertEquals(ids, rows.map { it.id })

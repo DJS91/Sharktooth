@@ -63,59 +63,80 @@
 
         <LinearLayout
             android:id="@+id/campModeChecklist"
-            android:layout_width="wrap_content"
+            android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
-            android:orientation="vertical">
+            android:baselineAligned="false"
+            android:orientation="horizontal">
 
-            <CheckBox
-                android:id="@+id/campStepDikey"
-                style="@style/Widget.OpenDiKey.CampStep"
-                android:layout_width="wrap_content"
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="@string/camp_mode_step_dikey" />
-            <CheckBox
-                android:id="@+id/campStepBluetooth"
-                style="@style/Widget.OpenDiKey.CampStep"
-                android:layout_width="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <CheckBox
+                    android:id="@+id/campStepDikey"
+                    style="@style/Widget.OpenDiKey.CampStep"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_mode_step_dikey" />
+                <CheckBox
+                    android:id="@+id/campStepBluetooth"
+                    style="@style/Widget.OpenDiKey.CampStep"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_mode_step_bluetooth" />
+                <CheckBox
+                    android:id="@+id/campStepClimate"
+                    style="@style/Widget.OpenDiKey.CampStep"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_mode_step_climate" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="@string/camp_mode_step_bluetooth" />
-            <CheckBox
-                android:id="@+id/campStepClimate"
-                style="@style/Widget.OpenDiKey.CampStep"
-                android:layout_width="wrap_content"
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <CheckBox
+                    android:id="@+id/campStepWindows"
+                    style="@style/Widget.OpenDiKey.CampStep"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_mode_step_windows" />
+                <CheckBox
+                    android:id="@+id/campStepHeadlights"
+                    style="@style/Widget.OpenDiKey.CampStep"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_mode_step_headlights" />
+                <CheckBox
+                    android:id="@+id/campStepDrls"
+                    style="@style/Widget.OpenDiKey.CampStep"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_mode_step_drls" />
+            </LinearLayout>
+
+            <LinearLayout
+                android:layout_width="0dp"
                 android:layout_height="wrap_content"
-                android:text="@string/camp_mode_step_climate" />
-            <CheckBox
-                android:id="@+id/campStepWindows"
-                style="@style/Widget.OpenDiKey.CampStep"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/camp_mode_step_windows" />
-            <CheckBox
-                android:id="@+id/campStepHeadlights"
-                style="@style/Widget.OpenDiKey.CampStep"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/camp_mode_step_headlights" />
-            <CheckBox
-                android:id="@+id/campStepDrls"
-                style="@style/Widget.OpenDiKey.CampStep"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/camp_mode_step_drls" />
-            <CheckBox
-                android:id="@+id/campStepMedia"
-                style="@style/Widget.OpenDiKey.CampStep"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/camp_mode_step_media" />
-            <CheckBox
-                android:id="@+id/campStepScreen"
-                style="@style/Widget.OpenDiKey.CampStep"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:text="@string/camp_mode_step_screen" />
+                android:layout_weight="1"
+                android:orientation="vertical">
+                <CheckBox
+                    android:id="@+id/campStepMedia"
+                    style="@style/Widget.OpenDiKey.CampStep"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_mode_step_media" />
+                <CheckBox
+                    android:id="@+id/campStepScreen"
+                    style="@style/Widget.OpenDiKey.CampStep"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_mode_step_screen" />
+            </LinearLayout>
         </LinearLayout>
 
         <TextView

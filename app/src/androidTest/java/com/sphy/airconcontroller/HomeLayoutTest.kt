@@ -49,6 +49,33 @@ class HomeLayoutTest {
                 val stop = root.findViewById<View>(R.id.campModeStopWindows)
                 assertSame("STOP WINDOWS must stay outside the scrolling checklist", root, stop.parent)
                 assertTrue("STOP WINDOWS must stay on screen", stop.top >= 0 && stop.bottom <= root.height)
+                val checklist = root.findViewById<ViewGroup>(R.id.campModeChecklist)
+                val columns = (0 until checklist.childCount).map { checklist.getChildAt(it) as ViewGroup }
+                val rows = columns.map { column ->
+                    (0 until column.childCount).map { column.getChildAt(it) as android.widget.CheckBox }
+                }
+                assertEquals("Fill each column top-to-bottom, leaving the last slot empty",
+                    listOf(3, 3, 2), rows.map { it.size })
+                for (column in rows) {
+                    for ((above, below) in column.zipWithNext()) {
+                        assertTrue("Checklist rows must not overlap", above.bottom <= below.top)
+                    }
+                }
+                for ((left, right) in columns.zipWithNext()) {
+                    assertTrue("Checklist columns must not overlap", left.right <= right.left)
+                }
+                for (step in rows.flatten()) {
+                    assertTrue("Each checklist label needs visible width", step.width > step.compoundPaddingLeft + step.compoundPaddingRight)
+                    assertTrue("Wrapped labels must not be clipped",
+                        step.layout.height <= step.height - step.compoundPaddingTop - step.compoundPaddingBottom)
+                    val contentHeight = maxOf(
+                        step.minimumHeight, step.layout.height + step.compoundPaddingTop + step.compoundPaddingBottom,
+                        step.buttonDrawable?.minimumHeight ?: 0, step.background?.minimumHeight ?: 0,
+                    )
+                    assertTrue("Checkboxes must not retain height measured with zero-width text",
+                        step.height <= contentHeight + density)
+                    assertTrue(step.left >= 0 && step.right <= (step.parent as View).width && step.bottom <= checklist.height)
+                }
             }
         }
     }
@@ -77,7 +104,10 @@ class HomeLayoutTest {
                         android.widget.RadioButton(context) to expected, android.widget.EditText(context) to expected,
                         LayoutInflater.from(context).inflate(R.layout.activity_camp_tests, null)
                             .findViewById<TextView>(R.id.campTestDimOverlay) to expected,
-                    ) + (0 until checklist.childCount).map { (checklist.getChildAt(it) as TextView) to expected }
+                    ) + (0 until checklist.childCount).flatMap { column ->
+                        val group = checklist.getChildAt(column) as ViewGroup
+                        (0 until group.childCount).map { (group.getChildAt(it) as TextView) to expected }
+                    }
                     for ((label, color) in labels) {
                         assertEquals("${label.javaClass.simpleName} must follow the selected text palette",
                             color, label.currentTextColor)

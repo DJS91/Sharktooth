@@ -110,8 +110,9 @@ internal class CampModeController private constructor(context: Context) {
                 val climate = ac.snapshot()
                 check(climate.bound && climate.powerOn != null) { "Cannot read the previous climate state; nothing changed." }
                 val drlOn = checkNotNull(drl.isOn()) { "Cannot read the previous DRL state; nothing changed." }
-                val headlightMode = checkNotNull(headlights.mode()) {
-                    "Cannot read the previous headlight selector; nothing changed."
+                val headlight = headlights.readMode()
+                val headlightMode = checkNotNull(headlight.mode) {
+                    "Cannot read the previous headlight selector; nothing changed. ${headlight.detail}"
                 }
                 val media = audio.snapshot()
                 bluetooth.prepare()
@@ -228,8 +229,9 @@ internal class CampModeController private constructor(context: Context) {
         }
 
         private suspend fun setHeadlights(mode: Int): CampResult {
-            val before = io { headlights.mode() }
-                ?: return CampResult(false, "Headlight selector read-back unavailable.")
+            val reading = io { headlights.readMode() }
+            val before = reading.mode
+                ?: return CampResult(false, "Headlight selector read-back unavailable: ${reading.detail}")
             if (before == mode) return CampResult(true, "Headlight selector already at mode $mode; no command sent.")
             val result = io {
                 if (mode == BydHeadlightController.OFF) requirePark()
@@ -240,7 +242,8 @@ internal class CampModeController private constructor(context: Context) {
                 delay(150)
                 if (io { headlights.mode() } == mode) return CampResult(true, "Headlight selector mode $mode confirmed.")
             }
-            return CampResult(false, "${result.detail}; headlight selector read-back=${io { headlights.mode() }}")
+            val after = io { headlights.readMode() }
+            return CampResult(false, "${result.detail}; headlight selector read-back=${after.mode}; ${after.detail}")
         }
 
         private suspend fun setDrl(on: Boolean): CampResult {
