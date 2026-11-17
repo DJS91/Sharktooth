@@ -1,6 +1,10 @@
 package com.sphy.airconcontroller.camp
 
 import com.sphy.airconcontroller.byd.BydAcController
+import com.sphy.airconcontroller.dikey.LedMode
+import com.sphy.airconcontroller.storage.LedBarState
+import com.sphy.airconcontroller.storage.LedRestoreSnapshot
+import com.sphy.airconcontroller.storage.LedRgb
 import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.runBlocking
@@ -13,6 +17,8 @@ class CampModeSessionTest {
         BydAcController.AcSnapshot(true, true, null, true, 22, 23, null, 3,
             1, 1, 2, 1, false, false, false, false, true),
         7, false, true, 2,
+        LedRestoreSnapshot((1..3).associateWith { LedBarState(LedMode.ON.code, LedRgb(4, 8, 16)) }, LedRgb(2, 4, 8)),
+        true,
     )
 
     private inner class Actions : CampActions {
@@ -20,6 +26,7 @@ class CampModeSessionTest {
         var stored: CampSavedState? = null
         var fail: String? = null
         var failPersist = false
+        var connectedAtEntry = true
         var onClose: (suspend () -> Unit)? = null
         var onScreen: (suspend () -> Unit)? = null
         var onPersist: (suspend (String) -> Unit)? = null
@@ -33,8 +40,14 @@ class CampModeSessionTest {
         override suspend fun save(): CampSavedState {
             calls += "save"
             check(fail != "save") { "Park could not be confirmed." }
-            return saved
+            return if (connectedAtEntry) saved else saved.copy(dikeyLighting = null)
         }
+        override suspend fun dikeyLightsOff(saved: CampSavedState) =
+            result(if (saved.dikeyLighting == null) "dikey-skipped" else "dikey")
+        override suspend fun headunitBluetoothOff() = result("bluetooth")
+        override suspend fun enableHeadunitBluetooth(saved: CampSavedState) = result("enable-bluetooth")
+        override suspend fun enableDikeyLights(saved: CampSavedState) =
+            result(if (saved.dikeyLighting == null) "enable-dikey-skipped" else "enable-dikey")
         override suspend fun climateOff() = result("climate")
         override suspend fun closeWindows(): CampResult { onClose?.invoke(); return result("windows") }
         override suspend fun headlightsOff() = result("headlights")
@@ -43,7 +56,7 @@ class CampModeSessionTest {
         override suspend fun screenOff(): CampResult { onScreen?.invoke(); return result("screen") }
         override suspend fun stopWindows() = result("stop")
         override suspend fun restoreClimate(saved: CampSavedState): CampResult {
-            assertEquals(this@CampModeSessionTest.saved, saved)
+            assertEquals(this@CampModeSessionTest.saved.climate, saved.climate)
             return result("restore-climate")
         }
         override suspend fun restoreMedia(saved: CampSavedState) = result("restore-media")
@@ -73,7 +86,7 @@ class CampModeSessionTest {
         }
         session.enter()
         assertEquals(listOf("save", "persist"), actions.calls.take(2))
-        assertEquals(listOf("save", "climate", "windows", "headlights", "drl", "mute", "screen"),
+        assertEquals(listOf("save", "dikey", "bluetooth", "climate", "windows", "headlights", "drl", "mute", "screen"),
             actions.calls.filter { it != "persist" })
         session.enter()
         assertEquals(1, actions.calls.count { it == "save" })
@@ -97,7 +110,7 @@ class CampModeSessionTest {
         assertFalse(actions.calls.contains("screen"))
         assertTrue(session.state.value.report.contains("NOT CONFIRMED"))
         assertTrue(session.state.value.active)
-        assertEquals(setOf(CampStep.CLIMATE, CampStep.WINDOWS, CampStep.HEADLIGHTS),
+        assertEquals(setOf(CampStep.DIKEY, CampStep.BLUETOOTH, CampStep.CLIMATE, CampStep.WINDOWS, CampStep.HEADLIGHTS),
             session.state.value.completedSteps)
         session.exit()
         assertFalse(session.state.value.active)
@@ -114,7 +127,7 @@ class CampModeSessionTest {
             val session = CampModeSession(actions)
             session.enter()
             assertFalse(session.state.value.busy)
-            assertFalse(actions.calls.any { it in listOf("climate", "windows", "headlights", "drl", "mute", "screen") })
+            assertFalse(actions.calls.any { it in listOf("dikey", "bluetooth", "climate", "windows", "headlights", "drl", "mute", "screen") })
             assertTrue(session.state.value.report.contains("Entry failed"))
             assertEquals(failStorage, session.state.value.active)
         }
@@ -126,7 +139,8 @@ class CampModeSessionTest {
         recovered.exit()
         assertTrue(recovered.state.value.active)
         assertEquals(saved, actions.stored)
-        assertTrue(actions.calls.containsAll(listOf("restore-media", "restore-headlights", "restore-drl", "restore-climate")))
+        assertTrue(actions.calls.containsAll(listOf("enable-bluetooth", "enable-dikey",
+            "restore-media", "restore-headlights", "restore-drl", "restore-climate")))
         actions.fail = null
         recovered.exit()
         assertFalse(recovered.state.value.active)
@@ -182,13 +196,14 @@ class CampModeSessionTest {
         }
         val entry = launch { session.enter() }
         climateDone.await()
-        assertEquals(setOf(CampStep.CLIMATE), session.state.value.completedSteps)
+        val completed = setOf(CampStep.DIKEY, CampStep.BLUETOOTH, CampStep.CLIMATE)
+        assertEquals(completed, session.state.value.completedSteps)
         session.stopWindows()
         entry.join()
         assertTrue(actions.calls.contains("stop"))
         assertFalse(actions.calls.contains("windows"))
         assertFalse(actions.calls.contains("screen"))
-        assertEquals(setOf(CampStep.CLIMATE), actions.completedSteps)
+        assertEquals(completed, actions.completedSteps)
         assertTrue(session.state.value.report.contains("Entry stopped"))
     }
 
@@ -208,7 +223,7 @@ class CampModeSessionTest {
         val session = CampModeSession(actions, saved, completedSteps = CampStep.entries.toSet())
         assertTrue(session.state.value.awaitingWake)
         session.onScreenWake()
-        assertEquals(listOf("restore-media", "restore-headlights", "restore-drl", "restore-climate"),
+        assertEquals(listOf("enable-bluetooth", "enable-dikey", "restore-media", "restore-headlights", "restore-drl", "restore-climate"),
             actions.calls.filter { it != "persist" })
         assertFalse(session.state.value.active)
         assertFalse(session.state.value.awaitingWake)
@@ -237,8 +252,8 @@ class CampModeSessionTest {
                 actions.calls.none { it.startsWith("restore-") })
         }
         session.enter()
-        assertEquals(listOf("save", "climate", "windows", "headlights", "drl", "mute", "screen",
-            "restore-media", "restore-headlights", "restore-drl", "restore-climate"),
+        assertEquals(listOf("save", "dikey", "bluetooth", "climate", "windows", "headlights", "drl", "mute", "screen",
+            "enable-bluetooth", "enable-dikey", "restore-media", "restore-headlights", "restore-drl", "restore-climate"),
             actions.calls.filter { it != "persist" })
         assertFalse(session.state.value.active)
         assertFalse(session.state.value.awaitingWake)
@@ -279,5 +294,34 @@ class CampModeSessionTest {
             session.exit()
             assertFalse(session.state.value.active)
         }
+    }
+
+    @Test fun newInitialStepsFailWithoutStartingClimateOrBlankingScreen() = runBlocking {
+        for (step in listOf("dikey", "bluetooth")) {
+            val actions = Actions().apply { fail = step }
+            val session = CampModeSession(actions)
+            session.enter()
+            assertFalse(actions.calls.contains("climate"))
+            assertFalse(actions.calls.contains("screen"))
+            assertTrue(session.state.value.active)
+            assertTrue(session.state.value.report.contains("NOT CONFIRMED"))
+            session.exit()
+            assertEquals(listOf("enable-bluetooth", "enable-dikey"),
+                actions.calls.filter { it.startsWith("enable-") })
+            assertFalse(session.state.value.active)
+        }
+    }
+
+    @Test fun disconnectedDikeyIsSkippedWithoutSkippingHeadunitBluetooth() = runBlocking {
+        val actions = Actions().apply { connectedAtEntry = false }
+        val session = CampModeSession(actions)
+        session.enter()
+        assertTrue(actions.calls.contains("dikey-skipped"))
+        assertFalse(actions.calls.contains("dikey"))
+        assertTrue(actions.calls.contains("bluetooth"))
+        session.onScreenWake()
+        assertTrue(actions.calls.contains("enable-dikey-skipped"))
+        assertTrue(actions.calls.contains("enable-bluetooth"))
+        assertFalse(session.state.value.active)
     }
 }

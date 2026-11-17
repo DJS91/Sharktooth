@@ -1,7 +1,9 @@
 package com.sphy.airconcontroller
 
 import android.content.Intent
+import android.bluetooth.BluetoothManager
 import android.media.AudioManager
+import android.os.Build
 import android.widget.CheckBox
 import android.widget.Button
 import android.widget.LinearLayout
@@ -9,18 +11,45 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.sphy.airconcontroller.byd.BydAcController
 import com.sphy.airconcontroller.camp.CampMediaAudio
+import com.sphy.airconcontroller.camp.CampHeadunitBluetooth
 import com.sphy.airconcontroller.camp.CampModeController
 import com.sphy.airconcontroller.camp.CampModeSession
 import com.sphy.airconcontroller.camp.CampSavedState
 import com.sphy.airconcontroller.camp.CampStep
 import com.sphy.airconcontroller.camp.CampScreenWakeReceiver
+import com.sphy.airconcontroller.dikey.LedMode
+import com.sphy.airconcontroller.storage.LedBarState
+import com.sphy.airconcontroller.storage.LedRestoreSnapshot
+import com.sphy.airconcontroller.storage.LedRgb
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
+import kotlinx.coroutines.runBlocking
 import org.junit.Test
 import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class CampModeTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+    @Test fun headunitBluetoothSwitchesOffAndBackOnUsingAndroidAdapterReadback() = runBlocking {
+        assumeTrue("Bluetooth toggling integration test is emulator-only",
+            Build.HARDWARE in setOf("ranchu", "goldfish"))
+        val adapter = checkNotNull(context.getSystemService(BluetoothManager::class.java)?.adapter)
+        val original = adapter.isEnabled
+        val bluetooth = CampHeadunitBluetooth(context)
+        try {
+            bluetooth.prepare()
+            val off = bluetooth.setEnabled(false)
+            assertTrue(off.detail, off.success)
+            assertFalse(adapter.isEnabled)
+            val on = bluetooth.setEnabled(true)
+            assertTrue(on.detail, on.success)
+            assertTrue(adapter.isEnabled)
+        } finally {
+            val restored = bluetooth.setEnabled(original)
+            assertTrue("Restore emulator Bluetooth: ${restored.detail}", restored.success)
+        }
+    }
 
     @Test fun wakeSignalsOnlyTriggerRestorationForScreenOnOrUnlock() {
         var wakes = 0
@@ -50,7 +79,7 @@ class CampModeTest {
                 assertEquals(stop.textSize, enable.textSize, 0f)
                 val list = activity.findViewById<LinearLayout>(R.id.campModeChecklist)
                 val rows = (0 until list.childCount).map { list.getChildAt(it) as CheckBox }
-                val ids = listOf(R.id.campStepClimate, R.id.campStepWindows, R.id.campStepHeadlights,
+                val ids = listOf(R.id.campStepDikey, R.id.campStepBluetooth, R.id.campStepClimate, R.id.campStepWindows, R.id.campStepHeadlights,
                     R.id.campStepDrls, R.id.campStepMedia, R.id.campStepScreen)
                 assertEquals(ids, rows.map { it.id })
                 for ((index, step) in CampStep.entries.withIndex()) {
@@ -98,9 +127,17 @@ class CampModeTest {
             BydAcController.AcSnapshot(true, true, null, false, 21, null, null, 4,
                 2, 1, 2, 1, false, null, true, false, true),
             0, true, false, 2,
+            LedRestoreSnapshot((1..3).associateWith {
+                LedBarState(LedMode.ON.code, LedRgb(4 * it, 8 * it, 16 * it))
+            }, LedRgb(4, 8, 16)), true,
         )
         assertEquals(saved, CampModeController.decodeSaved(CampModeController.encodeSaved(saved)))
-        val legacy = CampModeController.encodeSaved(saved).apply { remove("headlightMode") }
-        assertEquals(saved.copy(headlightMode = null), CampModeController.decodeSaved(legacy))
+        val legacy = CampModeController.encodeSaved(saved).apply {
+            remove("headlightMode")
+            remove("dikeyLighting")
+            remove("manageHeadunitBluetooth")
+        }
+        assertEquals(saved.copy(headlightMode = null, dikeyLighting = null, manageHeadunitBluetooth = false),
+            CampModeController.decodeSaved(legacy))
     }
 }

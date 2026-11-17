@@ -1,11 +1,13 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="camp_mode_confirm">Use only while safely parked with the vehicle ON. Keep hands and objects clear of all windows.\n\nThis turns climate OFF, closes all four windows, sets headlights OFF (including AUTO), turns DRLs OFF, mutes media, then sends the car\'s Screen off shortcut command.\n\nTouch the screen to wake it and automatically disable Camping Mode, restoring the saved climate, media volume, headlight selection and DRLs; windows stay closed. Call, alarm and safety audio are not targeted. This does not keep the vehicle powered or monitor occupants.</string>
-    <string name="camp_mode_idle">Park with the vehicle ON before enabling. Wake the screen to automatically restore saved settings; windows stay closed.</string>
+    <string name="camp_mode_confirm">Use only while safely parked with the vehicle ON. Keep hands and objects clear of all windows.\n\nThis turns DiKey strip and key lighting OFF if connected, turns head-unit Bluetooth OFF, turns climate OFF, closes all four windows, sets headlights OFF (including AUTO), turns DRLs OFF, mutes media, then sends the car\'s Screen off shortcut command.\n\nTouch the screen to wake it and automatically end Camping Mode. Head-unit Bluetooth and the connected DiKey lighting are turned ON, even if previously off; the DiKey colours are preserved. Saved climate, media volume, headlight selection and DRLs are restored; windows stay closed. Head-unit Bluetooth connections disconnect during camping; ESP32 Bluetooth stays on. Only media volume is muted. This does not keep the vehicle powered or monitor occupants.</string>
+    <string name="camp_mode_idle">Park with the vehicle ON before enabling. Wake the screen to end Camping Mode; windows stay closed.</string>
     <string name="camp_mode_working">Updating settings. Please wait. STOP WINDOWS remains available.</string>
     <string name="camp_mode_waiting">Camping Mode active. Touch the screen to wake it and automatically restore saved settings.</string>
     <string name="camp_mode_session">Saved settings need restoration. Check results below and tap Retry restoring settings. Saved settings are kept until restoration succeeds.</string>
     <string name="camp_mode_retry_restore">Retry restoring settings</string>
+    <string name="camp_mode_step_dikey">Turn DiKey lights off (if connected)</string>
+    <string name="camp_mode_step_bluetooth">Turn head-unit Bluetooth off</string>
     <string name="camp_mode_step_climate">Turn climate off</string>
     <string name="camp_mode_step_windows">Close all windows</string>
     <string name="camp_mode_step_headlights">Turn headlights off</string>

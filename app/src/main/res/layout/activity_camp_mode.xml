@@ -69,6 +69,18 @@
             android:orientation="vertical">
 
             <CheckBox
+                android:id="@+id/campStepDikey"
+                style="@style/Widget.OpenDiKey.CampStep"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/camp_mode_step_dikey" />
+            <CheckBox
+                android:id="@+id/campStepBluetooth"
+                style="@style/Widget.OpenDiKey.CampStep"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/camp_mode_step_bluetooth" />
+            <CheckBox
                 android:id="@+id/campStepClimate"
                 style="@style/Widget.OpenDiKey.CampStep"
                 android:layout_width="wrap_content"
@@ -106,13 +118,6 @@
                 android:text="@string/camp_mode_step_screen" />
         </LinearLayout>
 
-        <Button
-            android:id="@+id/campModeStopWindows"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:layout_marginTop="16dp"
-            android:text="@string/camp_test_windows_stop" />
-
         <TextView
             android:id="@+id/campModeReport"
             android:layout_width="match_parent"
@@ -124,4 +129,13 @@
             android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
     </LinearLayout>
     </ScrollView>
+
+    <Button
+        android:id="@+id/campModeStopWindows"
+        android:layout_width="wrap_content"
+        android:layout_height="wrap_content"
+        android:layout_gravity="center_horizontal"
+        android:layout_marginTop="8dp"
+        android:layout_marginBottom="16dp"
+        android:text="@string/camp_test_windows_stop" />
 </LinearLayout>

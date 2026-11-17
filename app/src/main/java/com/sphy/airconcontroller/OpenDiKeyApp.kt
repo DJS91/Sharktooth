@@ -29,13 +29,13 @@ class OpenDiKeyApp : Application() {
         BootAppLauncher.trackActivities(this)
         AdbKeepAlive.start(this)
         dikey = DiKeySession(this)
+        CampModeController.get(this)
         dikey.start()
         fridge = FridgeController(this, dikey.usbBridge.fridge)
         diagnosticUpload = DiagnosticUpload(this)
         telemetry = TelemetrySender(this, dikey.usbBridge)
         com.sphy.airconcontroller.lighting.LightingScheduler.scheduleNext(this)
         DiKeyListenService.start(this)
-        CampModeController.get(this)
     }
 
     companion object {

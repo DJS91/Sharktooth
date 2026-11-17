@@ -1,8 +1,11 @@
 package com.sphy.airconcontroller.dikey
 
+import com.sphy.airconcontroller.storage.LedRestoreSnapshot
+import kotlinx.coroutines.CompletableDeferred
 import kotlinx.coroutines.flow.MutableStateFlow
 import kotlinx.coroutines.flow.StateFlow
 import kotlinx.coroutines.flow.asStateFlow
+import kotlinx.coroutines.withTimeoutOrNull
 
 data class DialDisplay(val displayType: Int, val value: Int)
 
@@ -43,6 +46,45 @@ class DiKeyController(
     private var pendingLed: com.sphy.airconcontroller.storage.LedRestoreSnapshot? = null
 
     val isConnected: Boolean get() = ready
+    @Volatile var lightingSuppressed = false
+        private set
+
+    fun seedLightingSuppression(suppressed: Boolean) {
+        lightingSuppressed = suppressed
+    }
+
+    suspend fun applyCampLighting(enabled: Boolean, snapshot: LedRestoreSnapshot): Boolean {
+        val keys = checkNotNull(snapshot.backlight) { "Camp lighting requires the saved key-backlight colour." }
+        if (!ready) {
+            onStatus("Camp lighting failed: DiKey disconnected")
+            return false
+        }
+        lightingSuppressed = !enabled
+        val lighting = snapshot.copy(bars = snapshot.bars.mapValues { (_, state) ->
+            if (enabled && state.mode == LedMode.OFF.code) state.copy(mode = LedMode.ON.code) else state
+        })
+        seedLedMemory(lighting)
+        val writes = mutableListOf<CompletableDeferred<Boolean>>()
+        fun send(frame: ByteArray) {
+            val completion = CompletableDeferred<Boolean>()
+            writes += completion
+            if (!enqueue(OutboundWrite(frame, onComplete = { completion.complete(it) }))) completion.complete(false)
+        }
+        for ((bar, state) in lighting.bars) {
+            val mode = if (enabled) state.mode else LedMode.OFF.code
+            send(DiKeyProtocol.buildLedStrip(mode, bar, state.color.red, state.color.green, state.color.blue))
+        }
+        send(DiKeyProtocol.buildButtonBacklight(
+            if (enabled) keys.red else 0, if (enabled) keys.green else 0, if (enabled) keys.blue else 0,
+        ))
+        val confirmed = withTimeoutOrNull(5_000) {
+            var ok = true
+            for (write in writes) ok = write.await() && ok
+            ok
+        } == true
+        if (!confirmed) onStatus("Camp lighting failed: writes were rejected, disconnected or timed out")
+        return confirmed
+    }
 
     /** Which dial modes each dial is told it may enter (CMD 0x06/0x07). Defaults match the original setup. */
     data class AllowLists(
@@ -67,6 +109,8 @@ class DiKeyController(
     }
 
     fun onTransportReady() {
+        ready = false
+        failPendingWrites()
         ready = true
         _dialDisplays.value = DialDisplays()
         rangeConfigured = false
@@ -84,6 +128,7 @@ class DiKeyController(
 
     fun onTransportDown(reason: String) {
         ready = false
+        failPendingWrites()
         _dialDisplays.value = DialDisplays()
         writeQueue.clear()
         writeInFlight = false
@@ -150,6 +195,7 @@ class DiKeyController(
             onStatus("Write failed · ${done?.logLabel ?: ""}")
         }
         drainWriteQueue()
+        done?.onComplete?.invoke(success)
     }
 
     fun write(frame: ByteArray): Boolean = enqueue(OutboundWrite(frame))
@@ -161,7 +207,8 @@ class DiKeyController(
         }
         return enqueue(
             OutboundWrite(
-                bytes = DiKeyProtocol.buildLedStrip(mode, position, red, green, blue),
+                bytes = DiKeyProtocol.buildLedStrip(if (lightingSuppressed) LedMode.OFF.code else mode,
+                    position, red, green, blue),
                 logLabel = "LED mode=$mode pos=$position rgb=$red,$green,$blue"
             )
         )
@@ -170,7 +217,10 @@ class DiKeyController(
     fun sendButtonBacklight(red: Int, green: Int, blue: Int): Boolean {
         return enqueue(
             OutboundWrite(
-                bytes = DiKeyProtocol.buildButtonBacklight(red, green, blue),
+                bytes = DiKeyProtocol.buildButtonBacklight(
+                    if (lightingSuppressed) 0 else red,
+                    if (lightingSuppressed) 0 else green,
+                    if (lightingSuppressed) 0 else blue),
                 logLabel = "key backlight rgb=$red,$green,$blue"
             )
         )
@@ -406,12 +456,21 @@ class DiKeyController(
             inFlight = null
             onStatus("Write enqueue failed · ${item.logLabel ?: frame.toHex()}")
             drainWriteQueue()
+            item.onComplete?.invoke(false)
         } else {
             onStatus("TX · ${item.logLabel ?: frame.toHex()} · ${frame.toHex()}")
         }
     }
 
     private fun ByteArray.toHex(): String = with(DiKeyProtocol) { toHex() }
+
+    private fun failPendingWrites() {
+        val pending = listOfNotNull(inFlight) + writeQueue.toList()
+        writeQueue.clear()
+        inFlight = null
+        writeInFlight = false
+        pending.forEach { it.onComplete?.invoke(false) }
+    }
 
     private fun notifyRevision(left: Boolean): Long = if (left) leftNotifyRevision else rightNotifyRevision
 
@@ -434,6 +493,7 @@ class DiKeyController(
     private data class OutboundWrite(
         val bytes: ByteArray,
         val onSuccess: (() -> Unit)? = null,
+        val onComplete: ((Boolean) -> Unit)? = null,
         val dialDisplay: DialWrite? = null,
         val logLabel: String? = null
     )

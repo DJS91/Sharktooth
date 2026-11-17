@@ -63,6 +63,8 @@ class CampModeActivity : HomeActivity() {
 
     internal fun renderChecklist(state: CampModeSession.State) {
         val steps = listOf(
+            Triple(CampStep.DIKEY, R.id.campStepDikey, R.string.camp_mode_step_dikey),
+            Triple(CampStep.BLUETOOTH, R.id.campStepBluetooth, R.string.camp_mode_step_bluetooth),
             Triple(CampStep.CLIMATE, R.id.campStepClimate, R.string.camp_mode_step_climate),
             Triple(CampStep.WINDOWS, R.id.campStepWindows, R.string.camp_mode_step_windows),
             Triple(CampStep.HEADLIGHTS, R.id.campStepHeadlights, R.string.camp_mode_step_headlights),

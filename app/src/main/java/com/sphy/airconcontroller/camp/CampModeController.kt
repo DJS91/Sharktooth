@@ -7,6 +7,7 @@ import android.content.IntentFilter
 import android.media.AudioManager
 import android.util.Log
 import androidx.core.content.ContextCompat
+import com.sphy.airconcontroller.OpenDiKeyApp
 import com.sphy.airconcontroller.adb.AdbPermissionManager
 import com.sphy.airconcontroller.byd.BydAcController
 import com.sphy.airconcontroller.byd.BydDisplayController
@@ -14,6 +15,9 @@ import com.sphy.airconcontroller.byd.BydDrlController
 import com.sphy.airconcontroller.byd.BydHeadlightController
 import com.sphy.airconcontroller.byd.BydVehicleInfoController
 import com.sphy.airconcontroller.byd.BydWindowController
+import com.sphy.airconcontroller.dikey.LedMode
+import com.sphy.airconcontroller.storage.LedRestoreSnapshot
+import com.sphy.airconcontroller.storage.LightingProfile
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -39,6 +43,8 @@ internal class CampModeController private constructor(context: Context) {
     val state = session.state
 
     init {
+        OpenDiKeyApp.from(app).dikey.controller.seedLightingSuppression(
+            saved?.dikeyLighting != null && prefs.getBoolean("lightingSuppressed", false))
         ContextCompat.registerReceiver(app, CampScreenWakeReceiver { onScreenWake() },
             IntentFilter().apply {
                 addAction(Intent.ACTION_SCREEN_ON)
@@ -86,23 +92,71 @@ internal class CampModeController private constructor(context: Context) {
         private val display = BydDisplayController(app)
         private val vehicle = BydVehicleInfoController(app)
         private val audio = CampMediaAudio(app)
+        private val bluetooth = CampHeadunitBluetooth(app)
+        private val dikey get() = OpenDiKeyApp.from(app).dikey
         private val windowCommands = Mutex()
         private val persistence = Mutex()
 
-        override suspend fun save(): CampSavedState = io {
-            requirePark()
-            val climate = ac.snapshot()
-            check(climate.bound && climate.powerOn != null) { "Cannot read the previous climate state; nothing changed." }
-            val drlOn = checkNotNull(drl.isOn()) { "Cannot read the previous DRL state; nothing changed." }
-            val headlightMode = checkNotNull(headlights.mode()) {
-                "Cannot read the previous headlight selector; nothing changed."
+        override suspend fun save(): CampSavedState {
+            val lighting = if (dikey.isConnected) dikey.settings.ledRestoreSnapshot() else null
+            if (lighting != null) {
+                check(lighting.bars.keys.containsAll(listOf(1, 2, 3)) && lighting.backlight != null &&
+                    lighting.bars.values.all { it.mode in 0..4 }) {
+                    "Cannot read complete DiKey lighting settings; nothing changed."
+                }
             }
-            val media = audio.snapshot()
-            val wakeLog = AdbPermissionManager.runShellCommandQuick(app, wakeLogCommand(System.currentTimeMillis()))
-            check(wakeLog.exitCode == 0) {
-                "Cannot monitor the car's backlight wake event: ${wakeLog.output}. Check local ADB; nothing changed."
+            return io {
+                requirePark()
+                val climate = ac.snapshot()
+                check(climate.bound && climate.powerOn != null) { "Cannot read the previous climate state; nothing changed." }
+                val drlOn = checkNotNull(drl.isOn()) { "Cannot read the previous DRL state; nothing changed." }
+                val headlightMode = checkNotNull(headlights.mode()) {
+                    "Cannot read the previous headlight selector; nothing changed."
+                }
+                val media = audio.snapshot()
+                bluetooth.prepare()
+                val wakeLog = AdbPermissionManager.runShellCommandQuick(app, wakeLogCommand(System.currentTimeMillis()))
+                check(wakeLog.exitCode == 0) {
+                    "Cannot monitor the car's backlight wake event: ${wakeLog.output}. Check local ADB; nothing changed."
+                }
+                CampSavedState(climate, media.volume, media.muted, drlOn, headlightMode, lighting, true)
             }
-            CampSavedState(climate, media.volume, media.muted, drlOn, headlightMode)
+        }
+
+        override suspend fun dikeyLightsOff(saved: CampSavedState): CampResult {
+            val lighting = saved.dikeyLighting ?: return CampResult(true, "DiKey not connected at entry; skipped.")
+            val confirmed = dikey.controller.applyCampLighting(enabled = false, lighting)
+            return CampResult(confirmed, if (confirmed) "DiKey strip and key-backlight OFF writes acknowledged."
+                else "DiKey lighting OFF writes not confirmed.")
+        }
+
+        override suspend fun headunitBluetoothOff(): CampResult = bluetooth.setEnabled(false)
+
+        override suspend fun enableHeadunitBluetooth(saved: CampSavedState): CampResult {
+            if (!saved.manageHeadunitBluetooth) return CampResult(true, "Older session did not manage head-unit Bluetooth.")
+            val result = bluetooth.setEnabled(true)
+            if (result.success && saved.dikeyLighting != null) dikey.ensureConnected()
+            return result
+        }
+
+        override suspend fun enableDikeyLights(saved: CampSavedState): CampResult {
+            val lighting = saved.dikeyLighting ?: return CampResult(true, "Session did not change DiKey lighting.")
+            repeat(60) {
+                if (dikey.isConnected) {
+                    val period = dikey.settings.liveLightingPeriod()
+                    val profile = dikey.settings.lightingProfile(period)
+                    if (profile.bars.values.any { it.mode == LedMode.OFF.code }) {
+                        dikey.settings.saveLightingProfile(period, profile.copy(bars = profile.bars.mapValues { (_, bar) ->
+                            if (bar.mode == LedMode.OFF.code) bar.copy(mode = LedMode.ON.code) else bar
+                        }))
+                    }
+                    val confirmed = dikey.controller.applyCampLighting(enabled = true, lighting)
+                    return CampResult(confirmed, if (confirmed) "DiKey lighting ON writes acknowledged; saved colours preserved."
+                        else "DiKey lighting ON writes not confirmed.")
+                }
+                delay(250)
+            }
+            return CampResult(false, "DiKey not reconnected; lighting settings retained for restoration retry.")
         }
 
         private fun requirePark() {
@@ -204,6 +258,7 @@ internal class CampModeController private constructor(context: Context) {
                 io {
                     val editor = prefs.edit().putString("report", report)
                         .putStringSet("completedSteps", completedSteps.map { it.name }.toSet())
+                        .putBoolean("lightingSuppressed", dikey.controller.lightingSuppressed)
                     if (saved == null) editor.remove("saved") else editor.putString("saved", encodeSaved(saved).toString())
                     if (!editor.commit()) throw IOException("Cannot save Camp Mode restoration data.")
                 }
@@ -226,6 +281,10 @@ internal class CampModeController private constructor(context: Context) {
         internal fun encodeSaved(saved: CampSavedState): JSONObject {
             val ac = saved.climate
             return JSONObject().put("volume", saved.mediaVolume).put("muted", saved.mediaMuted)
+                .put("manageHeadunitBluetooth", saved.manageHeadunitBluetooth)
+                .put("dikeyLighting", saved.dikeyLighting?.let {
+                    JSONObject(LightingProfile(it.bars, it.backlight).toJson())
+                })
                 .put("drl", saved.drlOn).put("headlightMode", saved.headlightMode).put("climate", JSONObject().apply {
                     put("power", ac.powerOn)
                     put("driver", ac.driverTempC)
@@ -258,6 +317,13 @@ internal class CampModeController private constructor(context: Context) {
                 ),
                 json.getInt("volume"), json.getBoolean("muted"), json.getBoolean("drl"),
                 if (json.isNull("headlightMode")) null else json.getInt("headlightMode"),
+                if (json.isNull("dikeyLighting")) null else {
+                    val lighting = checkNotNull(LightingProfile.fromJson(json.getJSONObject("dikeyLighting").toString())) {
+                        "Invalid saved DiKey lighting settings."
+                    }
+                    LedRestoreSnapshot(lighting.bars, lighting.backlight)
+                },
+                json.optBoolean("manageHeadunitBluetooth", false),
             )
         }
     }

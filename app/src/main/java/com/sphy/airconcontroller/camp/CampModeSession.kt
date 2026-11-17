@@ -1,6 +1,7 @@
 package com.sphy.airconcontroller.camp
 
 import com.sphy.airconcontroller.byd.BydAcController
+import com.sphy.airconcontroller.storage.LedRestoreSnapshot
 import kotlinx.coroutines.CancellationException
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.MutableStateFlow
@@ -13,11 +14,15 @@ internal data class CampSavedState(
     val mediaMuted: Boolean,
     val drlOn: Boolean,
     val headlightMode: Int? = null,
+    val dikeyLighting: LedRestoreSnapshot? = null,
+    val manageHeadunitBluetooth: Boolean = false,
 )
 
 internal data class CampResult(val success: Boolean, val detail: String)
 
 internal enum class CampStep(val reportLabel: String) {
+    DIKEY("DiKey lights OFF"),
+    BLUETOOTH("Head-unit Bluetooth OFF"),
     CLIMATE("Climate OFF"),
     WINDOWS("Close windows"),
     HEADLIGHTS("Headlights OFF"),
@@ -28,6 +33,8 @@ internal enum class CampStep(val reportLabel: String) {
 
 internal interface CampActions {
     suspend fun save(): CampSavedState
+    suspend fun dikeyLightsOff(saved: CampSavedState): CampResult
+    suspend fun headunitBluetoothOff(): CampResult
     suspend fun climateOff(): CampResult
     suspend fun closeWindows(): CampResult
     suspend fun headlightsOff(): CampResult
@@ -39,6 +46,8 @@ internal interface CampActions {
     suspend fun restoreMedia(saved: CampSavedState): CampResult
     suspend fun restoreDrl(saved: CampSavedState): CampResult
     suspend fun restoreHeadlights(saved: CampSavedState): CampResult
+    suspend fun enableHeadunitBluetooth(saved: CampSavedState): CampResult
+    suspend fun enableDikeyLights(saved: CampSavedState): CampResult
     suspend fun persist(saved: CampSavedState?, report: String, completedSteps: Set<CampStep>)
 }
 
@@ -73,11 +82,14 @@ internal class CampModeSession(
         restoreAfterEntry = false
         mutableState.value = State(false, true, "")
         try {
-            saved = actions.save()
+            val original = actions.save()
+            saved = original
             // Durably save restoration data before the very first write to the car.
             actions.persist(saved, "", emptySet())
             mutableState.value = State(true, true, "")
             val steps: List<Pair<CampStep, suspend () -> CampResult>> = listOf(
+                CampStep.DIKEY to { actions.dikeyLightsOff(original) },
+                CampStep.BLUETOOTH to { actions.headunitBluetoothOff() },
                 CampStep.CLIMATE to { actions.climateOff() },
                 CampStep.WINDOWS to { actions.closeWindows() },
                 CampStep.HEADLIGHTS to { actions.headlightsOff() },
@@ -149,6 +161,8 @@ internal class CampModeSession(
         try {
             var restored = true
             val steps: List<Pair<String, suspend () -> CampResult>> = listOf(
+                "Enable head-unit Bluetooth" to { actions.enableHeadunitBluetooth(original) },
+                "Enable DiKey lights" to { actions.enableDikeyLights(original) },
                 "Restore media" to { actions.restoreMedia(original) },
                 "Restore headlights" to { actions.restoreHeadlights(original) },
                 "Restore DRLs" to { actions.restoreDrl(original) },

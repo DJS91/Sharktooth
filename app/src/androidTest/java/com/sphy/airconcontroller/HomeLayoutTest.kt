@@ -46,6 +46,9 @@ class HomeLayoutTest {
                 assertTrue(first.top >= content.paddingTop)
                 assertTrue(last.bottom <= content.height - content.paddingBottom)
                 assertTrue("Long content must remain scrollable", content.parent is android.widget.ScrollView)
+                val stop = root.findViewById<View>(R.id.campModeStopWindows)
+                assertSame("STOP WINDOWS must stay outside the scrolling checklist", root, stop.parent)
+                assertTrue("STOP WINDOWS must stay on screen", stop.top >= 0 && stop.bottom <= root.height)
             }
         }
     }
