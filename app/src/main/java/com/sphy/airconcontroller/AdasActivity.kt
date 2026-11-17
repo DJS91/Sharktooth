@@ -11,13 +11,12 @@ import com.sphy.airconcontroller.byd.BydAdasController
 import com.sphy.airconcontroller.storage.AdasCustomProfile
 import com.sphy.airconcontroller.storage.AdasEditMode
 import com.sphy.airconcontroller.storage.AppSettings
-import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** ADAS settings that Shark typically clears after a power cycle. */
-class AdasActivity : OpenDiKeyActivity() {
+class AdasActivity : HomeActivity() {
     private lateinit var adas: BydAdasController
     private lateinit var settings: AppSettings
     private lateinit var statusText: TextView

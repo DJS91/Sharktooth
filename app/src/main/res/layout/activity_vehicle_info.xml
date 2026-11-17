@@ -28,9 +28,11 @@
             android:tint="@color/text_primary" />
 
         <TextView
+            android:id="@+id/homePageTitle"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_weight="1"
+            android:gravity="center"
             android:text="@string/vehicle_info_title"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
             android:textColor="@color/text_primary"

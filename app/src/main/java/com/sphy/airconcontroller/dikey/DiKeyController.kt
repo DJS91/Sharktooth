@@ -1,5 +1,13 @@
 package com.sphy.airconcontroller.dikey
 
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.StateFlow
+import kotlinx.coroutines.flow.asStateFlow
+
+data class DialDisplay(val displayType: Int, val value: Int)
+
+data class DialDisplays(val left: DialDisplay? = null, val right: DialDisplay? = null)
+
 /** One GATT write in flight. USB bridge and native BLE both implement this. */
 interface DiKeyFrameSink {
     fun writeFrame(bytes: ByteArray): Boolean
@@ -25,6 +33,10 @@ class DiKeyController(
     private var lastDialValueLeft: Int? = null
     private var lastDialTypeRight: Int? = null
     private var lastDialValueRight: Int? = null
+    private var leftNotifyRevision = 0L
+    private var rightNotifyRevision = 0L
+    private val _dialDisplays = MutableStateFlow(DialDisplays())
+    val dialDisplays: StateFlow<DialDisplays> = _dialDisplays.asStateFlow()
     private var rangeConfigured = false
     private var modesConfigured = false
     private var pendingRestore: PendingDialRestore? = null
@@ -56,6 +68,7 @@ class DiKeyController(
 
     fun onTransportReady() {
         ready = true
+        _dialDisplays.value = DialDisplays()
         rangeConfigured = false
         modesConfigured = false
         writeInFlight = false
@@ -71,6 +84,7 @@ class DiKeyController(
 
     fun onTransportDown(reason: String) {
         ready = false
+        _dialDisplays.value = DialDisplays()
         writeQueue.clear()
         writeInFlight = false
         inFlight = null
@@ -99,6 +113,23 @@ class DiKeyController(
                     lastDialValueRight = event.value
                 }
             }
+            if (ready && event.side in setOf("LEFT", "RIGHT")) {
+                val left = event.side == "LEFT"
+                val current = if (left) _dialDisplays.value.left else _dialDisplays.value.right
+                val blanking = inFlight?.dialDisplay?.let {
+                    it.left == left && it.displayType == DiKeyProtocol.DISPLAY_TYPE_BLANK
+                } == true || writeQueue.any {
+                    it.dialDisplay?.let { display ->
+                        display.left == left && display.displayType == DiKeyProtocol.DISPLAY_TYPE_BLANK
+                    } == true
+                }
+                if ((current?.displayType != DiKeyProtocol.DISPLAY_TYPE_BLANK && !blanking) ||
+                    event.displayType == DiKeyProtocol.DISPLAY_TYPE_BLANK
+                ) {
+                    if (left) leftNotifyRevision++ else rightNotifyRevision++
+                    updateDialDisplay(left, event.displayType, event.value)
+                }
+            }
         }
         onEvent(event)
     }
@@ -110,6 +141,11 @@ class DiKeyController(
         inFlight = null
         if (success) {
             done?.onSuccess?.invoke()
+            done?.dialDisplay?.let { display ->
+                if (display.notifyRevisionAtDispatch == notifyRevision(display.left)) {
+                    updateDialDisplay(display.left, display.displayType, display.value)
+                }
+            }
         } else {
             onStatus("Write failed · ${done?.logLabel ?: ""}")
         }
@@ -163,6 +199,7 @@ class DiKeyController(
         writeQueue.addLast(
             OutboundWrite(
                 bytes = DiKeyProtocol.buildDialDisplay(left, displayType, clamped, switchDisplay),
+                dialDisplay = DialWrite(left, displayType, clamped),
                 onSuccess = {
                     if (displayType != DiKeyProtocol.DISPLAY_TYPE_BLANK) {
                         val p = pendingRestore
@@ -200,6 +237,7 @@ class DiKeyController(
                         bytes = DiKeyProtocol.buildDialDisplay(
                             otherLeft, otherType, otherValue, switchDisplay = true
                         ),
+                        dialDisplay = DialWrite(otherLeft, otherType, otherValue),
                         logLabel = "dial $otherLabel reaffirm type=0x%02X val=%d".format(
                             otherType, otherValue
                         )
@@ -362,6 +400,7 @@ class DiKeyController(
         writeInFlight = true
         inFlight = item
         val frame = item.bytes
+        item.dialDisplay?.let { it.notifyRevisionAtDispatch = notifyRevision(it.left) }
         if (!link.writeFrame(frame)) {
             writeInFlight = false
             inFlight = null
@@ -374,6 +413,17 @@ class DiKeyController(
 
     private fun ByteArray.toHex(): String = with(DiKeyProtocol) { toHex() }
 
+    private fun notifyRevision(left: Boolean): Long = if (left) leftNotifyRevision else rightNotifyRevision
+
+    private fun updateDialDisplay(left: Boolean, displayType: Int, value: Int) {
+        val display = DialDisplay(displayType, value)
+        _dialDisplays.value = if (left) {
+            _dialDisplays.value.copy(left = display)
+        } else {
+            _dialDisplays.value.copy(right = display)
+        }
+    }
+
     private data class PendingDialRestore(
         val leftType: Int,
         val leftValue: Int,
@@ -384,6 +434,14 @@ class DiKeyController(
     private data class OutboundWrite(
         val bytes: ByteArray,
         val onSuccess: (() -> Unit)? = null,
+        val dialDisplay: DialWrite? = null,
         val logLabel: String? = null
+    )
+
+    private data class DialWrite(
+        val left: Boolean,
+        val displayType: Int,
+        val value: Int,
+        var notifyRevisionAtDispatch: Long = 0,
     )
 }

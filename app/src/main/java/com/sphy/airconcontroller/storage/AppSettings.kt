@@ -25,7 +25,7 @@ enum class ThemeMode {
 
 /** Visual style chosen in Settings, independent of [ThemeMode]. */
 enum class ThemeStyle {
-    /** The original look: cabin photo background, rounded tiles, orange accent. */
+    /** The original look: cabin photo background, rounded tiles, blue accent. */
     CLASSIC,
 
     /** Dashboard look: solid background, flat bordered cards with small corners, blue accent. */
@@ -464,6 +464,42 @@ class AppSettings(context: Context) {
         prefs.edit().putString(key, profile.toJson()).apply()
     }
 
+    val barsSynced: Boolean get() = prefs.getBoolean(KEY_BARS_SYNCED, false)
+
+    fun setBarsSynced(enabled: Boolean) {
+        if (enabled == barsSynced) return
+        val edit = prefs.edit()
+        for (period in LightingPeriod.entries) {
+            val profile = lightingProfile(period)
+            val fallback = LedBarState(dikeyLedModeCode, LedRgb(dikeyLedRed, dikeyLedGreen, dikeyLedBlue).clamped())
+            val currentBars = (1..3).associateWith { profile.bars[it] ?: fallback }
+            val savedKey = if (period == LightingPeriod.DAY) KEY_UNSYNCED_DAY else KEY_UNSYNCED_NIGHT
+            val colorKey = if (period == LightingPeriod.DAY) KEY_SYNCED_COLOR_DAY else KEY_SYNCED_COLOR_NIGHT
+            val colors = if (enabled) {
+                edit.putString(savedKey, profile.copy(bars = currentBars).toJson())
+                val color = if (prefs.contains(colorKey)) {
+                    val packed = prefs.getInt(colorKey, 0)
+                    LedRgb((packed shr 16) and 255, (packed shr 8) and 255, packed and 255)
+                } else {
+                    currentBars.getValue(1).color
+                }
+                (1..3).associateWith { color }
+            } else {
+                val color = currentBars.getValue(1).color
+                edit.putInt(colorKey, (color.red shl 16) or (color.green shl 8) or color.blue)
+                val saved = checkNotNull(LightingProfile.fromJson(prefs.getString(savedKey, null))) {
+                    "Missing separate bar colours for $period"
+                }
+                (1..3).associateWith { checkNotNull(saved.bars[it]) { "Missing separate colour for bar $it" }.color }
+            }
+            val updatedBars = profile.bars.toMutableMap()
+            for (bar in 1..3) updatedBars[bar] = currentBars.getValue(bar).copy(color = colors.getValue(bar))
+            val profileKey = if (period == LightingPeriod.DAY) KEY_PROFILE_DAY else KEY_PROFILE_NIGHT
+            edit.putString(profileKey, profile.copy(bars = updatedBars).toJson())
+        }
+        edit.putBoolean(KEY_BARS_SYNCED, enabled).apply()
+    }
+
     fun updateEditingBar(bar: Int, mode: Int, red: Int, green: Int, blue: Int) {
         val period = editingLightingPeriod
         val current = lightingProfile(period)
@@ -610,6 +646,11 @@ class AppSettings(context: Context) {
         private const val KEY_LIGHTING_EDIT = "lighting_edit_period"
         private const val KEY_PROFILE_DAY = "lighting_profile_day"
         private const val KEY_PROFILE_NIGHT = "lighting_profile_night"
+        private const val KEY_BARS_SYNCED = "lighting_bars_synced"
+        private const val KEY_UNSYNCED_DAY = "lighting_unsynced_day"
+        private const val KEY_UNSYNCED_NIGHT = "lighting_unsynced_night"
+        private const val KEY_SYNCED_COLOR_DAY = "lighting_synced_color_day"
+        private const val KEY_SYNCED_COLOR_NIGHT = "lighting_synced_color_night"
         private const val KEY_VEHICLE_INFO_ATTITUDE_SPLIT = "vehicle_info_attitude_split"
         private const val KEY_ADAS_EDIT_MODE = "adas_edit_mode"
         private const val KEY_ADAS_CUSTOM_ELKA = "adas_custom_elka"

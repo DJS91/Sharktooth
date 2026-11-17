@@ -20,7 +20,6 @@ import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.lifecycle.lifecycleScope
 import com.sphy.airconcontroller.adb.AdbPermissionManager
-import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import com.sphy.airconcontroller.update.AppUpdater
 import com.sphy.airconcontroller.update.CompanionAppInstaller
 import com.sphy.airconcontroller.update.CompanionApps
@@ -31,7 +30,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
 /** Recording apps page: Overdrive on the left, Strike on the right. Install when missing, open when present. */
-class SentryActivity : OpenDiKeyActivity() {
+class SentryActivity : HomeActivity() {
     private lateinit var panels: List<CompanionPanel>
 
     private val installLauncher =

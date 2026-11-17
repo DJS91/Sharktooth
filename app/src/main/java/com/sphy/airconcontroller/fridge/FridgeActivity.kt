@@ -16,11 +16,11 @@ import androidx.appcompat.app.AlertDialog
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.sphy.airconcontroller.OpenDiKeyApp
+import com.sphy.airconcontroller.HomeActivity
 import com.sphy.airconcontroller.R
-import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 
 /** Fridge page: Bluetooth name, temperature history graph and target controls. */
-class FridgeActivity : OpenDiKeyActivity() {
+class FridgeActivity : HomeActivity() {
     private class Card(root: View, val compartment: Int) {
         val label: TextView = root.findViewById(R.id.compartmentLabel)
         val current: TextView = root.findViewById(R.id.compartmentCurrent)

@@ -1,4 +1,4 @@
-# <img src="app/src/main/res/mipmap-xxxhdpi/ic_launcher.webp" alt="" width="48"> Sharktooth
+# <img src="assets/sharktooth-logo.svg" alt="" width="48"> Sharktooth
 
 **Compatibility:** BYD Shark 6. Other vehicles are untested.
 **Disclaimer:** Not affiliated with BYD, DiKey or their sellers.
@@ -12,7 +12,7 @@ Sharktooth is an open source and free app for the BYD Shark 6's head unit to dis
 - **Vehicle dashboard** — Battery, range, fuel, tyres, driving data and head-unit status. **ESP32: not required.**
 - **ADAS profiles** — View and apply driver-assistance settings, with optional automatic application. **ESP32: not required.**
 - **Pet Mode** — Keep the display awake and maintain a configured climate profile while the vehicle is READY. **ESP32: not required.**
-- **Sentry** — Install, update and launch the separate [Strike](https://github.com/UnrealSalty/Strike) app. **ESP32: not required.**
+- **Sentry** — Install, update and launch the separate [Strike](https://github.com/DJS91/Strike) app. **ESP32: not required.**
 - **CarPlay / Android Auto** — Launch from the home screen or switch automatically when connected. **ESP32: not required.**
 - **DiKey controls (optional)** — Map buttons, control climate with the dials, and configure button and ambient lighting. **ESP32: optional**; direct Bluetooth requires compatible head-unit BLE.
 - **[EVAKOOL camping fridge](docs/camping-fridge.md)** — Monitor temperatures and voltage, control power and settings, and view history and alerts. **ESP32: optional**; the default uses the bridge, with a direct Android Bluetooth backup.

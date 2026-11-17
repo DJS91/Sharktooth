@@ -10,8 +10,8 @@
     <string name="telemetry_invalid_url">Enter a valid publicly trusted HTTPS URL (maximum 512 UTF-8 bytes).</string>
     <string name="telemetry_invalid_interval">Enter an interval between 5 and 3600 seconds.</string>
     <string name="telemetry_location_denied">Location permission not granted; location will be unavailable.</string>
-  <string name="app_name">Sharktooth</string>
-  <string name="hub_title">Sharktooth</string>
+  <string name="app_name">SHARKTOOTH</string>
+  <string name="hub_title">SHARKTOOTH</string>
   <string name="hub_subtitle">ADB setup for vehicle APIs, then open a test menu.</string>
   <string name="settings_menu_title">Settings</string>
   <string name="debug_menu_title">Debug</string>
@@ -98,22 +98,35 @@
   >
   <string name="settings_update_later">Later</string>
   <string name="settings_update_install">Download &amp; install</string>
-  <string name="color_config_title">Colors</string>
+  <string name="controls_bar_title">Controls Bar</string>
+  <string name="color_config_title">Colours</string>
   <string name="color_home_subtitle">Ambient bars, modes, and day/night profiles</string>
   <string name="color_config_subtitle"
-    >Each zone has its own wheel. Changes apply live when DiKey is connected.</string
+    >Select a zone to edit its colour. Changes apply live when DiKey is connected.</string
   >
   <string name="navigate_back">Back</string>
   <string name="color_left">Left bar</string>
   <string name="color_middle">Middle bar</string>
   <string name="color_right">Right bar</string>
   <string name="color_keys">Key backlight</string>
+  <string name="color_all_bars">All bars</string>
+  <string name="color_sync_bars">Sync bar colours</string>
   <string name="color_brightness">Brightness</string>
   <string name="color_brightness_fmt">Brightness · %1$d</string>
   <string name="color_red_fmt">Red · %1$d</string>
   <string name="color_green_fmt">Green · %1$d</string>
   <string name="color_blue_fmt">Blue · %1$d</string>
-  <string name="color_wheel_desc">Color wheel</string>
+  <string name="color_hue">Color</string>
+  <string name="color_saturation">Saturation</string>
+  <string name="color_saturation_fmt">Saturation · %1$d%%</string>
+  <string name="color_summary_sat">Sat: %1$d%%</string>
+  <string name="color_summary_mode">Mde: %1$s</string>
+  <string name="color_summary_brightness">Bri: %1$d</string>
+  <string name="color_summary_red">Red: %1$d</string>
+  <string name="color_summary_green">Grn: %1$d</string>
+  <string name="color_summary_blue">Blu: %1$d</string>
+  <string name="color_bar_preview_desc">Preview of the light bars and key backlight</string>
+  <string name="color_debug_dial_preview_label">Example dial values</string>
   <string name="color_mode">Mode</string>
   <string name="led_mode_off">Off</string>
   <string name="led_mode_blink">Blink</string>
@@ -521,8 +534,12 @@
   <string name="button_down_9">Sync</string>
   <string name="button_down_10">Max cool</string>
   <string name="listen_notification_channel">DiKey listener</string>
-  <string name="listen_notification_title">Sharktooth</string>
+  <string name="listen_notification_title">SHARKTOOTH</string>
   <string name="listen_notification_body">Listening for the key</string>
+  <string name="modes_title">Modes</string>
+  <string name="camp_mode_title">Camp Mode</string>
+  <string name="camp_mode_enable">Enable Camp Mode</string>
+  <string name="camp_mode_unavailable">Camp Mode is unavailable until vehicle window and display-mode controls are verified.</string>
   <string name="pet_mode_title">Pet Mode</string>
   <string name="pet_mode_home_subtitle">Keep your pet comfortable while you are away</string>
   <string name="pet_mode_owner_message">My owner will be back soon</string>

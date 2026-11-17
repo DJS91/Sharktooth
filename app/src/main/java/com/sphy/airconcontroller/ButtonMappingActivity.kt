@@ -5,21 +5,13 @@ import android.os.Bundle
 import android.view.View
 import android.widget.LinearLayout
 import android.widget.TextView
-import androidx.lifecycle.Lifecycle
-import androidx.lifecycle.lifecycleScope
-import androidx.lifecycle.repeatOnLifecycle
 import com.sphy.airconcontroller.dikey.ButtonMapSlot
 import com.sphy.airconcontroller.dikey.DiKeyButtonCatalog
-import com.sphy.airconcontroller.dikey.DiKeySession
 import com.sphy.airconcontroller.dikey.DialMapSlot
 import com.sphy.airconcontroller.storage.AppSettings
-import com.sphy.airconcontroller.ui.OpenDiKeyActivity
-import kotlinx.coroutines.launch
 
-class ButtonMappingActivity : OpenDiKeyActivity() {
-    private lateinit var session: DiKeySession
+class ButtonMappingActivity : HomeActivity() {
     private lateinit var settings: AppSettings
-    private lateinit var connStatus: TextView
     private lateinit var dialLeftClick: TextView
     private lateinit var dialLeftLong: TextView
     private lateinit var dialRightClick: TextView
@@ -30,9 +22,7 @@ class ButtonMappingActivity : OpenDiKeyActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_button_mapping)
 
-        session = OpenDiKeyApp.from(this).dikey
-        settings = session.settings
-        connStatus = findViewById(R.id.mappingConnStatus)
+        settings = OpenDiKeyApp.from(this).dikey.settings
         dialLeftClick = findViewById(R.id.mappingDialLeftClick)
         dialLeftLong = findViewById(R.id.mappingDialLeftLong)
         dialRightClick = findViewById(R.id.mappingDialRightClick)
@@ -45,12 +35,6 @@ class ButtonMappingActivity : OpenDiKeyActivity() {
         findViewById<View>(R.id.mappingDialRight).setOnClickListener { openDialLongMap("RIGHT") }
 
         inflateRows()
-
-        lifecycleScope.launch {
-            repeatOnLifecycle(Lifecycle.State.STARTED) {
-                session.status.collect { connStatus.text = it }
-            }
-        }
     }
 
     override fun onResume() {

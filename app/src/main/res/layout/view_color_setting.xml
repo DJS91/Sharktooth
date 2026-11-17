@@ -1,133 +1,131 @@
 <?xml version="1.0" encoding="utf-8"?>
-<LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
-    android:layout_height="match_parent"
-    android:gravity="center_horizontal"
-    android:orientation="vertical"
-    android:paddingStart="12dp"
-    android:paddingTop="12dp"
-    android:paddingEnd="12dp"
-    android:paddingBottom="8dp">
+    android:layout_height="match_parent">
 
     <LinearLayout
+        android:id="@+id/colorSettingControls"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:gravity="center_vertical"
-        android:orientation="horizontal">
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:paddingStart="8dp"
+        android:paddingTop="8dp"
+        android:paddingEnd="8dp"
+        android:paddingBottom="8dp">
 
-        <View
-            android:id="@+id/colorSettingSwatch"
-            android:layout_width="12dp"
-            android:layout_height="12dp"
-            android:layout_marginEnd="8dp"
-            android:background="@drawable/bg_color_swatch" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="40dp"
+            android:orientation="vertical">
+            <View
+                android:id="@+id/colorSettingSwatch"
+                android:layout_width="match_parent"
+                android:layout_height="6dp"
+                android:background="@drawable/bg_color_bar_swatch" />
+            <TextView
+                android:id="@+id/colorSettingTitle"
+                style="@style/ColorSettingTitle"
+                android:layout_width="match_parent"
+                android:layout_height="0dp"
+                android:layout_weight="1" />
+        </LinearLayout>
 
-        <TextView
-            android:id="@+id/colorSettingTitle"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:ellipsize="end"
-            android:letterSpacing="0.04"
-            android:maxLines="1"
-            android:textAllCaps="true"
-            android:textAppearance="@style/TextAppearance.MaterialComponents.Overline"
-            android:textColor="@color/text_muted" />
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="56dp"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <SeekBar
+                android:id="@+id/colorSettingHue"
+                style="@style/Widget.OpenDiKey.ColorSeekBar"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:contentDescription="@string/color_hue"
+                android:minHeight="12dp"
+                android:maxHeight="12dp"
+                android:max="360" />
+            <TextView
+                android:id="@+id/colorSettingHex"
+                android:layout_width="wrap_content"
+                android:layout_height="match_parent"
+                android:gravity="center_vertical"
+                android:fontFamily="monospace"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                android:textColor="@color/text_muted" />
+        </LinearLayout>
 
-        <TextView
-            android:id="@+id/colorSettingHex"
-            android:layout_width="wrap_content"
-            android:layout_height="wrap_content"
-            android:fontFamily="monospace"
-            android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-            android:textColor="@color/text_muted" />
+        <LinearLayout style="@style/ColorSettingRow">
+            <TextView android:id="@+id/colorSettingSaturationLabel" style="@style/ColorSettingLabel" />
+            <SeekBar android:id="@+id/colorSettingSaturation" style="@style/ColorSettingSeek"
+                android:contentDescription="@string/color_saturation" android:max="100" />
+        </LinearLayout>
+        <LinearLayout style="@style/ColorSettingRow">
+            <TextView android:id="@+id/colorSettingModeLabel" style="@style/ColorSettingLabel"
+                android:text="@string/color_mode" />
+            <Spinner android:id="@+id/colorSettingMode"
+                android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+        </LinearLayout>
+        <LinearLayout style="@style/ColorSettingRow">
+            <TextView android:id="@+id/colorSettingBrightnessLabel" style="@style/ColorSettingLabel" />
+            <SeekBar android:id="@+id/colorSettingBrightness" style="@style/ColorSettingSeek"
+                android:max="255" android:progress="255" />
+        </LinearLayout>
+        <LinearLayout style="@style/ColorSettingRow">
+            <TextView android:id="@+id/colorSettingRedLabel" style="@style/ColorSettingLabel" />
+            <SeekBar android:id="@+id/colorSettingRed" style="@style/ColorSettingSeek" android:max="255" />
+        </LinearLayout>
+        <LinearLayout style="@style/ColorSettingRow">
+            <TextView android:id="@+id/colorSettingGreenLabel" style="@style/ColorSettingLabel" />
+            <SeekBar android:id="@+id/colorSettingGreen" style="@style/ColorSettingSeek" android:max="255" />
+        </LinearLayout>
+        <LinearLayout style="@style/ColorSettingRow">
+            <TextView android:id="@+id/colorSettingBlueLabel" style="@style/ColorSettingLabel" />
+            <SeekBar android:id="@+id/colorSettingBlue" style="@style/ColorSettingSeek" android:max="255" />
+        </LinearLayout>
     </LinearLayout>
 
-    <com.sphy.airconcontroller.ui.HsvColorWheelView
-        android:id="@+id/colorSettingWheel"
+    <LinearLayout
+        android:id="@+id/colorSettingSummaryContainer"
         android:layout_width="match_parent"
-        android:layout_height="0dp"
-        android:layout_gravity="center"
-        android:layout_marginTop="8dp"
-        android:layout_weight="1"
-        android:contentDescription="@string/color_wheel_desc" />
-
-    <TextView
-        android:id="@+id/colorSettingModeLabel"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
-        android:text="@string/color_mode"
-        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-        android:textColor="@color/text_muted" />
-
-    <Spinner
-        android:id="@+id/colorSettingMode"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content" />
-
-    <TextView
-        android:id="@+id/colorSettingBrightnessLabel"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:text="@string/color_brightness_fmt"
-        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-        android:textColor="@color/text_muted" />
-
-    <SeekBar
-        android:id="@+id/colorSettingBrightness"
-        style="@style/Widget.OpenDiKey.ColorSeekBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:max="255"
-        android:progress="255" />
-
-    <TextView
-        android:id="@+id/colorSettingRedLabel"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:text="@string/color_red_fmt"
-        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-        android:textColor="@color/text_muted" />
-
-    <SeekBar
-        android:id="@+id/colorSettingRed"
-        style="@style/Widget.OpenDiKey.ColorSeekBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:max="255" />
-
-    <TextView
-        android:id="@+id/colorSettingGreenLabel"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:text="@string/color_green_fmt"
-        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-        android:textColor="@color/text_muted" />
-
-    <SeekBar
-        android:id="@+id/colorSettingGreen"
-        style="@style/Widget.OpenDiKey.ColorSeekBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:max="255" />
-
-    <TextView
-        android:id="@+id/colorSettingBlueLabel"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="6dp"
-        android:text="@string/color_blue_fmt"
-        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-        android:textColor="@color/text_muted" />
-
-    <SeekBar
-        android:id="@+id/colorSettingBlue"
-        style="@style/Widget.OpenDiKey.ColorSeekBar"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:max="255" />
-</LinearLayout>
+        android:layout_height="match_parent"
+        android:visibility="gone"
+        android:orientation="vertical">
+        <LinearLayout
+            android:id="@+id/colorSettingSummaryContents"
+            android:layout_width="match_parent"
+            android:layout_height="match_parent"
+            android:background="?attr/selectableItemBackground"
+            android:orientation="vertical"
+            android:paddingStart="8dp"
+            android:paddingTop="8dp"
+            android:paddingEnd="8dp"
+            android:paddingBottom="8dp">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="40dp"
+                android:orientation="vertical">
+                <View
+                    android:id="@+id/colorSettingSummarySwatch"
+                    android:layout_width="match_parent"
+                    android:layout_height="6dp"
+                    android:background="@drawable/bg_color_bar_swatch" />
+                <TextView
+                    android:id="@+id/colorSettingSummaryTitle"
+                    style="@style/ColorSettingTitle"
+                    android:layout_width="match_parent"
+                    android:layout_height="0dp"
+                    android:layout_weight="1" />
+            </LinearLayout>
+            <TextView android:id="@+id/colorSettingSummaryHex"
+                style="@style/ColorSettingSummaryValue"
+                android:layout_width="match_parent" android:layout_height="56dp" android:layout_weight="0" />
+            <TextView android:id="@+id/colorSettingSummarySaturation" style="@style/ColorSettingSummaryValue" />
+            <TextView android:id="@+id/colorSettingSummaryMode" style="@style/ColorSettingSummaryValue" />
+            <TextView android:id="@+id/colorSettingSummaryBrightness" style="@style/ColorSettingSummaryValue" />
+            <TextView android:id="@+id/colorSettingSummaryRed" style="@style/ColorSettingSummaryValue" />
+            <TextView android:id="@+id/colorSettingSummaryGreen" style="@style/ColorSettingSummaryValue" />
+            <TextView android:id="@+id/colorSettingSummaryBlue" style="@style/ColorSettingSummaryValue" />
+        </LinearLayout>
+    </LinearLayout>
+</FrameLayout>

@@ -18,8 +18,8 @@
     <color name="classic_divider">#33F4F6F8</color>
     <color name="classic_text">#FFF4F6F8</color>
     <color name="classic_muted">#FF9AA3AE</color>
-    <color name="classic_accent">#FFFF5A1F</color>
-    <color name="classic_accent_soft">#33FF5A1F</color>
+    <color name="classic_accent">#FF0099CC</color>
+    <color name="classic_accent_soft">#330099CC</color>
 
     <color name="modern_bg">#FF09090B</color>
     <color name="modern_surface">#FF17171C</color>
@@ -27,8 +27,8 @@
     <color name="modern_divider">#33FAFAFA</color>
     <color name="modern_text">#FFFAFAFA</color>
     <color name="modern_muted">#FF8E8E99</color>
-    <color name="modern_accent">#FFFF5A1F</color>
-    <color name="modern_accent_soft">#33FF5A1F</color>
+    <color name="modern_accent">#FF0099CC</color>
+    <color name="modern_accent_soft">#330099CC</color>
 
     <!-- Fixed warning orange for status indicators, independent of the theme accent. -->
     <color name="status_warning">#FFFF5A1F</color>

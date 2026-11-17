@@ -23,7 +23,6 @@ import com.sphy.airconcontroller.byd.TabletSocReader
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.ui.AttitudeHorizonView
 import com.sphy.airconcontroller.ui.PercentBar
-import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.isActive
@@ -32,8 +31,8 @@ import kotlinx.coroutines.withContext
 import kotlin.math.atan2
 import kotlin.math.sqrt
 
-/** Live vehicle dashboard — battery, dynamics, tyres in three orange-bordered columns. */
-class VehicleInfoActivity : OpenDiKeyActivity() {
+/** Live vehicle dashboard — battery, dynamics, tyres in three blue-bordered columns. */
+open class VehicleInfoActivity : HomeActivity() {
     private lateinit var info: BydVehicleInfoController
     private lateinit var tabletSoc: TabletSocReader
     private lateinit var settings: AppSettings
@@ -102,7 +101,6 @@ class VehicleInfoActivity : OpenDiKeyActivity() {
         findViewById<android.widget.ImageButton>(R.id.vehicleInfoBackButton).setOnClickListener {
             finish()
         }
-
         buildDashboard()
 
         lifecycleScope.launch {

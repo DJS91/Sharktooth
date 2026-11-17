@@ -283,7 +283,16 @@ class DiKeySession(private val app: Context) {
         return controller.sendButtonBacklight(red, green, blue)
     }
 
-    fun applyLightingPeriod(period: com.sphy.airconcontroller.lighting.LightingPeriod): Boolean {
+    fun applyLightingPeriod(period: com.sphy.airconcontroller.lighting.LightingPeriod): Boolean =
+        applyLightingPeriod(period, includeBacklight = true)
+
+    fun applyBarLightingPeriod(period: com.sphy.airconcontroller.lighting.LightingPeriod): Boolean =
+        applyLightingPeriod(period, includeBacklight = false)
+
+    private fun applyLightingPeriod(
+        period: com.sphy.airconcontroller.lighting.LightingPeriod,
+        includeBacklight: Boolean,
+    ): Boolean {
         settings.applyProfileToLive(period)
         // Build snapshot from the period being applied — not liveLightingPeriod(), which
         // can still reflect the previous period until LightingScheduler updates lastApplied.
@@ -304,8 +313,10 @@ class DiKeySession(private val app: Context) {
                 state.color.blue
             ) && ok
         }
-        snapshot.backlight?.let { bl ->
-            ok = controller.sendButtonBacklight(bl.red, bl.green, bl.blue) && ok
+        if (includeBacklight) {
+            snapshot.backlight?.let { bl ->
+                ok = controller.sendButtonBacklight(bl.red, bl.green, bl.blue) && ok
+            }
         }
         return ok
     }

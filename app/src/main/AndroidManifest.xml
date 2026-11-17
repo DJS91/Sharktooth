@@ -171,6 +171,11 @@
       android:parentActivityName=".MainActivity"
       android:theme="@style/Theme.OpenDiKey" />
     <activity
+      android:name=".CampModeActivity"
+      android:exported="false"
+      android:parentActivityName=".MainActivity"
+      android:theme="@style/Theme.OpenDiKey" />
+    <activity
       android:name=".PetModeConfigActivity"
       android:exported="false"
       android:parentActivityName=".PetModeActivity"

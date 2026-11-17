@@ -1,6 +1,6 @@
 package com.sphy.airconcontroller.fridge
 
-import android.content.Intent
+import android.content.pm.ApplicationInfo
 import android.text.SpannableStringBuilder
 import android.text.Spanned
 import android.text.style.ForegroundColorSpan
@@ -8,19 +8,20 @@ import android.text.style.RelativeSizeSpan
 import android.view.View
 import android.widget.Button
 import android.widget.TextView
-import com.sphy.airconcontroller.MainActivity
+import com.sphy.airconcontroller.HomeActivity
 import com.sphy.airconcontroller.OpenDiKeyApp
 import com.sphy.airconcontroller.R
 
 /**
  * Home tile. Hidden until the fridge first delivers live readings in this app run; after that
  * it stays, showing temperatures and Eco/Max, or "Disconnected" with a Reconnect button.
- * Tapping opens [FridgeActivity].
+ * Tapping opens [FridgeActivity]. Debug builds preview the tile until a real fridge is seen.
  */
-class FridgeTile(private val activity: MainActivity) {
+class FridgeTile(private val activity: HomeActivity) {
     private val tile = activity.findViewById<View>(R.id.homeFridgeButton)
     private val temperatures = activity.findViewById<TextView>(R.id.homeFridgeTemperatures)
     private val status = activity.findViewById<TextView>(R.id.homeFridgeStatus)
+    private val disconnected = activity.findViewById<TextView>(R.id.homeFridgeDisconnected)
     private val reconnect = activity.findViewById<Button>(R.id.homeFridgeReconnect)
     private val controller = OpenDiKeyApp.from(activity).fridge
     private val listener: () -> Unit = { render() }
@@ -28,7 +29,7 @@ class FridgeTile(private val activity: MainActivity) {
 
     init {
         tile.setOnClickListener {
-            activity.startActivity(Intent(activity, FridgeActivity::class.java))
+            activity.navigateTo(FridgeActivity::class.java)
         }
         reconnect.setOnClickListener { controller.reconnect() }
         render()
@@ -52,36 +53,47 @@ class FridgeTile(private val activity: MainActivity) {
     }
 
     private fun render() {
-        // INVISIBLE (not GONE) keeps the other tiles in this row the same size.
-        tile.visibility = if (controller.seenConnected) View.VISIBLE else View.INVISIBLE
-        val value = controller.status
+        val actual = controller.status
+        val preview = isFridgeTilePreview(
+            activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0,
+            controller.seenConnected,
+            actual,
+        )
+        tile.visibility = if (controller.seenConnected || actual != null || preview) View.VISIBLE else View.GONE
+        val value = if (preview) PREVIEW_STATUS else actual
         if (value != null) {
+            temperatures.visibility = View.VISIBLE
+            disconnected.visibility = View.GONE
             temperatures.text = temperatureText(value)
             val max = controller.displayMax ?: value.max
             val mode = activity.getString(
                 when {
-                    controller.displayOn == false -> R.string.fridge_tile_off
-                    max -> R.string.fridge_mode_max_label
-                    else -> R.string.fridge_mode_eco_label
+                    (controller.displayOn ?: value.on) == false -> R.string.fridge_off
+                    max -> R.string.fridge_mode_max
+                    else -> R.string.fridge_mode_eco
                 },
             )
             status.text = activity.getString(R.string.fridge_tile_voltage, value.voltage) + "\n" + mode
             reconnect.visibility = View.GONE
             status.visibility = View.VISIBLE
         } else {
-            temperatures.setText(R.string.fridge_disconnected_tile)
+            temperatures.visibility = View.GONE
+            disconnected.visibility = View.VISIBLE
             status.text = controller.message
             // The button takes the status line's place so the tile keeps the row's height;
             // the detailed reason remains on the fridge page and in the accessibility text.
             status.visibility = View.GONE
             reconnect.visibility = View.VISIBLE
         }
-        tile.contentDescription = listOf(
-            activity.getString(R.string.fridge_title), temperatures.text, status.text,
+        tile.contentDescription = listOfNotNull(
+            activity.getString(R.string.fridge_title),
+            if (preview) activity.getString(R.string.fridge_tile_example_readings) else null,
+            if (value != null) temperatures.text else disconnected.text,
+            status.text,
         ).joinToString(", ")
     }
 
-    /** "L 4°C   R -18°C" with small grey side letters so the temperatures stand out. */
+    /** Small grey side letters keep the two temperatures prominent. */
     private fun temperatureText(value: EvakoolProtocol.Status): CharSequence {
         val unit = if (value.celsius) "C" else "F"
         val muted = activity.getColor(R.color.text_muted)
@@ -95,9 +107,22 @@ class FridgeTile(private val activity: MainActivity) {
         }
         label("L")
         text.append("${value.left}°$unit")
-        text.append("   ")
+        text.append('\n')
         label("R")
         text.append("${value.right}°$unit")
         return text
     }
+
+    companion object {
+        private val PREVIEW_STATUS = EvakoolProtocol.Status(
+            on = true, celsius = true, left = 4, right = -18,
+            leftTarget = 4, rightTarget = -18, voltage = "13.8",
+        )
+    }
 }
+
+internal fun isFridgeTilePreview(
+    isDebug: Boolean,
+    seenConnected: Boolean,
+    status: EvakoolProtocol.Status?,
+): Boolean = isDebug && !seenConnected && status == null

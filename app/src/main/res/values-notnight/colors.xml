@@ -1,7 +1,7 @@
 <?xml version="1.0" encoding="utf-8"?>
 <!--
     Light palette. Only the colors that differ from the dark palette in values/colors.xml are
-    overridden here; the accent orange and the white-on-accent text are shared by both.
+    overridden here; the blue accent and the white-on-accent text are shared by both.
 -->
 <resources>
     <color name="classic_bg">#FFDCE1E8</color>
@@ -17,8 +17,8 @@
     <color name="modern_divider">#33101214</color>
     <color name="modern_text">#FF0F1115</color>
     <color name="modern_muted">#FF6B7280</color>
-    <color name="modern_accent">#FFFF5A1F</color>
-    <color name="modern_accent_soft">#33FF5A1F</color>
+    <color name="modern_accent">#FF0099CC</color>
+    <color name="modern_accent_soft">#330099CC</color>
     <!-- Deeper green: the dark-mode green is too pale to read on a white surface. -->
     <color name="tyre_ok">#FF1E9E5A</color>
     <color name="accent_green_soft">#331E9E5A</color>

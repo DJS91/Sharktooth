@@ -1,22 +1,4 @@
-<!-- Open-DiKey brand glyph: ring/open-padlock mark from open-dikey_logo.svg,
-     recentered in the square canvas now that the wordmark below it is dropped
-     (app icons are too small for the text to read). Path data (M/L/Q, 512x512
-     space) is copied verbatim from the SVG's Layer0_2_FILL; a group translate
-     recenters it vertically/horizontally without needing to touch the curve
-     numbers themselves. -->
-<vector xmlns:android="http://schemas.android.com/apk/res/android"
-    android:width="108dp"
-    android:height="108dp"
-    android:viewportWidth="512"
-    android:viewportHeight="512">
-    <group android:translateX="-0.5" android:translateY="40.7">
-        <path
-            android:fillColor="#FFFFFF"
-            android:pathData="M362.2,328.15
-                Q406,284.4 406,222.45 406,160.5 362.2,116.7 318.45,72.95 256.5,72.95 194.55,72.95 150.75,116.7 107,160.5 107,222.45 107,284.4 150.75,328.15 167.85,345.25 187.75,355.7
-                L224.95,277.05
-                Q218.05,272.95 212,266.9 193.6,248.5 193.6,222.45 193.6,196.4 212,178 230.4,159.6 256.45,159.6 282.5,159.6 300.9,178 319.3,196.4 319.3,222.45 319.3,248.5 300.9,266.9 292.8,275 283.2,279.55
-                L321.4,357.65
-                Q343.45,346.9 362.2,328.15 Z" />
-    </group>
-</vector>
+<?xml version="1.0" encoding="utf-8"?>
+<inset xmlns:android="http://schemas.android.com/apk/res/android"
+    android:drawable="@drawable/ic_logo"
+    android:inset="20%" />

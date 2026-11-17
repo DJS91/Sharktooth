@@ -27,24 +27,23 @@
             android:src="@drawable/ic_arrow_back"
             android:tint="@color/text_primary" />
 
-        <TextView
+        <FrameLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:text="@string/pet_mode_title"
-            android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
-            android:textColor="@color/text_primary"
-            android:textStyle="bold" />
+            android:layout_weight="1">
+            <include layout="@layout/view_modes_tabs" />
 
-        <ImageButton
-            android:id="@+id/petSettingsButton"
-            android:layout_width="48dp"
-            android:layout_height="48dp"
-            android:background="?attr/selectableItemBackgroundBorderless"
-            android:contentDescription="@string/pet_mode_configure"
-            android:padding="12dp"
-            android:src="@drawable/ic_settings"
-            android:tint="@color/text_primary" />
+            <ImageButton
+                android:id="@+id/petSettingsButton"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:layout_gravity="end"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/pet_mode_configure"
+                android:padding="12dp"
+                android:src="@drawable/ic_settings"
+                android:tint="@color/text_primary" />
+        </FrameLayout>
 
         <include layout="@layout/view_back_button_end" />
     </LinearLayout>

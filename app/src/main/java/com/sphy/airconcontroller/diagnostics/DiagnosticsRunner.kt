@@ -77,6 +77,11 @@ class DiagnosticsRunner(
             Step("SDK classes and injection") { sdkClasses() },
             Step("BYD device binding") { deviceBinding() },
             Step("ADAS API inventory") { adasApiInventory() },
+            Step("Camp Mode API inventory") {
+                line(campModeApiInventory(app.classLoader, DEVICE_CLASSES.filter {
+                    it.first in setOf("Bodywork", "Setting", "Instrument", "Light")
+                }))
+            },
             Step("Climate controller") { climate() },
             Step("AC service probe") { acServiceProbe() },
             Step("Vehicle info") { vehicleInfo() },

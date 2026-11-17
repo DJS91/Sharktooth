@@ -1,31 +1,53 @@
 package com.sphy.airconcontroller
 
+import android.content.pm.ApplicationInfo
 import android.os.Bundle
 import android.os.Handler
 import android.os.Looper
+import android.transition.ChangeBounds
+import android.transition.TransitionManager
+import android.view.View
+import android.view.animation.PathInterpolator
+import android.widget.LinearLayout
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.button.MaterialButtonToggleGroup
+import com.sphy.airconcontroller.dikey.DialDisplay
+import com.sphy.airconcontroller.dikey.DialDisplayType
+import com.sphy.airconcontroller.dikey.DialDisplays
 import com.sphy.airconcontroller.dikey.DiKeySession
 import com.sphy.airconcontroller.dikey.LedMode
 import com.sphy.airconcontroller.lighting.LightingPeriod
 import com.sphy.airconcontroller.lighting.LightingScheduler
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.ui.ColorSettingCard
-import com.sphy.airconcontroller.ui.OpenDiKeyActivity
+import com.sphy.airconcontroller.ui.DiKeyBarPreview
+import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
 
-class ColorConfigActivity : OpenDiKeyActivity() {
+internal fun previewDialDisplays(displays: DialDisplays, isConnected: Boolean, isDebug: Boolean): DialDisplays =
+    if (isDebug && !isConnected) {
+        DialDisplays(
+            DialDisplay(DialDisplayType.PASSENGER_TEMP.code, 24),
+            DialDisplay(DialDisplayType.DRIVER_FAN.code, 3),
+        )
+    } else {
+        displays
+    }
+
+class ColorConfigActivity : HomeActivity() {
     private lateinit var session: DiKeySession
     private lateinit var settings: AppSettings
-    private lateinit var connStatus: android.widget.TextView
+    private lateinit var debugDialLabel: android.widget.TextView
     private lateinit var periodToggle: MaterialButtonToggleGroup
+    private lateinit var syncGroup: MaterialButtonToggleGroup
 
     private lateinit var colorLeft: ColorSettingCard
     private lateinit var colorMiddle: ColorSettingCard
     private lateinit var colorRight: ColorSettingCard
     private lateinit var colorKeys: ColorSettingCard
+    private lateinit var barPreview: DiKeyBarPreview
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val applyBarRunnables = Array<Runnable?>(4) { null }
@@ -37,8 +59,9 @@ class ColorConfigActivity : OpenDiKeyActivity() {
 
         session = OpenDiKeyApp.from(this).dikey
         settings = session.settings
-        connStatus = findViewById(R.id.colorConnStatus)
+        debugDialLabel = findViewById(R.id.colorDebugDialLabel)
         periodToggle = findViewById(R.id.colorPeriodToggle)
+        syncGroup = findViewById(R.id.colorSyncGroup)
 
         findViewById<android.widget.ImageButton>(R.id.colorBackButton).setOnClickListener {
             finish()
@@ -48,6 +71,7 @@ class ColorConfigActivity : OpenDiKeyActivity() {
         colorMiddle = findViewById(R.id.colorMiddle)
         colorRight = findViewById(R.id.colorRight)
         colorKeys = findViewById(R.id.colorKeys)
+        barPreview = findViewById(R.id.colorBarPreview)
 
         colorLeft.setTitle(getString(R.string.color_left))
         colorMiddle.setTitle(getString(R.string.color_middle))
@@ -55,12 +79,20 @@ class ColorConfigActivity : OpenDiKeyActivity() {
         colorKeys.setTitle(getString(R.string.color_keys))
         colorKeys.setModeVisible(false)
 
+        setupSyncControl()
+        selectCard(savedInstanceState?.getInt(STATE_SELECTED_CARD, 0) ?: 0)
         setupPeriodControls()
         reloadCardsFromEditingProfile()
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                session.status.collect { connStatus.text = it }
+                combine(session.connectionState, session.controller.dialDisplays) { state, displays -> state to displays }
+                    .collect { (state, displays) ->
+                        val isDebug = applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0
+                        val isConnected = state == DiKeySession.ConnectionState.CONNECTED
+                        debugDialLabel.visibility = if (isDebug && !isConnected) View.VISIBLE else View.GONE
+                        barPreview.setDialDisplays(previewDialDisplays(displays, isConnected, isDebug))
+                    }
             }
         }
     }
@@ -71,8 +103,48 @@ class ColorConfigActivity : OpenDiKeyActivity() {
     }
 
     override fun onDestroy() {
-        applyBarRunnables.forEach { it?.let(mainHandler::removeCallbacks) }
+        flushScheduled()
         super.onDestroy()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putInt(STATE_SELECTED_CARD, selectedCard)
+        super.onSaveInstanceState(outState)
+    }
+
+    private var selectedCard = 0
+    private fun selectCard(selected: Int, animate: Boolean = false) {
+        val cards = listOf(colorLeft, colorMiddle, colorRight, colorKeys)
+        val container = findViewById<LinearLayout>(R.id.colorCards)
+        if (animate && container.isLaidOut) {
+            val transition = ChangeBounds().setDuration(350)
+            transition.interpolator = PathInterpolator(0.42f, 0f, 0.58f, 1f)
+            TransitionManager.beginDelayedTransition(container, transition)
+        }
+        selectedCard = selected.coerceIn(cards.indices).let {
+            if (settings.barsSynced && it in 1..2) 0 else it
+        }
+        cards.forEachIndexed { index, card ->
+            card.visibility = if (settings.barsSynced && index in 1..2) View.GONE else View.VISIBLE
+            val expanded = index == selectedCard
+            val params = card.layoutParams as LinearLayout.LayoutParams
+            params.width = if (expanded) 0 else (104 * resources.displayMetrics.density).toInt()
+            params.weight = if (expanded) 1f else 0f
+            card.layoutParams = params
+            card.setExpanded(expanded) { selectCard(index, animate = true) }
+        }
+    }
+
+    private fun setupSyncControl() {
+        if (settings.barsSynced) syncGroup.check(R.id.colorSyncBars)
+        syncGroup.addOnButtonCheckedListener { _, id, checked ->
+            if (id != R.id.colorSyncBars) return@addOnButtonCheckedListener
+            flushScheduled()
+            settings.setBarsSynced(checked)
+            session.applyBarLightingPeriod(settings.liveLightingPeriod())
+            selectCard(selectedCard)
+            reloadCardsFromEditingProfile()
+        }
     }
 
     private fun setupPeriodControls() {
@@ -88,6 +160,7 @@ class ColorConfigActivity : OpenDiKeyActivity() {
 
         periodToggle.addOnButtonCheckedListener { _, checkedId, isChecked ->
             if (!isChecked || suppressUi) return@addOnButtonCheckedListener
+            flushScheduled()
             settings.editingLightingPeriod =
                 if (checkedId == R.id.colorPeriodNight) LightingPeriod.NIGHT else LightingPeriod.DAY
             reloadCardsFromEditingProfile()
@@ -99,18 +172,40 @@ class ColorConfigActivity : OpenDiKeyActivity() {
         bindBar(colorMiddle, 2)
         bindBar(colorRight, 3)
         bindBacklight(colorKeys)
+        colorLeft.setTitle(getString(if (settings.barsSynced) R.string.color_all_bars else R.string.color_left))
+        if (settings.barsSynced) {
+            colorLeft.setModeVisible(false)
+            colorLeft.onModeChanged = null
+            colorLeft.onColorChanged = { r, g, b ->
+                for (bar in 1..3) {
+                    barPreview.setBarColor(bar, r, g, b)
+                    scheduleApply(bar, r, g, b, settings.modeForBar(bar))
+                }
+            }
+            colorLeft.onColorCommitted = { r, g, b ->
+                for (bar in 1..3) {
+                    cancelSchedule(bar)
+                    session.applyBarColor(bar, r, g, b, settings.modeForBar(bar))
+                }
+            }
+        }
     }
 
     private fun bindBar(card: ColorSettingCard, bar: Int) {
         val color = settings.colorForBar(bar)
         val mode = LedMode.entries.find { it.code == settings.modeForBar(bar) } ?: LedMode.ON
+        card.onModeChanged = null
         card.setModeVisible(true)
         card.setMode(mode)
         card.setRgb(color.red, color.green, color.blue)
+        barPreview.setBarColor(bar, card.red, card.green, card.blue)
         card.onModeChanged = { next ->
             session.applyBarColor(bar, card.red, card.green, card.blue, next.code)
         }
-        card.onColorChanged = { r, g, b -> scheduleApply(bar, r, g, b, card.mode().code) }
+        card.onColorChanged = { r, g, b ->
+            barPreview.setBarColor(bar, r, g, b)
+            scheduleApply(bar, r, g, b, card.mode().code)
+        }
         card.onColorCommitted = { r, g, b ->
             cancelSchedule(bar)
             session.applyBarColor(bar, r, g, b, card.mode().code)
@@ -120,7 +215,11 @@ class ColorConfigActivity : OpenDiKeyActivity() {
     private fun bindBacklight(card: ColorSettingCard) {
         val color = settings.colorForBacklight()
         card.setRgb(color.red, color.green, color.blue)
-        card.onColorChanged = { r, g, b -> scheduleApply(BACKLIGHT_SLOT, r, g, b, null) }
+        barPreview.setKeyBacklightColor(card.red, card.green, card.blue)
+        card.onColorChanged = { r, g, b ->
+            barPreview.setKeyBacklightColor(r, g, b)
+            scheduleApply(BACKLIGHT_SLOT, r, g, b, null)
+        }
         card.onColorCommitted = { r, g, b ->
             cancelSchedule(BACKLIGHT_SLOT)
             session.applyBacklight(r, g, b)
@@ -130,6 +229,7 @@ class ColorConfigActivity : OpenDiKeyActivity() {
     private fun scheduleApply(slot: Int, r: Int, g: Int, b: Int, mode: Int?) {
         cancelSchedule(slot)
         val task = Runnable {
+            applyBarRunnables[slotIndex(slot)] = null
             if (slot == BACKLIGHT_SLOT) {
                 session.applyBacklight(r, g, b)
             } else {
@@ -145,10 +245,20 @@ class ColorConfigActivity : OpenDiKeyActivity() {
         applyBarRunnables[slotIndex(slot)] = null
     }
 
+    private fun flushScheduled() {
+        for (slot in 0..3) {
+            val task = applyBarRunnables[slot] ?: continue
+            mainHandler.removeCallbacks(task)
+            applyBarRunnables[slot] = null
+            task.run()
+        }
+    }
+
     private fun slotIndex(slot: Int) = if (slot == BACKLIGHT_SLOT) 3 else slot - 1
 
     companion object {
         private const val APPLY_DEBOUNCE_MS = 80L
         private const val BACKLIGHT_SLOT = 0
+        private const val STATE_SELECTED_CARD = "selected_color_card"
     }
 }

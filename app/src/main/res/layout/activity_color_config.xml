@@ -28,58 +28,63 @@
             android:src="@drawable/ic_arrow_back"
             android:tint="@color/text_primary" />
 
-        <LinearLayout
+        <Space
+            android:layout_width="0dp"
+            android:layout_height="1dp"
+            android:layout_weight="1" />
+
+        <FrameLayout
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_weight="1"
-            android:orientation="vertical">
+            android:layout_weight="1">
+            <include layout="@layout/view_controls_bar_tabs" />
+        </FrameLayout>
 
-            <TextView
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/color_config_title"
-                android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6"
-                android:textColor="@color/text_primary"
-                android:textStyle="bold" />
-
-            <TextView
-                android:id="@+id/colorConnStatus"
-                android:layout_width="match_parent"
-                android:layout_height="wrap_content"
-                android:text="@string/dikey_status_idle"
-                android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
-                android:textColor="@color/text_muted" />
-        </LinearLayout>
-
-        <com.google.android.material.button.MaterialButtonToggleGroup
-            android:id="@+id/colorPeriodToggle"
-            android:layout_width="wrap_content"
+        <FrameLayout
+            android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
-            app:singleSelection="true"
-            app:selectionRequired="true">
+            android:layout_weight="1">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/colorPeriodDay"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/colorPeriodToggle"
                 android:layout_width="wrap_content"
                 android:layout_height="wrap_content"
-                android:minWidth="0dp"
-                android:text="@string/lighting_day" />
+                android:layout_gravity="end"
+                app:singleSelection="true"
+                app:selectionRequired="true">
 
-            <com.google.android.material.button.MaterialButton
-                android:id="@+id/colorPeriodNight"
-                style="@style/Widget.MaterialComponents.Button.OutlinedButton"
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:minWidth="0dp"
-                android:text="@string/lighting_night" />
-        </com.google.android.material.button.MaterialButtonToggleGroup>
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/colorPeriodDay"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="0dp"
+                    android:text="@string/lighting_day" />
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/colorPeriodNight"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="wrap_content"
+                    android:minWidth="0dp"
+                    android:text="@string/lighting_night" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+
+        </FrameLayout>
 
         <include layout="@layout/view_back_button_end" />
     </LinearLayout>
 
+    <com.sphy.airconcontroller.ui.DiKeyBarPreview
+        android:id="@+id/colorBarPreview"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:paddingStart="16dp"
+        android:paddingEnd="16dp"
+        android:contentDescription="@string/color_bar_preview_desc" />
+
     <LinearLayout
+        android:id="@+id/colorCards"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
@@ -87,7 +92,7 @@
         android:paddingStart="16dp"
         android:paddingTop="8dp"
         android:paddingEnd="16dp"
-        android:paddingBottom="16dp">
+        android:paddingBottom="8dp">
 
         <com.sphy.airconcontroller.ui.ColorSettingCard
             android:id="@+id/colorLeft"
@@ -128,4 +133,46 @@
             app:strokeColor="@color/surface_stroke"
             app:strokeWidth="1dp" />
     </LinearLayout>
+
+    <com.google.android.material.card.MaterialCardView
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginStart="16dp"
+        android:layout_marginEnd="16dp"
+        android:layout_marginBottom="16dp"
+        app:cardBackgroundColor="@color/surface"
+        app:cardCornerRadius="16dp"
+        app:cardElevation="0dp">
+
+        <FrameLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content">
+
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/colorSyncGroup"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginStart="8dp"
+                app:singleSelection="true">
+
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/colorSyncBars"
+                    style="@style/Widget.MaterialComponents.Button.OutlinedButton"
+                    android:layout_width="wrap_content"
+                    android:layout_height="48dp"
+                    android:text="@string/color_sync_bars" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
+
+            <TextView
+                android:id="@+id/colorDebugDialLabel"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_gravity="center_vertical|end"
+                android:layout_marginEnd="16dp"
+                android:text="@string/color_debug_dial_preview_label"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
+                android:textColor="@color/text_muted"
+                android:visibility="gone" />
+        </FrameLayout>
+    </com.google.android.material.card.MaterialCardView>
 </LinearLayout>

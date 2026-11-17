@@ -16,7 +16,6 @@ import com.sphy.airconcontroller.byd.BydAcController
 import com.sphy.airconcontroller.byd.BydVehicleInfoController
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.storage.PetModeProfile
-import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.Job
 import kotlinx.coroutines.delay
@@ -24,7 +23,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-class PetModeActivity : OpenDiKeyActivity() {
+class PetModeActivity : HomeActivity() {
     private lateinit var ac: BydAcController
     private lateinit var vehicleInfo: BydVehicleInfoController
     private lateinit var settings: AppSettings
@@ -315,7 +314,11 @@ class PetModeActivity : OpenDiKeyActivity() {
         }
     }
 
-    private fun exitPetMode() {
+    override fun leavePage(action: () -> Unit) {
+        exitPetMode(action)
+    }
+
+    private fun exitPetMode(afterExit: (() -> Unit)? = null) {
         if (exiting) return
         exiting = true
         statusText.setText(R.string.pet_mode_restoring)
@@ -335,6 +338,7 @@ class PetModeActivity : OpenDiKeyActivity() {
             originalSnapshot = null
             sessionActive = false
             restoreSystemBrightness()
+            afterExit?.invoke()
             finish()
         }
     }
