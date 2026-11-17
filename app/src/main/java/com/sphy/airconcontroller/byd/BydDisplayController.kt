@@ -1,19 +1,20 @@
 package com.sphy.airconcontroller.byd
 
+import android.content.ComponentName
 import android.content.Context
-import android.os.PowerManager
-import android.os.SystemClock
+import android.content.Intent
+import android.net.Uri
 import android.provider.Settings
 import android.util.Log
 import java.lang.reflect.InvocationTargetException
 import kotlin.math.roundToInt
 
 /**
- * Centre-display brightness and backlight, following Overdrive's approach:
- * - brightness: `BYDAutoSettingDevice.setInfotainmentBrightness(0..100)` plus Android's system
- *   brightness (manual mode), since the SDK setter is a no-op on some trims;
- * - backlight: `BYDAutoSettingDevice.turnBacklightOff/On()`, then hidden PowerManager
- *   `turnBacklightOff/On(long)` / `TurnBacklightOff/On(long)`.
+ * Centre-display brightness and screen off:
+ * - brightness (Overdrive's approach): `BYDAutoSettingDevice.setInfotainmentBrightness(0..100)` plus
+ *   Android's system brightness (manual mode), since the SDK setter is a no-op on some trims;
+ * - screen off: the car's own "Screen off" shortcut, which starts BYD Car Settings' DialogService
+ *   with a `screen_saver` link; the car turns the backlight off and wakes it on touch.
  */
 class BydDisplayController(context: Context) {
     private val app = context.applicationContext
@@ -59,29 +60,15 @@ class BydDisplayController(context: Context) {
         return Result(sdk.success || system.success, "${sdk.detail}; ${system.detail}")
     }
 
-    /** Tries each backlight route until one is accepted; the report lists every attempt. */
-    fun backlight(on: Boolean): Result {
-        val suffix = if (on) "On" else "Off"
-        val attempts = mutableListOf<String>()
-        val sdk = callSetting("turnBacklight$suffix")
-        attempts += sdk.detail
-        if (sdk.success) return Result(true, attempts.joinToString("; "))
-        val power = app.getSystemService(PowerManager::class.java)
-        for (name in listOf("turnBacklight$suffix", "TurnBacklight$suffix")) {
-            val label = "PowerManager.$name(long)"
-            try {
-                power.javaClass.getMethod(name, Long::class.javaPrimitiveType).invoke(power, SystemClock.uptimeMillis())
-                attempts += "$label accepted"
-                return Result(true, attempts.joinToString("; "))
-            } catch (e: NoSuchMethodException) {
-                attempts += "$label unavailable"
-            } catch (e: InvocationTargetException) {
-                attempts += "$label ${e.targetException.javaClass.simpleName}: ${e.targetException.message}"
-            } catch (e: ReflectiveOperationException) {
-                attempts += "$label ${e.javaClass.simpleName}: ${e.message}"
-            }
-        }
-        return Result(false, attempts.joinToString("; "))
+    /** Starts the car's screen saver directly; it's a non-exported service on some builds, so callers fall back to ADB. */
+    fun startCarScreenSaver(): Result = try {
+        val started = app.startService(Intent(Intent.ACTION_VIEW, Uri.parse(SCREEN_SAVER_URI)).setComponent(SCREEN_SAVER_SERVICE))
+        if (started != null) Result(true, "startService(DialogService) accepted")
+        else Result(false, "startService(DialogService): BYD Car Settings not installed")
+    } catch (e: SecurityException) {
+        Result(false, "startService(DialogService) SecurityException: ${e.message}")
+    } catch (e: IllegalStateException) {
+        Result(false, "startService(DialogService) IllegalStateException: ${e.message}")
     }
 
     private fun writeSystem(brightness: Int, mode: Int): Result {
@@ -120,8 +107,13 @@ class BydDisplayController(context: Context) {
         }
     }
 
-    private companion object {
-        const val TAG = "BydDisplayController"
-        const val SETTING_CLASS = "android.hardware.bydauto.setting.BYDAutoSettingDevice"
+    companion object {
+        private const val TAG = "BydDisplayController"
+        private const val SETTING_CLASS = "android.hardware.bydauto.setting.BYDAutoSettingDevice"
+        // Captured from the car's own "Screen off" shortcut.
+        private const val SCREEN_SAVER_URI = "byd_pad://byd_car_settings:2935/launcher?action=screen_saver"
+        private val SCREEN_SAVER_SERVICE = ComponentName("com.byd.carsettings", "com.byd.dialogservice.DialogService")
+        const val SCREEN_SAVER_SHELL =
+            "am startservice -a android.intent.action.VIEW -d '$SCREEN_SAVER_URI' -n com.byd.carsettings/com.byd.dialogservice.DialogService"
     }
 }

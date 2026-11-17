@@ -174,17 +174,18 @@ class CampTestsActivityTest {
         assertTrue(text, text.contains("10-second timeout"))
     }
 
-    @Test fun screenOffReportsEveryBacklightAttemptAndRestoresOnTimeout() {
+    @Test fun screenOffSendsCarShortcutCommandAndReportsEachRoute() {
         val page = open()
-        instrumentation.runOnMainSync {
-            page.startDisplayTest(CampTestsActivity.DisplayTest.OFF)
-            assertEquals(View.VISIBLE, page.findViewById<View>(R.id.campTestDimOverlay).visibility)
-        }
-        awaitOverlayGone(page)
         awaitReady(page)
-        val text = awaitReport(page, "TurnBacklightOn(long)")
-        assertTrue(text, text.contains("Screen backlight OFF started") && text.contains("TurnBacklightOff(long)"))
-        assertTrue(text, text.contains("Display restored") && text.contains("TurnBacklightOn(long)"))
+        instrumentation.runOnMainSync { page.carScreenOff() }
+        awaitReady(page)
+        val text = awaitReport(page, "ADB am startservice")
+        // No BYD Car Settings on the emulator, so the direct route fails and ADB is tried.
+        assertTrue(text, text.contains("Car screen off") && text.contains("BYD Car Settings not installed"))
+        assertTrue(text, text.contains("ADB am startservice"))
+        instrumentation.runOnMainSync {
+            assertEquals(View.GONE, page.findViewById<View>(R.id.campTestDimOverlay).visibility)
+        }
     }
 
     private fun awaitReport(page: CampTestsActivity, expected: String): String {

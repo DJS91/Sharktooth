@@ -57,8 +57,7 @@ class CampTestsActivity : OpenDiKeyActivity() {
     private var grantingDim = false
     private var shortcutStart: String? = null
     private lateinit var display: BydDisplayController
-    internal enum class DisplayTest { DIM, OFF }
-    private var displayTest: DisplayTest? = null
+    private var dimming = false
     private var savedDisplay: BydDisplayController.Saved? = null
     private var consumeDimTouch = false
     private val handler = Handler(Looper.getMainLooper())
@@ -119,7 +118,7 @@ class CampTestsActivity : OpenDiKeyActivity() {
                 .setTitle(R.string.camp_test_screen_off)
                 .setMessage(R.string.camp_test_screen_off_confirm)
                 .setNegativeButton(android.R.string.cancel, null)
-                .setPositiveButton(R.string.camp_test_screen_off) { _, _ -> startDisplayTest(DisplayTest.OFF) }
+                .setPositiveButton(R.string.camp_test_screen_off) { _, _ -> carScreenOff() }
                 .show()
         }
         findViewById<View>(R.id.campTestShare).setOnClickListener {
@@ -302,9 +301,9 @@ class CampTestsActivity : OpenDiKeyActivity() {
     }
 
     private fun dim() {
-        if (busy || displayTest != null || grantingDim) return
+        if (busy || dimming || grantingDim) return
         if (display.canWriteSystem()) {
-            startDisplayTest(DisplayTest.DIM)
+            startDim()
             return
         }
         grantingDim = true
@@ -318,32 +317,45 @@ class CampTestsActivity : OpenDiKeyActivity() {
                     "Could not grant 'Modify system settings' over local ADB (exit ${grant.exitCode}: ${grant.output.ifBlank { "no output" }}). Trying the BYD brightness setting only.",
                 )
             }
-            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) startDisplayTest(DisplayTest.DIM)
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) startDim()
         }
     }
 
-    @VisibleForTesting
-    internal fun startDisplayTest(test: DisplayTest) {
-        if (busy || displayTest != null) return
+    private fun startDim() {
+        if (busy || dimming) return
         val saved = display.save()
         savedDisplay = saved
-        displayTest = test
-        val result = if (test == DisplayTest.DIM) display.setBrightness(DIM_PERCENT) else display.backlight(false)
-        findViewById<TextView>(R.id.campTestDimOverlay).apply {
-            // Dimming stays see-through so the real panel change is visible; screen off is fully black.
-            setBackgroundColor(if (test == DisplayTest.DIM) 0x33000000 else 0xFF000000.toInt())
-            visibility = View.VISIBLE
-        }
+        dimming = true
+        val result = display.setBrightness(DIM_PERCENT)
+        // Stays see-through so the real panel change is visible.
+        findViewById<View>(R.id.campTestDimOverlay).visibility = View.VISIBLE
         handler.postDelayed(restoreDim, 10_000)
         operation {
-            val label = if (test == DisplayTest.DIM) "Display dim to $DIM_PERCENT% started" else "Screen backlight OFF started"
-            append(label, "Accepted: ${result.success}\n${result.detail}\nPrevious system brightness=${saved.brightness ?: "?"} mode=${saved.mode ?: "?"}\nIf the panel did not visibly change, note that in the observation.")
+            append("Display dim to $DIM_PERCENT% started", "Accepted: ${result.success}\n${result.detail}\nPrevious system brightness=${saved.brightness ?: "?"} mode=${saved.mode ?: "?"}\nIf the panel did not visibly change, note that in the observation.")
             persist()
         }
     }
 
+    /** Sends the same command as the car's own "Screen off" shortcut; the car wakes the screen on touch. */
+    @VisibleForTesting
+    internal fun carScreenOff() = operation {
+        val direct = display.startCarScreenSaver()
+        val attempts = mutableListOf(direct.detail)
+        var accepted = direct.success
+        if (!accepted) {
+            val shell = AdbPermissionManager.runShellCommand(this, BydDisplayController.SCREEN_SAVER_SHELL)
+            accepted = shell.output.contains("Starting service") && !shell.output.contains("Error")
+            attempts += "ADB am startservice: ${shell.output.ifBlank { "exit ${shell.exitCode}" }}"
+        }
+        append(
+            "Car screen off (screen-off shortcut command)",
+            "Accepted: $accepted\n${attempts.joinToString("\n")}\nTouch the screen to wake it, as with the car's shortcut.",
+        )
+        persist()
+    }
+
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        if (displayTest != null && event.actionMasked == MotionEvent.ACTION_DOWN) {
+        if (dimming && event.actionMasked == MotionEvent.ACTION_DOWN) {
             consumeDimTouch = true
             restoreBrightness("touch")
         }
@@ -357,15 +369,11 @@ class CampTestsActivity : OpenDiKeyActivity() {
     }
 
     private fun restoreBrightness(reason: String) {
-        val test = displayTest ?: return
+        if (!dimming) return
         handler.removeCallbacks(restoreDim)
-        displayTest = null
+        dimming = false
         // Restoration itself is synchronous and never depends on a coroutine completing.
-        val result = if (test == DisplayTest.DIM) {
-            display.restore(savedDisplay ?: BydDisplayController.Saved(null, null))
-        } else {
-            display.backlight(true)
-        }
+        val result = display.restore(savedDisplay ?: BydDisplayController.Saved(null, null))
         findViewById<View>(R.id.campTestDimOverlay).visibility = View.GONE
         append("Display restored", "Reason: $reason\nAccepted: ${result.success}\n${result.detail}")
         lifecycleScope.launch {

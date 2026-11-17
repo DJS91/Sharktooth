@@ -10,7 +10,7 @@
     <string name="camp_test_saved">Report saved locally.</string>
     <string name="camp_test_failed">Test/report error: %1$s</string>
     <string name="camp_test_controls">Explicit control tests</string>
-    <string name="camp_test_controls_note">Climate OFF sends a real command and leaves climate off; restore it using the car controls. Display dimming (10%, never zero) and screen off change the real centre display and restore on touch, leaving this screen, or after 10 seconds. Close windows raises all four side windows (car must be ON); STOP WINDOWS is always available and halts them immediately. DRL OFF works only in Park; use Restore to turn them back on. Vehicle-theme writes remain locked until their meanings are verified.</string>
+    <string name="camp_test_controls_note">Climate OFF sends a real command and leaves climate off; restore it using the car controls. Display dimming (10%, never zero) changes the real centre display and restores on touch, leaving this screen, or after 10 seconds. Screen off sends the car\'s own Screen off shortcut command; touch the screen to wake it. Close windows raises all four side windows (car must be ON); STOP WINDOWS is always available and halts them immediately. DRL OFF works only in Park; use Restore to turn them back on. Vehicle-theme writes remain locked until their meanings are verified.</string>
     <string name="camp_test_ac_off">Test climate OFF</string>
     <string name="camp_test_ac_confirm">Vehicle parked, no occupants or pets relying on climate control? This turns the whole climate system OFF and does not restore it automatically. The report records the command result and a delayed read-back.</string>
     <string name="camp_test_drl_off">Test daytime running lights OFF</string>
@@ -18,8 +18,8 @@
     <string name="camp_test_drl_confirm">Car in Park? This turns the daytime running lights OFF (the car only changes them in Park). They stay off until you tap Restore or switch them back on in the car settings. Check local rules before driving with them off.</string>
     <string name="camp_test_dim">Test display dimming (10%)</string>
     <string name="camp_test_restore">Tap anywhere to restore the display\nAutomatically restores after 10 seconds</string>
-    <string name="camp_test_screen_off">Test screen off (backlight)</string>
-    <string name="camp_test_screen_off_confirm">This turns the centre display\'s backlight OFF. Tap the screen to turn it back on; it also restores automatically after 10 seconds or when you leave this page. If the screen stays dark, briefly press the power/volume knob.</string>
+    <string name="camp_test_screen_off">Test screen off (car shortcut)</string>
+    <string name="camp_test_screen_off_confirm">This sends the same command as the car\'s own Screen off shortcut, turning the centre display off. Touch the screen to wake it, as with the shortcut.</string>
     <string name="camp_test_shortcut_record">Record car screen-off shortcut</string>
     <string name="camp_test_shortcut_finish">Finish recording and show log</string>
     <string name="camp_test_shortcut_steps">Recording. Straight away, press the car\'s own Screen off shortcut, wake the screen again, come back to this page and tap Finish recording and show log.</string>
