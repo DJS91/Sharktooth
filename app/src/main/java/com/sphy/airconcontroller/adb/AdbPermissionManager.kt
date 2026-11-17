@@ -23,6 +23,8 @@ import java.net.Socket
 object AdbPermissionManager {
 
     private const val TAG = "AdbPermissionManager"
+    // Head units may not ship the "Modify system settings" screen, so this is granted over ADB.
+    private const val WRITE_SETTINGS_GRANT = "appops set \$user\$pkg WRITE_SETTINGS allow"
     private const val ADB_PORT = 5555
     private const val PORT_WAIT_ATTEMPTS = 10
     private val ADB_HOST_CANDIDATES = listOf("127.0.0.1", "::1")
@@ -90,6 +92,7 @@ object AdbPermissionManager {
         "appops set \$user\$pkg RUN_IN_BACKGROUND allow",
         "appops set \$user\$pkg RUN_ANY_IN_BACKGROUND allow",
         "appops set \$user\$pkg WAKE_LOCK allow",
+        WRITE_SETTINGS_GRANT,
         "cmd notification allow_listener \$pkg/${KeepAliveNotificationListener::class.java.name}\$userSuffix",
     )
 
@@ -232,6 +235,12 @@ object AdbPermissionManager {
     suspend fun runShellCommand(context: Context, command: String): ShellResult = withContext(Dispatchers.IO) {
         shellSync(context, command)
     }
+
+    /** Lets the app change system brightness without the Settings screen. */
+    suspend fun grantWriteSettings(context: Context): ShellResult = runShellCommand(
+        context,
+        WRITE_SETTINGS_GRANT.replace("\$user", userFlag()).replace("\$pkg", context.packageName),
+    )
 
     /**
      * Blocking shell for lightweight telemetry (e.g. `/proc/stat`). Uses a short connect

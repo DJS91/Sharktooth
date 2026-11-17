@@ -46,6 +46,7 @@ class CampTestsActivityTest {
             instrumentation.runOnMainSync { page.finish() }
             instrumentation.waitForIdleSync()
         }
+        shell("appops set ${instrumentation.targetContext.packageName} WRITE_SETTINGS allow")
         Settings.System.putInt(resolver, Settings.System.SCREEN_BRIGHTNESS, previousBrightness)
         Settings.System.putInt(resolver, Settings.System.SCREEN_BRIGHTNESS_MODE, previousMode)
         val previous = previousSession
@@ -62,6 +63,26 @@ class CampTestsActivityTest {
     private fun assertSystemBrightness(level: Int, mode: Int) {
         assertEquals(level, Settings.System.getInt(resolver, Settings.System.SCREEN_BRIGHTNESS))
         assertEquals(mode, Settings.System.getInt(resolver, Settings.System.SCREEN_BRIGHTNESS_MODE))
+    }
+
+    @Test fun displayDimNeedsNoSettingsScreenWhenPermissionIsMissing() {
+        shell("appops set ${instrumentation.targetContext.packageName} WRITE_SETTINGS deny")
+        val page = open()
+        awaitReady(page)
+        instrumentation.runOnMainSync { page.findViewById<View>(R.id.campTestDim).performClick() }
+        val text = awaitReport(page, "Display dim to 10% started")
+        assertTrue(text, text.contains("Display dim to 10% started"))
+        // The emulator has no authorised local ADB, so the app must report it and still run the BYD route.
+        assertTrue(text, Settings.System.canWrite(instrumentation.targetContext) || text.contains("Could not grant"))
+        instrumentation.runOnMainSync {
+            assertTrue(page.hasWindowFocus())
+            val now = SystemClock.uptimeMillis()
+            for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                val event = MotionEvent.obtain(now, now, action, 20f, 20f, 0)
+                try { page.dispatchTouchEvent(event) } finally { event.recycle() }
+            }
+            assertEquals(View.GONE, page.findViewById<View>(R.id.campTestDimOverlay).visibility)
+        }
     }
 
     @Test fun capturesCompareAndSurviveReopeningWithoutVehicleSdk() {

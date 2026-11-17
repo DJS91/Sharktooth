@@ -88,13 +88,14 @@ class BydDisplayController(context: Context) {
         if (!canWriteSystem()) return Result(false, "system brightness: 'Modify system settings' not allowed")
         return try {
             val resolver = app.contentResolver
+            val level = brightness.coerceIn(1, 255)
             // Manual first, so auto-brightness can't immediately override the level.
             Settings.System.putInt(resolver, Settings.System.SCREEN_BRIGHTNESS_MODE, Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL)
-            Settings.System.putInt(resolver, Settings.System.SCREEN_BRIGHTNESS, brightness.coerceIn(1, 255))
+            Settings.System.putInt(resolver, Settings.System.SCREEN_BRIGHTNESS, level)
             if (mode != Settings.System.SCREEN_BRIGHTNESS_MODE_MANUAL) {
                 Settings.System.putInt(resolver, Settings.System.SCREEN_BRIGHTNESS_MODE, mode)
             }
-            Result(true, "system brightness=${brightness.coerceIn(1, 255)}/255 mode=$mode")
+            Result(true, "system brightness=$level/255 mode=$mode")
         } catch (e: SecurityException) {
             Result(false, "system brightness: ${e.message}")
         }

@@ -21,6 +21,7 @@ import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.sphy.airconcontroller.adb.AdbPermissionManager
 import com.sphy.airconcontroller.byd.BydDisplayController
 import com.sphy.airconcontroller.byd.BydDrlController
 import com.sphy.airconcontroller.byd.BydWindowController
@@ -51,6 +52,7 @@ class CampTestsActivity : OpenDiKeyActivity() {
     private var baseline: CampTestSnapshot? = null
     private var report = ""
     private var busy = false
+    private var grantingDim = false
     private lateinit var display: BydDisplayController
     internal enum class DisplayTest { DIM, OFF }
     private var displayTest: DisplayTest? = null
@@ -294,18 +296,24 @@ class CampTestsActivity : OpenDiKeyActivity() {
     }
 
     private fun dim() {
-        if (busy || displayTest != null) return
+        if (busy || displayTest != null || grantingDim) return
         if (display.canWriteSystem()) {
             startDisplayTest(DisplayTest.DIM)
             return
         }
-        MaterialAlertDialogBuilder(this)
-            .setTitle(R.string.camp_test_dim)
-            .setMessage(R.string.camp_test_write_settings)
-            .setNegativeButton(R.string.camp_test_byd_only) { _, _ -> startDisplayTest(DisplayTest.DIM) }
-            .setPositiveButton(R.string.camp_test_allow) { _, _ ->
-                startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName")))
-            }.show()
+        grantingDim = true
+        status.setText(R.string.camp_test_busy)
+        lifecycleScope.launch {
+            val grant = AdbPermissionManager.grantWriteSettings(this@CampTestsActivity)
+            grantingDim = false
+            if (!display.canWriteSystem()) {
+                append(
+                    "System brightness permission",
+                    "Could not grant 'Modify system settings' over local ADB (exit ${grant.exitCode}: ${grant.output.ifBlank { "no output" }}). Trying the BYD brightness setting only.",
+                )
+            }
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) startDisplayTest(DisplayTest.DIM)
+        }
     }
 
     @VisibleForTesting
