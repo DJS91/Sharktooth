@@ -40,7 +40,9 @@ import org.json.JSONException
 import org.json.JSONObject
 import java.io.File
 import java.io.IOException
+import java.text.SimpleDateFormat
 import java.util.Date
+import java.util.Locale
 
 class CampTestsActivity : OpenDiKeyActivity() {
     private lateinit var reader: CampTestReader
@@ -53,6 +55,7 @@ class CampTestsActivity : OpenDiKeyActivity() {
     private var report = ""
     private var busy = false
     private var grantingDim = false
+    private var shortcutStart: String? = null
     private lateinit var display: BydDisplayController
     internal enum class DisplayTest { DIM, OFF }
     private var displayTest: DisplayTest? = null
@@ -75,8 +78,11 @@ class CampTestsActivity : OpenDiKeyActivity() {
         buttons = listOf(
             R.id.campTestBaseline, R.id.campTestCapture, R.id.campTestAcOff, R.id.campTestWindowsClose,
             R.id.campTestDrlOff, R.id.campTestDrlOn,
-            R.id.campTestDim, R.id.campTestScreenOff, R.id.campTestShare, R.id.campTestClear,
+            R.id.campTestDim, R.id.campTestScreenOff, R.id.campTestShortcut, R.id.campTestShare, R.id.campTestClear,
         ).map { findViewById(it) }
+        findViewById<View>(R.id.campTestShortcut).setOnClickListener {
+            if (shortcutStart == null) startShortcutRecording() else finishShortcutRecording()
+        }
         findViewById<View>(R.id.campTestBack).setOnClickListener { finish() }
         findViewById<View>(R.id.campTestBaseline).setOnClickListener { capture(true) }
         findViewById<View>(R.id.campTestCapture).setOnClickListener { capture(false) }
@@ -402,6 +408,45 @@ class CampTestsActivity : OpenDiKeyActivity() {
         }
     }
 
+    private fun startShortcutRecording() = operation {
+        val probe = AdbPermissionManager.runShellCommand(this, "echo ready")
+        if (!probe.output.contains("ready")) {
+            append("Car shortcut recording", "Local ADB is unavailable, so the car's log can't be read: ${probe.output.ifBlank { "exit ${probe.exitCode}" }}")
+            persist()
+            return@operation
+        }
+        // Logcat timestamps use the head unit's local time, as does this format.
+        shortcutStart = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US).format(Date())
+        findViewById<Button>(R.id.campTestShortcut).setText(R.string.camp_test_shortcut_finish)
+        append("Car shortcut recording started", getString(R.string.camp_test_shortcut_steps))
+        persist()
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.camp_test_shortcut_record)
+            .setMessage(R.string.camp_test_shortcut_steps)
+            .setPositiveButton(android.R.string.ok, null)
+            .show()
+    }
+
+    private fun finishShortcutRecording() = operation {
+        val start = shortcutStart ?: return@operation
+        val result = AdbPermissionManager.runShellCommand(
+            this,
+            "logcat -d -v time -b main,system,events -T '$start' | grep -iE '$SHORTCUT_LOG_PATTERN' | grep -vE '\\( *${android.os.Process.myPid()}\\)|BoundBrokerSvc' | head -n $SHORTCUT_LOG_LINES",
+        )
+        shortcutStart = null
+        findViewById<Button>(R.id.campTestShortcut).setText(R.string.camp_test_shortcut_record)
+        val log = result.output.ifBlank { "No matching log lines (exit ${result.exitCode})." }
+        append("Car shortcut log since $start", log)
+        persist()
+        if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.camp_test_shortcut_title)
+                .setMessage(log)
+                .setPositiveButton(android.R.string.ok, null)
+                .show()
+        }
+    }
+
     private fun append(label: String, text: String) {
         report += "\n=== ${Date()} | $label ===\n$text\n"
     }
@@ -471,5 +516,10 @@ class CampTestsActivity : OpenDiKeyActivity() {
 
     private companion object {
         const val DIM_PERCENT = 10
+        // Activity starts, intents, key presses and screen power events are what a shortcut can trigger.
+        const val SHORTCUT_LOG_PATTERN =
+            "START u|act=|cmp=|backlight|screen_toggled|power_screen|gotosleep|go_to_sleep|wakeup|keyevent|keycode|shortcut|am_start|am_broadcast|am_focused|wm_on_|bydauto"
+        // Lines from the start of recording, where the shortcut press is.
+        const val SHORTCUT_LOG_LINES = 250
     }
 }

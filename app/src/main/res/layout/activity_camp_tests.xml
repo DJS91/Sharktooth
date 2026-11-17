@@ -103,6 +103,11 @@
                     android:layout_height="wrap_content"
                     android:text="@string/camp_test_screen_off" />
                 <Button
+                    android:id="@+id/campTestShortcut"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_shortcut_record" />
+                <Button
                     android:id="@+id/campTestWindowsClose"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

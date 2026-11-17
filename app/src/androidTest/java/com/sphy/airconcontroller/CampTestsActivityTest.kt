@@ -65,6 +65,17 @@ class CampTestsActivityTest {
         assertEquals(mode, Settings.System.getInt(resolver, Settings.System.SCREEN_BRIGHTNESS_MODE))
     }
 
+    @Test fun shortcutRecordingReportsOnScreenWithoutExport() {
+        val page = open()
+        awaitReady(page)
+        instrumentation.runOnMainSync { page.findViewById<View>(R.id.campTestShortcut).performClick() }
+        awaitReady(page)
+        instrumentation.runOnMainSync {
+            val text = page.findViewById<TextView>(R.id.campTestReport).text.toString()
+            assertTrue(text, text.contains("Local ADB is unavailable") || text.contains("Car shortcut recording started"))
+        }
+    }
+
     @Test fun displayDimNeedsNoSettingsScreenWhenPermissionIsMissing() {
         shell("appops set ${instrumentation.targetContext.packageName} WRITE_SETTINGS deny")
         val page = open()

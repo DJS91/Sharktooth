@@ -20,6 +20,10 @@
     <string name="camp_test_restore">Tap anywhere to restore the display\nAutomatically restores after 10 seconds</string>
     <string name="camp_test_screen_off">Test screen off (backlight)</string>
     <string name="camp_test_screen_off_confirm">This turns the centre display\'s backlight OFF. Tap the screen to turn it back on; it also restores automatically after 10 seconds or when you leave this page. If the screen stays dark, briefly press the power/volume knob.</string>
+    <string name="camp_test_shortcut_record">Record car screen-off shortcut</string>
+    <string name="camp_test_shortcut_finish">Finish recording and show log</string>
+    <string name="camp_test_shortcut_steps">Recording. Straight away, press the car\'s own Screen off shortcut, wake the screen again, come back to this page and tap Finish recording and show log.</string>
+    <string name="camp_test_shortcut_title">Car shortcut log</string>
     <string name="camp_test_windows_close">Test close all windows</string>
     <string name="camp_test_windows_confirm">Car switched ON and parked? Make sure no hands, arms, pets or objects are in any window opening. This raises all four side windows. Use STOP WINDOWS to halt them. The report records the command result and the window positions as they close.</string>
     <string name="camp_test_windows_stop">STOP WINDOWS</string>
