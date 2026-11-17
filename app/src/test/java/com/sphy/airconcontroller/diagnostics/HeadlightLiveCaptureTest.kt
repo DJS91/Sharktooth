@@ -49,7 +49,7 @@ class HeadlightLiveCaptureTest {
         assertTrue(report.contains("Latest 8 of 1003 events"))
         assertEquals(2, report.lineSequence().count { it.endsWith("headlight stalk OFF") })
         assertTrue("The whole live view must remain short", report.length < 2200)
-        assertTrue(report.lines().size <= 15)
+        assertTrue(report.lines().size <= 16)
     }
 
     @Test fun readFailuresAreVisibleOnceAndRecoveryIsAChange() {
@@ -63,5 +63,21 @@ class HeadlightLiveCaptureTest {
         assertTrue(capture.report().contains("unavailable -> 1"))
         capture.stopped = true
         assertTrue(capture.report().startsWith("STOPPED"))
+    }
+
+    @Test fun bodyworkRearLampChangesRemainVisibleWithoutGuessingHeadlightMode() {
+        val capture = HeadlightLiveCapture(100_000, 42)
+        capture.sample(snapshot("Bodywork.getRearLampLightState" to "1"), "07:25:00")
+        capture.sample(snapshot("Bodywork.getRearLampLightState" to "2"), "07:25:02")
+        assertTrue(capture.report().contains("SDK raw Bodywork.getRearLampLightState: 1 -> 2"))
+        repeat(20) { capture.logs("${101 + it}.000 200 201 I CarLight: headlight event $it") }
+        val report = capture.report()
+        assertTrue(report.contains("Rear-lamp feedback (raw): 2"))
+        assertTrue("The header must retain the reading even after its change event scrolls out",
+            report.contains("Latest 8 of 21 events"))
+        assertTrue(report.contains("Selector: unavailable (not OFF)"))
+        assertFalse(report.contains("Selector: OFF"))
+        capture.sample(CampTestSnapshot(emptyMap(), mapOf("Bodywork.getRearLampLightState" to "denied")), "07:25:30")
+        assertTrue(capture.report().contains("Rear-lamp feedback (raw): unavailable"))
     }
 }

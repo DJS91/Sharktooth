@@ -136,6 +136,7 @@ class CampTestsActivity : OpenDiKeyActivity() {
                 val result = "${getString(R.string.camp_test_lighting_note)}\n\n$inventory\n\nFull raw snapshot:\n${snapshot.report()}"
                 val summary = "Read-only: no settings changed.\nHeadlight selector: ${headlightSelectorLabel(snapshot)}\n" +
                     "Named raw reading: ${snapshot.values["Instrument.getHeadlightControlMode"] ?: "unavailable"}\n" +
+                    "Rear-lamp feedback (raw): ${snapshot.values["Bodywork.getRearLampLightState"] ?: "unavailable"}\n" +
                     "No verified daylight override is implemented.\nNext: use Watch headlight stalk to see changes live."
                 append("Lighting and daylight inspection", result, summary)
                 persist()

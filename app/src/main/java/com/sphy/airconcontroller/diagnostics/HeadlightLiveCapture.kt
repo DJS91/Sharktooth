@@ -19,6 +19,7 @@ internal class HeadlightLiveCapture(private val startedAtMillis: Long, private v
     private val events = ArrayDeque<String>()
     private var eventCount = 0
     private var selector = "unavailable (not OFF)"
+    private var rearLamp = "unavailable"
     private var readable = 0
     private var lastSample = "waiting..."
     private val clock = SimpleDateFormat("HH:mm:ss.SSS", Locale.US)
@@ -28,6 +29,7 @@ internal class HeadlightLiveCapture(private val startedAtMillis: Long, private v
     fun sample(snapshot: CampTestSnapshot, time: String) {
         lastSample = time
         selector = headlightSelectorLabel(snapshot)
+        rearLamp = snapshot.values["Bodywork.getRearLampLightState"] ?: "unavailable"
         val values = snapshot.values.filterKeys { it == "Headlights.selector" || GETTER.matches(it) }
         readable = values.size
         val current = values + snapshot.errors.filterKeys {
@@ -61,6 +63,7 @@ internal class HeadlightLiveCapture(private val startedAtMillis: Long, private v
         appendLine(if (stopped) "STOPPED - headlight stalk capture" else "LIVE - turn the stalk while safely parked")
         appendLine("Pause 2 seconds in OFF, AUTO and low beam.")
         appendLine("Selector: $selector")
+        appendLine("Rear-lamp feedback (raw): $rearLamp")
         appendLine("Last sample: $lastSample; readable lighting values: $readable")
         appendLine("Car logs: $logStatus")
         appendLine("Readings/logs are observations, NOT verified commands. No writes.")
@@ -76,7 +79,7 @@ internal class HeadlightLiveCapture(private val startedAtMillis: Long, private v
     }
 
     private companion object {
-        val GETTER = Regex("(Light|Sensor|Instrument)\\.(get|is|has).*")
+        val GETTER = Regex("(Bodywork|Light|Sensor|Instrument)\\.(get|is|has).*")
         val LOG_LINE = Regex("^\\s*(\\d+\\.\\d+)\\s+(\\d+)\\s+\\d+\\s+[VDIWEF]\\s+")
         val LIGHTING = Regex(
             "head.?light|head.?lamp|low.?beam|high.?beam|dipped.?beam|light.?switch|ambient.?light|sunlight|\\blux\\b|1011875880|1276153912",

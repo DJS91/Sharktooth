@@ -65,7 +65,7 @@ class CampTestReader(context: Context) {
             "read-only SDK constants; not validated command mappings"
         }
         for ((label, className) in DEVICES) {
-            if (lightingOnly && label !in setOf("Instrument", "Light", "Sensor")) continue
+            if (lightingOnly && label !in setOf("Bodywork", "Instrument", "Light", "Sensor")) continue
             read("$label.binding") {
                 val type = Class.forName(className, false, app.classLoader)
                 val device = type.getMethod("getInstance", Context::class.java)
