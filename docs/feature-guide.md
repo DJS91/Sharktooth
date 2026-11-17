@@ -4,7 +4,7 @@ Detailed operation and compatibility notes for the features in the [README](../R
 
 ## Features
 
-The app opens on Vehicle info. Use the right-hand sidebar to switch pages; its blue selection highlight slides to the tapped tile with an ease-in/ease-out animation. Cards and sections are borderless in both styles, and floating panel shadows extend into the outer app margins. Settings and Debug remain in the top row. Leaving Pet Mode from the sidebar restores its previous climate and brightness settings.
+The app opens on Dashboard. Use the right-hand sidebar to switch pages; its blue selection highlight slides to the tapped tile with an ease-in/ease-out animation. Cards and sections are borderless in both styles, and floating panel shadows extend into the outer app margins. Settings and Debug remain in the top row. Leaving Pet Mode from the sidebar restores its previous climate and brightness settings.
 
 Classic uses the same cabin-photo background at the same opacity in light and dark mode, visible through the translucent page and sidebar. Modern keeps its solid background.
 
@@ -14,9 +14,11 @@ Classic uses the same cabin-photo background at the same opacity in light and da
 
 **Button mapping** — Down click keeps climate (as printed) unless remapped. Down long, up, and up long can open apps or run Android Intents (activity / broadcast).
 
+The Colours page uses darker segment panels in light mode and a filled **Sync bar colours** button. Bar modes are selected directly from the slim horizontal **Off / Solid / Breath / Blink / Flow** button row beside the **Mode** label; the selected mode is highlighted. Light-mode button labels use dark text. Temperature dial previews use a third seven-segment position with only its upper loop lit as a degree symbol; fan and volume values have no degree symbol, and single-digit values have no leading zero.
+
 **Dials** — Left dial = passenger, right dial = driver. Click to switch between **temp** and **fan**, rotate to adjust. Each dial returns to temperature after 3 seconds without a turn in fan mode.
 
-**Vehicle info** — Live dashboard for battery, range, fuel, driving data, tyre pressures, vehicle attitude, and head-unit resource usage.
+**Dashboard** — Live cards for battery, range, fuel, driving data, tyre pressures, vehicle attitude, and head-unit resource usage. There is no page heading, leaving more vertical space for the cards.
 
 **ADAS** — View current driver-assistance settings or save and apply a custom ELKA, LDA, AEB, and DMS profile. Long-press the ADAS tile to configure automatic application when the app starts.
 

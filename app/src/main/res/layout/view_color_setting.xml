@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    xmlns:app="http://schemas.android.com/apk/res-auto"
     android:layout_width="match_parent"
     android:layout_height="match_parent">
 
@@ -61,10 +62,42 @@
                 android:contentDescription="@string/color_saturation" android:max="100" />
         </LinearLayout>
         <LinearLayout style="@style/ColorSettingRow">
-            <TextView android:id="@+id/colorSettingModeLabel" style="@style/ColorSettingLabel"
+            <TextView
+                android:id="@+id/colorSettingModeLabel"
+                style="@style/ColorSettingLabel"
+                android:layout_width="48dp"
                 android:text="@string/color_mode" />
-            <Spinner android:id="@+id/colorSettingMode"
-                android:layout_width="0dp" android:layout_height="match_parent" android:layout_weight="1" />
+            <com.google.android.material.button.MaterialButtonToggleGroup
+                android:id="@+id/colorSettingMode"
+                android:layout_width="0dp"
+                android:layout_height="match_parent"
+                android:layout_weight="1"
+                android:gravity="center_vertical"
+                android:contentDescription="@string/color_mode"
+                app:checkedButton="@id/colorSettingModeSolid"
+                app:singleSelection="true"
+                app:selectionRequired="true">
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/colorSettingModeOff"
+                    style="@style/Widget.OpenDiKey.ColorModeButton"
+                    android:text="@string/led_mode_off" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/colorSettingModeSolid"
+                    style="@style/Widget.OpenDiKey.ColorModeButton"
+                    android:text="@string/led_mode_solid" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/colorSettingModeBreath"
+                    style="@style/Widget.OpenDiKey.ColorModeButton"
+                    android:text="@string/led_mode_breath" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/colorSettingModeBlink"
+                    style="@style/Widget.OpenDiKey.ColorModeButton"
+                    android:text="@string/led_mode_blink" />
+                <com.google.android.material.button.MaterialButton
+                    android:id="@+id/colorSettingModeFlow"
+                    style="@style/Widget.OpenDiKey.ColorModeButton"
+                    android:text="@string/led_mode_flow" />
+            </com.google.android.material.button.MaterialButtonToggleGroup>
         </LinearLayout>
         <LinearLayout style="@style/ColorSettingRow">
             <TextView android:id="@+id/colorSettingBrightnessLabel" style="@style/ColorSettingLabel" />

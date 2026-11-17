@@ -13,6 +13,7 @@ import android.util.AttributeSet
 import android.view.View
 import com.sphy.airconcontroller.R
 import com.sphy.airconcontroller.dikey.DialDisplay
+import com.sphy.airconcontroller.dikey.DialDisplayType
 import com.sphy.airconcontroller.dikey.DialDisplays
 import com.sphy.airconcontroller.dikey.DiKeyProtocol
 import kotlin.math.hypot
@@ -174,16 +175,19 @@ class DiKeyBarPreview @JvmOverloads constructor(
 
     private fun drawDial(canvas: Canvas, centerX: Float, display: DialDisplay?) {
         if (display == null || display.displayType == DiKeyProtocol.DISPLAY_TYPE_BLANK || display.value !in 0..99) return
-        if (display.value < 10) {
-            drawDigit(canvas, centerX - 15f, display.value)
-        } else {
-            drawDigit(canvas, centerX - 34f, display.value / 10)
-            drawDigit(canvas, centerX + 4f, display.value % 10)
+        val isTemperature = display.displayType == DialDisplayType.DRIVER_TEMP.code ||
+            display.displayType == DialDisplayType.PASSENGER_TEMP.code
+        var x = centerX - if (display.value < 10) 15f else 34f
+        if (isTemperature) x -= 19f
+        if (display.value >= 10) {
+            drawSegments(canvas, x, DIGIT_SEGMENTS[display.value / 10])
+            x += 38f
         }
+        drawSegments(canvas, x, DIGIT_SEGMENTS[display.value % 10])
+        if (isTemperature) drawSegments(canvas, x + 38f, DEGREE_SEGMENTS)
     }
 
-    private fun drawDigit(canvas: Canvas, x: Float, digit: Int) {
-        val segments = DIGIT_SEGMENTS[digit]
+    private fun drawSegments(canvas: Canvas, x: Float, segments: Int) {
         fun line(bit: Int, x1: Float, y1: Float, x2: Float, y2: Float) {
             if (segments and (1 shl bit) != 0) canvas.drawLine(x + x1, y1, x + x2, y2, digitPaint)
         }
@@ -209,6 +213,7 @@ class DiKeyBarPreview @JvmOverloads constructor(
 
     companion object {
         private const val BAR_RADIUS = 6f
+        private const val DEGREE_SEGMENTS = 0b1100011
         private val DIGIT_SEGMENTS = intArrayOf(63, 6, 91, 79, 102, 109, 125, 7, 127, 111)
         // Pixel bounds in the supplied, unscaled 2114 x 190 image.
         private val BAR_REGIONS = arrayOf(

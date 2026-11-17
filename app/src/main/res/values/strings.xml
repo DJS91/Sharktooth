@@ -292,7 +292,7 @@
   <string name="button_mapping_home_subtitle"
     >Climate defaults, dials, and remappable presses</string
   >
-  <string name="vehicle_info_title">Vehicle info</string>
+  <string name="vehicle_info_title">Dashboard</string>
   <string name="vehicle_info_home_subtitle">Battery, tyres, dynamics, and more</string>
   <string name="adas_title">ADAS</string>
   <string name="adas_home_subtitle">Custom ADAS profile, driver monitoring etc</string>

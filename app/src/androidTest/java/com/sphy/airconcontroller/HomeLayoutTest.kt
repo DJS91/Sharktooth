@@ -184,6 +184,33 @@ class HomeLayoutTest {
         }
     }
 
+    @Test fun dashboardColumnsUsePageHeightWithoutAHeading() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val context = ContextThemeWrapper(
+                InstrumentationRegistry.getInstrumentation().targetContext,
+                R.style.Theme_OpenDiKey,
+            )
+            val density = context.resources.displayMetrics.density
+            for ((width, height) in listOf(640 to 480, 1120 to 640)) {
+                val page = LayoutInflater.from(context).inflate(R.layout.activity_vehicle_info, null) as ViewGroup
+                page.measure(
+                    View.MeasureSpec.makeMeasureSpec((width * density).toInt(), View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec((height * density).toInt(), View.MeasureSpec.EXACTLY),
+                )
+                page.layout(0, 0, page.measuredWidth, page.measuredHeight)
+                assertNull(page.findViewById<View>(R.id.homePageTitle))
+                for (id in listOf(R.id.vehicleColBattery, R.id.vehicleColDynamics, R.id.vehicleColTyres)) {
+                    val scroll = page.findViewById<View>(id).parent as View
+                    val bounds = Rect()
+                    scroll.getDrawingRect(bounds)
+                    page.offsetDescendantRectToMyCoords(scroll, bounds)
+                    assertEquals("Cards should start at the page gutter, not below a title", (16 * density).toInt(), bounds.top)
+                    assertEquals(page.height - (16 * density).toInt(), bounds.bottom)
+                }
+            }
+        }
+    }
+
     @Test fun pageTitlesAreCenteredAndHeaderControlsFit() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
         val context = ContextThemeWrapper(
@@ -191,7 +218,6 @@ class HomeLayoutTest {
             R.style.Theme_OpenDiKey,
         )
         val pages = listOf(
-            Triple(R.layout.activity_vehicle_info, R.id.homePageTitle, null),
             Triple(R.layout.activity_color_config, R.id.controlsBarTabs, R.id.colorPeriodToggle),
             Triple(R.layout.activity_button_mapping, R.id.controlsBarTabs, null),
             Triple(R.layout.activity_adas, R.id.homePageTitle, R.id.adasModeToggle),
@@ -201,7 +227,7 @@ class HomeLayoutTest {
             Triple(R.layout.activity_fridge, R.id.fridgeName, null),
         )
         val backIds = listOf(
-            R.id.vehicleInfoBackButton, R.id.colorBackButton, R.id.mappingBackButton,
+            R.id.colorBackButton, R.id.mappingBackButton,
             R.id.adasBackButton, R.id.sentryBackButton, R.id.petBackButton,
             R.id.fridgeBack, R.id.backButtonEnd,
         )

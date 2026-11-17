@@ -1,6 +1,7 @@
 package com.sphy.airconcontroller
 
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -17,6 +18,9 @@ import android.widget.SeekBar
 import android.widget.TextView
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
+import com.google.android.material.button.MaterialButton
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.sphy.airconcontroller.dikey.DialDisplay
 import com.sphy.airconcontroller.dikey.DialDisplayType
@@ -166,17 +170,26 @@ class DiKeyBarPreviewTest {
             preview.setDialDisplays(DialDisplays(DialDisplay(DialDisplayType.PASSENGER_TEMP.code, 24), right))
             val digits = render(preview)
 
-            assertTrue(Color.red(digits.getPixel(440, 68)) > 200) // 2, top segment
-            assertTrue(Color.red(digits.getPixel(432, 80)) < 30) // 2, unlit upper-left
-            assertTrue(Color.red(digits.getPixel(432, 108)) > 200) // 2, lower-left
-            assertTrue(Color.red(digits.getPixel(478, 68)) < 30) // 4, unlit top
-            assertTrue(Color.red(digits.getPixel(470, 80)) > 200) // 4, upper-left
+            assertTrue(Color.red(digits.getPixel(421, 68)) > 200) // 2, top segment
+            assertTrue(Color.red(digits.getPixel(413, 80)) < 30) // 2, unlit upper-left
+            assertTrue(Color.red(digits.getPixel(413, 108)) > 200) // 2, lower-left
+            assertTrue(Color.red(digits.getPixel(459, 68)) < 30) // 4, unlit top
+            assertTrue(Color.red(digits.getPixel(451, 80)) > 200) // 4, upper-left
+            for ((x, y) in listOf(502 to 68, 489 to 80, 515 to 80, 502 to 95)) {
+                assertTrue("Temperature should light the upper loop of its third digit",
+                    Color.red(digits.getPixel(x, y)) > 200)
+            }
+            for ((x, y) in listOf(489 to 108, 515 to 108, 502 to 122)) {
+                assertEquals("The degree symbol must leave the lower half unlit",
+                    blank.getPixel(x, y), digits.getPixel(x, y))
+            }
             assertTrue(Color.red(digits.getPixel(1624, 68)) < 30) // No leading zero
             assertTrue(Color.red(digits.getPixel(1648, 95)) > 200) // Centered 3, middle
 
             preview.setDialDisplays(DialDisplays(DialDisplay(DiKeyProtocol.DISPLAY_TYPE_BLANK, 0), right))
             val leftOff = render(preview)
-            assertEquals(blank.getPixel(440, 68), leftOff.getPixel(440, 68))
+            assertEquals(blank.getPixel(421, 68), leftOff.getPixel(421, 68))
+            assertEquals(blank.getPixel(502, 68), leftOff.getPixel(502, 68))
             assertEquals(digits.getPixel(1648, 95), leftOff.getPixel(1648, 95))
             preview.setDialDisplays(DialDisplays())
             val disconnected = render(preview)
@@ -193,6 +206,20 @@ class DiKeyBarPreviewTest {
             assertTrue(Color.red(ten.getPixel(1642, 80)) > 200)
             assertTrue(Color.red(ten.getPixel(1662, 68)) > 200)
             assertTrue(Color.red(ten.getPixel(1662, 95)) < 30)
+
+            preview.setDialDisplays(DialDisplays(right = DialDisplay(DialDisplayType.DRIVER_TEMP.code, 7)))
+            val singleTemp = render(preview)
+            assertTrue(Color.red(singleTemp.getPixel(1624, 68)) > 200)
+            assertTrue(Color.red(singleTemp.getPixel(1662, 68)) > 200)
+            assertTrue(Color.red(singleTemp.getPixel(1680, 80)) > 200)
+            assertEquals("Single temperatures must not gain a leading zero",
+                blank.getPixel(1590, 68), singleTemp.getPixel(1590, 68))
+            assertEquals("No lower segments in the temperature suffix",
+                blank.getPixel(1662, 122), singleTemp.getPixel(1662, 122))
+            preview.setDialDisplays(DialDisplays(right = right))
+            val fan = render(preview)
+            assertEquals("Fan values must not keep the temperature suffix",
+                blank.getPixel(1680, 80), fan.getPixel(1680, 80))
         }
     }
 
@@ -298,7 +325,7 @@ class DiKeyBarPreviewTest {
                 assertEquals(Color.rgb(255, 128, 64), (summaryBar.background as GradientDrawable).color!!.defaultColor)
                 val pairs = listOf(
                     R.id.colorSettingSaturationLabel to R.id.colorSettingSummarySaturation,
-                    R.id.colorSettingModeLabel to R.id.colorSettingSummaryMode,
+                    R.id.colorSettingMode to R.id.colorSettingSummaryMode,
                     R.id.colorSettingBrightnessLabel to R.id.colorSettingSummaryBrightness,
                     R.id.colorSettingRedLabel to R.id.colorSettingSummaryRed,
                     R.id.colorSettingGreenLabel to R.id.colorSettingSummaryGreen,
@@ -533,6 +560,101 @@ class DiKeyBarPreviewTest {
             }
             card.setModeVisible(false)
             assertEquals(View.INVISIBLE, card.findViewById<View>(R.id.colorSettingSummaryMode).visibility)
+        }
+    }
+
+    @Test fun modeButtonsSelectOneModeAndProgrammaticUpdatesStaySilent() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val context = ContextThemeWrapper(InstrumentationRegistry.getInstrumentation().targetContext, R.style.Theme_OpenDiKey)
+            val card = ColorSettingCard(context)
+            card.setRgb(12, 34, 56)
+            val group = card.findViewById<MaterialButtonToggleGroup>(R.id.colorSettingMode)
+            val changes = mutableListOf<LedMode>()
+            card.onModeChanged = { changes.add(it) }
+            card.setMode(LedMode.FLOW)
+            assertEquals(R.id.colorSettingModeFlow, group.checkedButtonId)
+            assertTrue(changes.isEmpty())
+            for ((id, mode) in listOf(
+                R.id.colorSettingModeSolid to LedMode.ON,
+                R.id.colorSettingModeBreath to LedMode.BREATH,
+                R.id.colorSettingModeBlink to LedMode.BLINK,
+                R.id.colorSettingModeOff to LedMode.OFF,
+            )) {
+                card.findViewById<MaterialButton>(id).performClick()
+                assertEquals(listOf(id), group.checkedButtonIds)
+                assertEquals(mode, card.mode())
+                assertEquals(mode, changes.last())
+                val count = changes.size
+                card.findViewById<MaterialButton>(id).performClick()
+                assertEquals(listOf(id), group.checkedButtonIds)
+                assertEquals(count, changes.size)
+            }
+            assertEquals(4, changes.size)
+            assertEquals("Mde: Off", card.findViewById<TextView>(R.id.colorSettingSummaryMode).text)
+            assertEquals(listOf(12, 34, 56), listOf(card.red, card.green, card.blue))
+            val saved = android.util.SparseArray<android.os.Parcelable>()
+            card.saveHierarchyState(saved)
+            val restored = ColorSettingCard(context)
+            restored.setMode(LedMode.BLINK)
+            restored.restoreHierarchyState(saved)
+            assertEquals("Restoring reused view IDs must not overwrite the profile mode", LedMode.BLINK, restored.mode())
+            assertEquals(R.id.colorSettingModeBlink,
+                restored.findViewById<MaterialButtonToggleGroup>(R.id.colorSettingMode).checkedButtonId)
+        }
+    }
+
+    @Test fun lightModePanelsAndButtonsAreDistinctAndModeLabelsFit() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            val config = Configuration(instrumentation.targetContext.resources.configuration)
+            config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or Configuration.UI_MODE_NIGHT_NO
+            val base = instrumentation.targetContext.createConfigurationContext(config)
+            for (theme in listOf(R.style.Theme_OpenDiKey, R.style.Theme_OpenDiKey_Modern)) {
+                val context = ContextThemeWrapper(base, theme)
+                val page = LayoutInflater.from(context).inflate(R.layout.activity_color_config, null)
+                val surface = ContextCompat.getColor(context, R.color.surface)
+                val card = page.findViewById<ColorSettingCard>(R.id.colorLeft)
+                val panel = card.cardBackgroundColor.defaultColor
+                assertTrue("Panels should be visibly darker than the page surface",
+                    ColorUtils.calculateLuminance(surface) - ColorUtils.calculateLuminance(panel) > 0.1)
+                val sync = page.findViewById<MaterialButton>(R.id.colorSyncBars)
+                val syncFill = sync.backgroundTintList!!.getColorForState(intArrayOf(android.R.attr.state_enabled), 0)
+                assertTrue("Sync should have a darker unselected fill",
+                    ColorUtils.calculateLuminance(syncFill) < ColorUtils.calculateLuminance(panel))
+                val density = context.resources.displayMetrics.density
+                card.measure(
+                    View.MeasureSpec.makeMeasureSpec((272 * density).toInt(), View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec((340 * density).toInt(), View.MeasureSpec.EXACTLY),
+                )
+                card.layout(0, 0, card.measuredWidth, card.measuredHeight)
+                val group = card.findViewById<MaterialButtonToggleGroup>(R.id.colorSettingMode)
+                val modeLabel = card.findViewById<TextView>(R.id.colorSettingModeLabel)
+                assertEquals(context.getString(R.string.color_mode), modeLabel.text)
+                assertTrue(modeLabel.width > 0)
+                assertTrue("Mode label should precede the button options", modeLabel.right <= group.left)
+                assertEquals("Off should be the first option", R.id.colorSettingModeOff, group.getChildAt(0).id)
+                for (i in 0 until group.childCount) {
+                    val button = group.getChildAt(i) as MaterialButton
+                    assertTrue(button.width > 0 && button.height > 0)
+                    assertTrue("Mode buttons should stay slim", button.height <= 28 * density + 1)
+                    assertTrue("Mode buttons should remain vertically centred",
+                        kotlin.math.abs(button.top + button.bottom - group.height) <= 1)
+                    assertTrue("All mode buttons should fit in one row", button.right <= group.width)
+                    assertEquals(1, button.layout.lineCount)
+                    assertEquals(0, button.layout.getEllipsisCount(0))
+                    assertTrue("Mode text should fit inside its button",
+                        button.layout.getLineWidth(0) <= button.width - button.compoundPaddingLeft - button.compoundPaddingRight)
+                    for (state in listOf(
+                        intArrayOf(android.R.attr.state_enabled),
+                        intArrayOf(android.R.attr.state_enabled, android.R.attr.state_checked),
+                    )) {
+                        val text = button.textColors.getColorForState(state, 0)
+                        val fill = button.backgroundTintList!!.getColorForState(state, 0)
+                        assertTrue("Light-mode button labels should have readable dark text",
+                            ColorUtils.calculateContrast(text, fill) >= 4.5)
+                    }
+                }
+            }
         }
     }
 

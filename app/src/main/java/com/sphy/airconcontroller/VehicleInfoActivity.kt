@@ -98,9 +98,6 @@ open class VehicleInfoActivity : HomeActivity() {
         colDynamics = findViewById(R.id.vehicleColDynamics)
         colTyres = findViewById(R.id.vehicleColTyres)
 
-        findViewById<android.widget.ImageButton>(R.id.vehicleInfoBackButton).setOnClickListener {
-            finish()
-        }
         buildDashboard()
 
         lifecycleScope.launch {

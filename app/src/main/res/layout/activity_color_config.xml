@@ -100,7 +100,7 @@
             android:layout_height="match_parent"
             android:layout_marginEnd="8dp"
             android:layout_weight="1"
-            app:cardBackgroundColor="@color/surface"
+            app:cardBackgroundColor="@color/color_setting_panel"
             app:strokeColor="@color/surface_stroke"
             app:strokeWidth="?attr/dkOutlineWidth" />
 
@@ -110,7 +110,7 @@
             android:layout_height="match_parent"
             android:layout_marginEnd="8dp"
             android:layout_weight="1"
-            app:cardBackgroundColor="@color/surface"
+            app:cardBackgroundColor="@color/color_setting_panel"
             app:strokeColor="@color/surface_stroke"
             app:strokeWidth="?attr/dkOutlineWidth" />
 
@@ -120,7 +120,7 @@
             android:layout_height="match_parent"
             android:layout_marginEnd="8dp"
             android:layout_weight="1"
-            app:cardBackgroundColor="@color/surface"
+            app:cardBackgroundColor="@color/color_setting_panel"
             app:strokeColor="@color/surface_stroke"
             app:strokeWidth="?attr/dkOutlineWidth" />
 
@@ -129,7 +129,7 @@
             android:layout_width="0dp"
             android:layout_height="match_parent"
             android:layout_weight="1"
-            app:cardBackgroundColor="@color/surface"
+            app:cardBackgroundColor="@color/color_setting_panel"
             app:strokeColor="@color/surface_stroke"
             app:strokeWidth="?attr/dkOutlineWidth" />
     </LinearLayout>
@@ -160,7 +160,9 @@
                     style="@style/Widget.MaterialComponents.Button.OutlinedButton"
                     android:layout_width="wrap_content"
                     android:layout_height="48dp"
-                    android:text="@string/color_sync_bars" />
+                    android:text="@string/color_sync_bars"
+                    android:textColor="@color/color_setting_choice_text"
+                    app:backgroundTint="@color/color_setting_choice_background" />
             </com.google.android.material.button.MaterialButtonToggleGroup>
 
             <TextView

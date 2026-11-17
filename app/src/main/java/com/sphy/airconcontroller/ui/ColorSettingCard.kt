@@ -6,11 +6,9 @@ import android.graphics.drawable.GradientDrawable
 import android.util.AttributeSet
 import android.view.LayoutInflater
 import android.view.View
-import android.widget.AdapterView
-import android.widget.ArrayAdapter
 import android.widget.SeekBar
-import android.widget.Spinner
 import android.widget.TextView
+import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.card.MaterialCardView
 import com.sphy.airconcontroller.R
 import com.sphy.airconcontroller.dikey.LedMode
@@ -41,7 +39,7 @@ class ColorSettingCard @JvmOverloads constructor(
     private val brightnessLabel: TextView
     private val brightnessSeek: SeekBar
     private val modeLabel: TextView
-    private val modeSpinner: Spinner
+    private val modeButtons: MaterialButtonToggleGroup
     private val redLabel: TextView
     private val redSeek: SeekBar
     private val greenLabel: TextView
@@ -92,8 +90,10 @@ class ColorSettingCard @JvmOverloads constructor(
         }
         brightnessLabel = findViewById(R.id.colorSettingBrightnessLabel)
         brightnessSeek = findViewById(R.id.colorSettingBrightness)
+        modeButtons = findViewById(R.id.colorSettingMode)
         modeLabel = findViewById(R.id.colorSettingModeLabel)
-        modeSpinner = findViewById(R.id.colorSettingMode)
+        // Each card reuses these child IDs; the lighting profile owns its selection.
+        modeButtons.isSaveFromParentEnabled = false
         redLabel = findViewById(R.id.colorSettingRedLabel)
         redSeek = findViewById(R.id.colorSettingRed)
         greenLabel = findViewById(R.id.colorSettingGreenLabel)
@@ -102,22 +102,13 @@ class ColorSettingCard @JvmOverloads constructor(
         blueSeek = findViewById(R.id.colorSettingBlue)
         hexView = findViewById(R.id.colorSettingHex)
 
-        modeSpinner.adapter = ArrayAdapter(
-            context,
-            android.R.layout.simple_spinner_dropdown_item,
-            LedMode.entries.map { labelFor(it) }
-        )
-        modeSpinner.onItemSelectedListener = object : AdapterView.OnItemSelectedListener {
-            override fun onItemSelected(parent: AdapterView<*>?, view: View?, position: Int, id: Long) {
-                if (suppress) return
-                val mode = LedMode.entries[position]
-                if (mode == currentMode) return
-                currentMode = mode
-                updateSummary(currentColor())
-                onModeChanged?.invoke(mode)
-            }
-
-            override fun onNothingSelected(parent: AdapterView<*>?) = Unit
+        modeButtons.addOnButtonCheckedListener { _, checkedId, checked ->
+            if (suppress || !checked) return@addOnButtonCheckedListener
+            val mode = modeButtonIds.entries.first { it.value == checkedId }.key
+            if (mode == currentMode) return@addOnButtonCheckedListener
+            currentMode = mode
+            updateSummary(currentColor())
+            onModeChanged?.invoke(mode)
         }
 
         bindSeek(hueSeek) { progress, live ->
@@ -152,8 +143,8 @@ class ColorSettingCard @JvmOverloads constructor(
 
     fun setModeVisible(visible: Boolean) {
         val v = if (visible) View.VISIBLE else View.INVISIBLE
+        modeButtons.visibility = v
         modeLabel.visibility = v
-        modeSpinner.visibility = v
         summaryMode.visibility = v
         updateSummary(currentColor())
     }
@@ -161,7 +152,7 @@ class ColorSettingCard @JvmOverloads constructor(
     fun setMode(mode: LedMode) {
         currentMode = mode
         suppress = true
-        modeSpinner.setSelection(LedMode.entries.indexOf(mode).coerceAtLeast(0), false)
+        modeButtons.check(modeButtonIds.getValue(mode))
         suppress = false
         updateSummary(currentColor())
     }
@@ -260,4 +251,14 @@ class ColorSettingCard @JvmOverloads constructor(
     }
 
     private enum class Source { HUE, SATURATION, BRIGHTNESS, RGB, EXTERNAL }
+
+    private companion object {
+        val modeButtonIds = mapOf(
+            LedMode.ON to R.id.colorSettingModeSolid,
+            LedMode.BREATH to R.id.colorSettingModeBreath,
+            LedMode.BLINK to R.id.colorSettingModeBlink,
+            LedMode.FLOW to R.id.colorSettingModeFlow,
+            LedMode.OFF to R.id.colorSettingModeOff,
+        )
+    }
 }

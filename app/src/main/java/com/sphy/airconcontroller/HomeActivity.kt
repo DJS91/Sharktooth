@@ -84,7 +84,7 @@ open class HomeActivity : OpenDiKeyActivity() {
         val page = layoutInflater.inflate(layoutResID, null)
         val shell = layoutInflater.inflate(R.layout.activity_main, null)
         listOf(
-            R.id.vehicleInfoBackButton, R.id.colorBackButton, R.id.mappingBackButton,
+            R.id.colorBackButton, R.id.mappingBackButton,
             R.id.adasBackButton, R.id.sentryBackButton, R.id.petBackButton,
             R.id.fridgeBack, R.id.backButtonEnd,
         ).forEach { page.findViewById<View>(it)?.visibility = View.GONE }
