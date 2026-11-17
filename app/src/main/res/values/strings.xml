@@ -53,6 +53,9 @@
   <string name="diag_storage_uploading">Uploading diagnostic report…</string>
   <string name="diag_storage_done">Diagnostic report URL (expires after 24 hours):\n%1$s</string>
   <string name="diag_storage_failed">Diagnostic upload failed: %1$s</string>
+  <string name="diag_storage_qr_description">QR code for the uploaded diagnostics report</string>
+  <string name="diag_storage_qr_hint">Scan with your phone to open the report.</string>
+  <string name="diag_storage_qr_failed">Unable to generate a QR code. Use the displayed link instead.</string>
   <string name="wifi_scan_button">Scan for networks</string>
   <string name="wifi_scan_initial">Scan for nearby 2.4 GHz networks. Hidden networks are not listed.</string>
   <string name="wifi_scan_running">Scanning for networks…</string>

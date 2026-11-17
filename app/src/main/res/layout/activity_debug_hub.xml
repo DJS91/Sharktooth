@@ -119,6 +119,32 @@
             android:visibility="gone" />
 
         <LinearLayout
+            android:id="@+id/diagStorageQrResult"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:gravity="center_horizontal"
+            android:orientation="vertical"
+            android:visibility="gone">
+
+            <ImageView
+                android:id="@+id/diagStorageQrImage"
+                android:layout_width="@dimen/diagnostic_qr_size"
+                android:layout_height="@dimen/diagnostic_qr_size"
+                android:contentDescription="@string/diag_storage_qr_description"
+                android:scaleType="fitCenter" />
+
+            <TextView
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:layout_marginTop="8dp"
+                android:gravity="center"
+                android:text="@string/diag_storage_qr_hint"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+                android:textColor="@color/text_primary" />
+        </LinearLayout>
+
+        <LinearLayout
             android:id="@+id/openDiagnosticsButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

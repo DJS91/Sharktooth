@@ -2,17 +2,27 @@ package com.sphy.airconcontroller
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.graphics.drawable.BitmapDrawable
 import android.net.Uri
 import android.os.Bundle
+import android.util.Log
 import android.view.View
 import android.widget.Button
+import android.widget.ImageView
+import android.widget.TextView
 import android.widget.Toast
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.zxing.WriterException
+import com.sphy.airconcontroller.diagnostics.DiagnosticUpload
+import com.sphy.airconcontroller.diagnostics.diagnosticQrCode
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
+import kotlinx.coroutines.Dispatchers
+import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.launch
+import kotlinx.coroutines.withContext
 
 /** Debug probe menus behind the home bug icon. */
 class DebugHubActivity : OpenDiKeyActivity() {
@@ -56,21 +66,10 @@ class DebugHubActivity : OpenDiKeyActivity() {
         }
         if (bridge.isUsbOpen) bridge.requestWifiStatus()
         val uploadButton = findViewById<Button>(R.id.sendDiagnosticStorageButton)
-        val uploadStatus = findViewById<android.widget.TextView>(R.id.diagStorageStatus)
         val upload = OpenDiKeyApp.from(this).diagnosticUpload
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                upload.state.collect { state ->
-                    uploadButton.isEnabled = !state.busy
-                    val text = when {
-                        state.url != null -> getString(R.string.diag_storage_done, state.url)
-                        state.error != null -> getString(R.string.diag_storage_failed, state.error)
-                        state.busy -> state.progress ?: getString(R.string.diag_storage_uploading)
-                        else -> ""
-                    }
-                    uploadStatus.text = text
-                    uploadStatus.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
-                }
+                upload.state.collectLatest { state -> renderDiagnosticUpload(state) }
             }
         }
         uploadButton.setOnClickListener {
@@ -112,6 +111,34 @@ class DebugHubActivity : OpenDiKeyActivity() {
     override fun onSaveInstanceState(outState: Bundle) {
         outState.putBoolean(STATE_WIFI_DETAILS_VISIBLE, wifiDetailsVisible)
         super.onSaveInstanceState(outState)
+    }
+
+    internal suspend fun renderDiagnosticUpload(state: DiagnosticUpload.State) {
+        findViewById<Button>(R.id.sendDiagnosticStorageButton).isEnabled = !state.busy
+        val uploadStatus = findViewById<TextView>(R.id.diagStorageStatus)
+        val text = when {
+            state.url != null -> getString(R.string.diag_storage_done, state.url)
+            state.error != null -> getString(R.string.diag_storage_failed, state.error)
+            state.busy -> state.progress ?: getString(R.string.diag_storage_uploading)
+            else -> ""
+        }
+        uploadStatus.text = text
+        uploadStatus.visibility = if (text.isEmpty()) View.GONE else View.VISIBLE
+        val qrResult = findViewById<View>(R.id.diagStorageQrResult)
+        val qrImage = findViewById<ImageView>(R.id.diagStorageQrImage)
+        qrResult.visibility = View.GONE
+        qrImage.setImageDrawable(null)
+        val url = state.url ?: return
+        val size = resources.getDimensionPixelSize(R.dimen.diagnostic_qr_size)
+        val bitmap = try {
+            withContext(Dispatchers.Default) { diagnosticQrCode(url, size) }
+        } catch (e: WriterException) {
+            Log.e("DebugHubActivity", "Could not generate diagnostics QR code", e)
+            Toast.makeText(this, R.string.diag_storage_qr_failed, Toast.LENGTH_LONG).show()
+            return
+        }
+        qrImage.setImageDrawable(BitmapDrawable(resources, bitmap).apply { isFilterBitmap = false })
+        qrResult.visibility = View.VISIBLE
     }
 
     private fun openBydAdbServiceMenu() {
