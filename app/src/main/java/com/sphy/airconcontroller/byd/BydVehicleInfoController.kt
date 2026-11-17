@@ -343,6 +343,10 @@ class BydVehicleInfoController(context: Context) {
 
     /** Both gearbox getters, read independently so a caller can tell which one tracks the shifter. */
     data class GearReads(val gear: Int?, val autoMode: Int?) {
+        val confirmedPark: Boolean
+            get() = listOfNotNull(gear, autoMode).let { values ->
+                values.any { it == 1 } && values.none { it in 2..6 }
+            }
         override fun toString() = "getGear=${gear ?: "—"} getGearboxAutoModeType=${autoMode ?: "—"}"
     }
 

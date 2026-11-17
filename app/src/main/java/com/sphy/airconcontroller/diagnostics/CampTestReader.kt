@@ -48,24 +48,40 @@ class CampTestReader(context: Context) {
             values["Headlights.readPaths"] = reading.detail
             reading.mode ?: throw IllegalArgumentException(reading.detail)
         }
+        read("Lighting.featureIds") {
+            val type = Class.forName("android.hardware.bydauto.BYDAutoFeatureIds", false, app.classLoader)
+            (listOf(type) + type.declaredClasses.filter {
+                it.simpleName in setOf("Instrument", "Light", "Sensor", "Bodywork", "Setting")
+            }).forEach { owner ->
+                owner.fields.filter {
+                    Modifier.isStatic(it.modifiers) && it.type == Int::class.javaPrimitiveType &&
+                        LIGHTING_API_PATTERN.containsMatchIn(it.name)
+                }.forEach { field -> read("SDK.${owner.simpleName}.${field.name}") { field.getInt(null) } }
+            }
+            "read-only SDK constants; not validated command mappings"
+        }
         for ((label, className) in DEVICES) {
             read("$label.binding") {
                 val type = Class.forName(className, false, app.classLoader)
                 val device = type.getMethod("getInstance", Context::class.java)
                     .invoke(null, BydPermissionContext(app))
                     ?: throw IllegalArgumentException("getInstance returned null")
+                values["$label.runtimeClass"] = device.javaClass.name
+                values["$label.classLoader"] = device.javaClass.classLoader?.toString() ?: "boot class loader"
                 val constants = type.fields.filter {
                     Modifier.isStatic(it.modifiers) && Modifier.isFinal(it.modifiers) &&
                         it.type == Int::class.javaPrimitiveType &&
-                        CONSTANT_PATTERN.containsMatchIn(it.name)
+                        (CONSTANT_PATTERN.containsMatchIn(it.name) || LIGHTING_API_PATTERN.containsMatchIn(it.name))
                 }
                 constants.forEach { field -> read("$label.${field.name}") { field.getInt(null) } }
                 val getters = when (label) {
                     "Bodywork" -> listOf("getWindowPermitState", "getWindowAntiPinchConfig")
-                    "Instrument" -> listOf("getDayNightMode", "getInstrumentTheme")
-                    else -> listOf("getINSTheme")
+                    "Instrument" -> listOf("getInstrumentTheme")
+                    "Setting" -> listOf("getINSTheme")
+                    else -> emptyList()
                 }
                 getters.forEach { name -> read("$label.$name") { type.getMethod(name).invoke(device) } }
+                readLightingGetters(label, device, ::read)
                 if (label == "Bodywork") {
                     constants.filter { it.name.startsWith("BODYWORK_CMD_WINDOW_") }.forEach { field ->
                         for (getter in listOf("getWindowState", "getWindowOpenPercent", "getWindowControlState")) {
@@ -104,6 +120,9 @@ class CampTestReader(context: Context) {
         return CampTestSnapshot(values, errors)
     }
 
+    fun lightingApiInventory(): String = campModeApiInventory(app.classLoader,
+        DEVICES + ("Feature IDs" to "android.hardware.bydauto.BYDAutoFeatureIds"))
+
     private companion object {
         const val TAG = "CampTestReader"
         val CONSTANT_PATTERN = Regex("WINDOW|MODE_DAY|MODE_NIGHT|THEME")
@@ -112,6 +131,8 @@ class CampTestReader(context: Context) {
             "Bodywork" to "android.hardware.bydauto.bodywork.BYDAutoBodyworkDevice",
             "Instrument" to "android.hardware.bydauto.instrument.BYDAutoInstrumentDevice",
             "Setting" to "android.hardware.bydauto.setting.BYDAutoSettingDevice",
+            "Light" to "android.hardware.bydauto.light.BYDAutoLightDevice",
+            "Sensor" to "android.hardware.bydauto.sensor.BYDAutoSensorDevice",
         )
     }
 }

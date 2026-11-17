@@ -2,7 +2,23 @@ package com.sphy.airconcontroller.diagnostics
 
 import java.lang.reflect.Modifier
 
-private val CAMP_API_PATTERN = Regex("window|theme|night|day|display.?mode", RegexOption.IGNORE_CASE)
+private val CAMP_API_PATTERN = Regex("window|theme|night|day|display.?mode|light|beam|ambient|lux|lumin", RegexOption.IGNORE_CASE)
+internal val LIGHTING_API_PATTERN = Regex("light|beam|day.?night|ambient|lux|lumin", RegexOption.IGNORE_CASE)
+private val MUTATING_GETTER_PATTERN = Regex("^getAnd(Set|Reset|Clear)", RegexOption.IGNORE_CASE)
+
+internal fun readLightingGetters(label: String, device: Any, read: (String, () -> Any?) -> Unit) {
+    device.javaClass.methods.filter { method ->
+        method.parameterCount == 0 && !Modifier.isStatic(method.modifiers) &&
+            (method.name.startsWith("get") || method.name.startsWith("is") || method.name.startsWith("has")) &&
+            !MUTATING_GETTER_PATTERN.containsMatchIn(method.name) &&
+            LIGHTING_API_PATTERN.containsMatchIn(method.name) &&
+            ((method.returnType.isPrimitive && method.returnType != Void.TYPE) ||
+                Number::class.java.isAssignableFrom(method.returnType) ||
+                method.returnType == java.lang.Boolean::class.java)
+    }.sortedBy { it.name }.forEach { method ->
+        read("$label.${method.name}") { method.invoke(device) }
+    }
+}
 
 internal fun campModeApiInventory(classLoader: ClassLoader, classes: List<Pair<String, String>>): String =
     buildString {

@@ -2,6 +2,7 @@ package com.sphy.airconcontroller
 
 import android.content.Intent
 import android.os.ParcelFileDescriptor
+import android.os.Build
 import android.os.SystemClock
 import android.provider.Settings
 import android.view.MotionEvent
@@ -9,10 +10,20 @@ import android.view.View
 import android.widget.Button
 import android.widget.EditText
 import android.widget.TextView
+import android.widget.ScrollView
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.action.ViewActions.swipeUp
+import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
+import androidx.test.espresso.matcher.ViewMatchers.withText
+import androidx.test.espresso.matcher.ViewMatchers.withId
 import org.junit.After
 import org.junit.Assert.*
+import org.junit.Assume.assumeTrue
+import org.hamcrest.CoreMatchers.containsString
 import org.junit.Before
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -129,7 +140,28 @@ class CampTestsActivityTest {
         awaitReady(page)
         instrumentation.runOnMainSync {
             assertTrue(page.findViewById<TextView>(R.id.campTestReport).text.contains("Differences from baseline:"))
+            val report = page.findViewById<TextView>(R.id.campTestReport)
+            (report.parent.parent as ScrollView).fullScroll(View.FOCUS_DOWN)
         }
+        onView(withId(R.id.campTestShowReport)).check(matches(isDisplayed())).perform(click())
+        onView(withId(android.R.id.message))
+            .check(matches(isDisplayed()))
+            .check(matches(withText(containsString("Manual test observation"))))
+            .check { view, error ->
+                if (error != null) throw error
+                val body = view as TextView
+                assertTrue("On-screen results must be selectable", body.isTextSelectable)
+                assertEquals(page.getColor(R.color.text_primary), body.currentTextColor)
+                assertTrue("Long results must scroll within the viewer",
+                    generateSequence(body.parent) { it.parent }.filterIsInstance<View>()
+                        .any { it.canScrollVertically(1) })
+            }
+        onView(withId(androidx.appcompat.R.id.scrollView)).perform(swipeUp()).check { view, error ->
+            if (error != null) throw error
+            assertTrue("Swiping must reveal more of the saved report", view.scrollY > 0)
+        }
+        onView(withText(android.R.string.ok)).perform(click())
+        instrumentation.runOnMainSync { assertTrue("Viewing results must stay in the app", page.hasWindowFocus()) }
     }
 
     @Test fun displayDimSetsRealBrightnessAndRestoresOnTouchAndForegroundLoss() {
@@ -239,6 +271,61 @@ class CampTestsActivityTest {
         instrumentation.runOnMainSync {
             val text = page.findViewById<TextView>(R.id.campTestReport).text.toString()
             assertTrue(text, text.contains("setDayTimeLightState(1)") && text.contains("NOT SENT"))
+        }
+    }
+
+    @Test fun lightingInspectionReportsApisAndRawReadFailuresWithoutSendingControls() {
+        val page = open()
+        instrumentation.runOnMainSync { page.findViewById<View>(R.id.campTestLightingInspect).performClick() }
+        awaitReady(page)
+        val text = awaitReport(page, "Lighting and daylight inspection")
+        assertTrue(text, text.contains("no vehicle methods or settings are invoked"))
+        assertTrue(text, text.contains("No daylight-sensor or theme writes are performed"))
+        assertTrue(text, text.contains("Headlights.readPaths"))
+        assertTrue(text, text.contains("Sensor (android.hardware.bydauto.sensor.BYDAutoSensorDevice)"))
+        assertFalse(text, text.contains("Headlight OFF test ("))
+        onView(withId(android.R.id.message))
+            .check(matches(isDisplayed()))
+            .check(matches(withText(containsString("Headlights.readPaths"))))
+            .check(matches(withText(containsString("no vehicle methods or settings are invoked"))))
+        onView(withText(android.R.string.ok)).perform(click())
+    }
+
+    @Test fun headlightOffTestsRequireConfirmationAndNeverClaimSuccessWithoutSdk() {
+        assumeTrue("Active command UI integration test is emulator-only",
+            Build.HARDWARE in setOf("ranchu", "goldfish"))
+        val page = open()
+        for ((id, path) in listOf(R.id.campTestHeadlightsNamed to "NAMED", R.id.campTestHeadlightsFeature to "FEATURE")) {
+            var before = ""
+            instrumentation.runOnMainSync {
+                before = page.findViewById<TextView>(R.id.campTestReport).text.toString()
+                page.findViewById<View>(id).performClick()
+            }
+            onView(withText(R.string.camp_test_headlights_confirm)).check(matches(isDisplayed()))
+            onView(withText(android.R.string.cancel)).perform(click())
+            instrumentation.runOnMainSync {
+                assertEquals("Cancel must not run a headlight command", before,
+                    page.findViewById<TextView>(R.id.campTestReport).text.toString())
+                page.findViewById<View>(id).performClick()
+            }
+            onView(withText(R.string.camp_test_headlights_send)).perform(click())
+            awaitReady(page)
+            val text = awaitReport(page, "Headlight OFF test ($path) read-back")
+            assertTrue(text, text.contains("Headlight OFF test ($path)"))
+            assertTrue(text, text.contains("Command accepted: false"))
+            assertTrue(text, text.contains("NOT CONFIRMED"))
+            assertTrue(text, text.contains("MANUAL RESTORATION REQUIRED"))
+            onView(withId(android.R.id.message))
+                .check(matches(isDisplayed()))
+                .check(matches(withText(containsString("Command accepted: false"))))
+                .check(matches(withText(containsString("NOT CONFIRMED"))))
+                .check(matches(withText(containsString("MANUAL RESTORATION REQUIRED"))))
+                .check { view, error ->
+                    if (error != null) throw error
+                    if (path == "FEATURE") assertFalse("Automatic results must show this test, not the earlier one",
+                        (view as TextView).text.contains("Headlight OFF test (NAMED)"))
+                }
+            onView(withText(android.R.string.ok)).perform(click())
         }
     }
 

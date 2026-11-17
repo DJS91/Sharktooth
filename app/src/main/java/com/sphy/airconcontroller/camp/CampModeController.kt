@@ -162,8 +162,7 @@ internal class CampModeController private constructor(context: Context) {
 
         private fun requirePark() {
             val gears = vehicle.readGear()
-            check(gears != null && listOfNotNull(gears.gear, gears.autoMode).any { it == 1 } &&
-                listOfNotNull(gears.gear, gears.autoMode).none { it in 2..6 }) {
+            check(gears?.confirmedPark == true) {
                 "Park could not be confirmed ($gears). Select Park before enabling Camp Mode."
             }
         }

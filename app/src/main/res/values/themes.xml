@@ -152,6 +152,16 @@
         <item name="buttonBarNeutralButtonStyle">@style/Widget.OpenDiKey.DialogButton</item>
     </style>
 
+    <!-- Vertical padding on Material's scrollable button panel clips buttons in long reports. -->
+    <style name="Widget.OpenDiKey.ReportButtonBar" parent="Widget.OpenDiKey.DialogButtonBar">
+        <item name="android:paddingTop">0dp</item>
+        <item name="android:paddingBottom">0dp</item>
+    </style>
+
+    <style name="ThemeOverlay.OpenDiKey.ReportDialog" parent="ThemeOverlay.OpenDiKey.MaterialAlertDialog">
+        <item name="buttonBarStyle">@style/Widget.OpenDiKey.ReportButtonBar</item>
+    </style>
+
     <style name="Widget.OpenDiKey.ColorSeekBar" parent="Widget.AppCompat.SeekBar">
         <item name="android:paddingStart">16dp</item>
         <item name="android:paddingEnd">16dp</item>

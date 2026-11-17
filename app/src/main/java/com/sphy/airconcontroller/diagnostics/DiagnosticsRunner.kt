@@ -79,7 +79,7 @@ class DiagnosticsRunner(
             Step("ADAS API inventory") { adasApiInventory() },
             Step("Camp Mode API inventory") {
                 line(campModeApiInventory(app.classLoader, DEVICE_CLASSES.filter {
-                    it.first in setOf("Bodywork", "Setting", "Instrument", "Light")
+                    it.first in setOf("Bodywork", "Setting", "Instrument", "Light", "Sensor")
                 }))
             },
             Step("Climate controller") { climate() },

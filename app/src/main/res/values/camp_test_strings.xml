@@ -1,6 +1,6 @@
 <resources>
     <string name="camp_test_title">Camp Mode interactive tests</string>
-    <string name="camp_test_intro">Park safely before testing. Capture a baseline, change ONE thing using the car controls, choose its label below, then capture again. Return here after using another screen. Raw values and differences are evidence, not proof of a command mapping. Reports stay on this device unless you share them.</string>
+    <string name="camp_test_intro">Park safely before testing. Capture a baseline, change ONE thing using the car controls, choose its label below, then capture again. Return here after using another screen. Raw values and differences are evidence, not proof of a command mapping. Results are displayed on screen and saved locally. Use Show results at the top to reopen them; no file export is needed.</string>
     <string name="camp_test_baseline">Capture / replace baseline</string>
     <string name="camp_test_capture">Capture and compare</string>
     <string name="camp_test_note">Optional observation: which screen changed, window position, etc.</string>
@@ -15,6 +15,13 @@
     <string name="camp_test_ac_confirm">Vehicle parked, no occupants or pets relying on climate control? This turns the whole climate system OFF and does not restore it automatically. The report records the command result and a delayed read-back.</string>
     <string name="camp_test_drl_off">Test daytime running lights OFF</string>
     <string name="camp_test_drl_on">Restore daytime running lights ON</string>
+    <string name="camp_test_lighting_note">Headlight / daylight debugging: capture a baseline, move the physical stalk between OFF, AUTO and low beam, then capture each state. Raw Light, Sensor and Instrument readings and SDK constants are included when available. Display Day/Night mode is not proof of an ambient-light override. No daylight-sensor or theme writes are performed.</string>
+    <string name="camp_test_lighting_inspect">Inspect headlight and daylight APIs (read only)</string>
+    <string name="camp_test_headlights_named">Test headlights OFF (named API)</string>
+    <string name="camp_test_headlights_feature">Test headlights OFF (feature API)</string>
+    <string name="camp_test_headlights_confirm">Experimental headlight-OFF test while safely parked. This sends ONLY the selected API command, even if the previous selector state is unreadable. Park must be confirmed again immediately before the write. Headlights may turn off and STAY OFF. There is NO automatic restoration. You must restore and visually verify normal lighting using the physical stalk before driving. Test one API at a time and record what you see. This does not enable Camping Mode or spoof daylight.</string>
+    <string name="camp_test_headlights_send">Send parked-only OFF test</string>
+    <string name="camp_test_headlights_restore">MANUAL RESTORATION REQUIRED: restore and visually check normal lighting with the physical stalk before driving. No automatic restoration or fallback command is sent.</string>
     <string name="camp_test_drl_confirm">Car in Park? This turns the daytime running lights OFF (the car only changes them in Park). They stay off until you tap Restore or switch them back on in the car settings. Check local rules before driving with them off.</string>
     <string name="camp_test_dim">Test display dimming (10%)</string>
     <string name="camp_test_restore">Tap anywhere to restore the display\nAutomatically restores after 10 seconds</string>
@@ -30,8 +37,10 @@
     <string name="camp_test_theme_locked">Vehicle-theme commands: awaiting verified mapping</string>
     <string name="camp_test_clear">Clear test session</string>
     <string name="camp_test_clear_confirm">Delete this session\'s captures and baseline? This does not undo vehicle settings.</string>
-    <string name="camp_test_share">Share test report</string>
-    <string name="camp_test_share_note">The report includes display settings, raw vehicle readings and your observations. Review it before sharing. Nothing is uploaded automatically.</string>
+    <string name="camp_test_show_report">Show results</string>
+    <string name="camp_test_report_title">Test results</string>
+    <string name="camp_test_lighting_results">Headlight / daylight inspection results</string>
+    <string name="camp_test_headlights_results">Headlight OFF test results (%1$s)</string>
     <string-array name="camp_test_stages">
         <item>All windows manually closed</item>
         <item>Only front-left window slightly open</item>
@@ -42,6 +51,11 @@
         <item>Car display set to Dark / Night</item>
         <item>Car display set to Auto</item>
         <item>Display brightness manually changed</item>
+        <item>Physical headlight stalk set to OFF</item>
+        <item>Physical headlight stalk set to AUTO</item>
+        <item>Physical headlight stalk set to parking lights</item>
+        <item>Physical headlight stalk set to low beam</item>
+        <item>Ambient light / daylight condition changed</item>
         <item>Other change (describe below)</item>
     </string-array>
 </resources>

@@ -1,7 +1,7 @@
 package com.sphy.airconcontroller
 
 import android.content.ActivityNotFoundException
-import android.content.Intent
+import android.graphics.Typeface
 import android.net.Uri
 import android.os.Bundle
 import android.provider.Settings
@@ -17,13 +17,16 @@ import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
 import androidx.annotation.VisibleForTesting
-import androidx.core.content.FileProvider
+import androidx.appcompat.app.AlertDialog
+import androidx.core.content.ContextCompat
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.sphy.airconcontroller.adb.AdbPermissionManager
 import com.sphy.airconcontroller.byd.BydDisplayController
 import com.sphy.airconcontroller.byd.BydDrlController
+import com.sphy.airconcontroller.byd.BydHeadlightController
+import com.sphy.airconcontroller.byd.BydVehicleInfoController
 import com.sphy.airconcontroller.byd.BydWindowController
 import com.sphy.airconcontroller.diagnostics.CampTestReader
 import com.sphy.airconcontroller.diagnostics.CampTestSnapshot
@@ -48,6 +51,8 @@ class CampTestsActivity : OpenDiKeyActivity() {
     private lateinit var reader: CampTestReader
     private lateinit var windows: BydWindowController
     private lateinit var drl: BydDrlController
+    private lateinit var headlights: BydHeadlightController
+    private lateinit var vehicle: BydVehicleInfoController
     private lateinit var status: TextView
     private lateinit var reportView: TextView
     private lateinit var buttons: List<Button>
@@ -56,6 +61,7 @@ class CampTestsActivity : OpenDiKeyActivity() {
     private var busy = false
     private var grantingDim = false
     private var shortcutStart: String? = null
+    private var reportDialog: AlertDialog? = null
     private lateinit var display: BydDisplayController
     private var dimming = false
     private var savedDisplay: BydDisplayController.Saved? = null
@@ -71,13 +77,16 @@ class CampTestsActivity : OpenDiKeyActivity() {
         reader = CampTestReader(this)
         windows = BydWindowController(this)
         drl = BydDrlController(this)
+        headlights = BydHeadlightController(this)
+        vehicle = BydVehicleInfoController(this)
         display = BydDisplayController(this)
         status = findViewById(R.id.campTestStatus)
         reportView = findViewById(R.id.campTestReport)
         buttons = listOf(
             R.id.campTestBaseline, R.id.campTestCapture, R.id.campTestAcOff, R.id.campTestWindowsClose,
             R.id.campTestDrlOff, R.id.campTestDrlOn,
-            R.id.campTestDim, R.id.campTestScreenOff, R.id.campTestShortcut, R.id.campTestShare, R.id.campTestClear,
+            R.id.campTestLightingInspect, R.id.campTestHeadlightsNamed, R.id.campTestHeadlightsFeature,
+            R.id.campTestDim, R.id.campTestScreenOff, R.id.campTestShortcut, R.id.campTestShowReport, R.id.campTestClear,
         ).map { findViewById(it) }
         findViewById<View>(R.id.campTestShortcut).setOnClickListener {
             if (shortcutStart == null) startShortcutRecording() else finishShortcutRecording()
@@ -112,6 +121,29 @@ class CampTestsActivity : OpenDiKeyActivity() {
                 .show()
         }
         findViewById<View>(R.id.campTestDrlOn).setOnClickListener { setDrl(true) }
+        findViewById<View>(R.id.campTestLightingInspect).setOnClickListener {
+            operation {
+                val snapshot = withContext(Dispatchers.IO) { reader.capture() }
+                val inventory = withContext(Dispatchers.IO) { reader.lightingApiInventory() }
+                val result = "${getString(R.string.camp_test_lighting_note)}\n\n$inventory\n\nFull raw snapshot:\n${snapshot.report()}"
+                append("Lighting and daylight inspection", result)
+                persist()
+                showReport(result, getString(R.string.camp_test_lighting_results))
+            }
+        }
+        for ((id, path) in listOf(
+            R.id.campTestHeadlightsNamed to BydHeadlightController.TestPath.NAMED,
+            R.id.campTestHeadlightsFeature to BydHeadlightController.TestPath.FEATURE,
+        )) {
+            findViewById<View>(id).setOnClickListener {
+                MaterialAlertDialogBuilder(this)
+                    .setTitle((findViewById<Button>(id)).text)
+                    .setMessage(R.string.camp_test_headlights_confirm)
+                    .setNegativeButton(android.R.string.cancel, null)
+                    .setPositiveButton(R.string.camp_test_headlights_send) { _, _ -> testHeadlightsOff(path) }
+                    .show()
+            }
+        }
         findViewById<View>(R.id.campTestDim).setOnClickListener { dim() }
         findViewById<View>(R.id.campTestScreenOff).setOnClickListener {
             MaterialAlertDialogBuilder(this)
@@ -121,14 +153,7 @@ class CampTestsActivity : OpenDiKeyActivity() {
                 .setPositiveButton(R.string.camp_test_screen_off) { _, _ -> carScreenOff() }
                 .show()
         }
-        findViewById<View>(R.id.campTestShare).setOnClickListener {
-            MaterialAlertDialogBuilder(this)
-                .setTitle(R.string.camp_test_share)
-                .setMessage(R.string.camp_test_share_note)
-                .setNegativeButton(android.R.string.cancel, null)
-                .setPositiveButton(R.string.camp_test_share) { _, _ -> share() }
-                .show()
-        }
+        findViewById<View>(R.id.campTestShowReport).setOnClickListener { showReport() }
         findViewById<View>(R.id.campTestClear).setOnClickListener {
             MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.camp_test_clear)
@@ -300,6 +325,33 @@ class CampTestsActivity : OpenDiKeyActivity() {
         null -> "unknown"
     }
 
+    private fun testHeadlightsOff(path: BydHeadlightController.TestPath) = operation {
+        val before = withContext(Dispatchers.IO) { reader.capture() }
+        withContext(NonCancellable) {
+            val result = withContext(Dispatchers.IO) {
+                headlights.testOff(path, vehicle::readGear) {
+                    lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)
+                }
+            }
+            append("Headlight OFF test ($path)",
+                "Command accepted: ${result.success}\n${result.detail}\n${getString(R.string.camp_test_headlights_restore)}\nBefore:\n${before.report()}")
+            persist()
+            render()
+            if (result.success) delay(1500)
+            val after = withContext(Dispatchers.IO) { reader.capture() }
+            val observed = if (result.success && after.values["Headlights.selector"] == BydHeadlightController.OFF.toString()) {
+                "Selector read-back reports OFF; visually verify the headlights."
+            } else {
+                "NOT CONFIRMED: an SDK acceptance code does not prove the headlights switched off. Record what you saw."
+            }
+            val readback = "$observed\nCommand accepted: ${result.success}\n${result.detail}\n" +
+                "${getString(R.string.camp_test_headlights_restore)}\n${after.changesFrom(before)}\nAfter:\n${after.report()}"
+            append("Headlight OFF test ($path) read-back", readback)
+            persist()
+            showReport("$readback\nBefore:\n${before.report()}", getString(R.string.camp_test_headlights_results, path.name))
+        }
+    }
+
     private fun dim() {
         if (busy || dimming || grantingDim) return
         if (display.canWriteSystem()) {
@@ -389,6 +441,11 @@ class CampTestsActivity : OpenDiKeyActivity() {
     override fun onPause() {
         restoreBrightness("screen left / foreground lost")
         super.onPause()
+    }
+
+    override fun onDestroy() {
+        reportDialog?.dismiss()
+        super.onDestroy()
     }
 
     private fun operation(block: suspend () -> Unit) {
@@ -485,31 +542,25 @@ class CampTestsActivity : OpenDiKeyActivity() {
         }
     }
 
-    private fun share() {
-        if (report.isEmpty()) {
-            status.setText(R.string.camp_test_baseline_needed)
-            return
-        }
-        operation {
-            val text = "Sharktooth Camp Mode interactive tests\n${AppUpdater.currentVersionName(this)}\n" +
-                "Observed changes do not validate setter semantics.\n$report"
-            val file = withContext(Dispatchers.IO) {
-                File(cacheDir, "diagnostics").apply {
-                    if (!isDirectory && !mkdirs()) throw IOException("Cannot create report directory")
-                }.let { File(it, "camp-mode-tests.txt") }.apply { writeText(text) }
-            }
-            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
-                val uri = FileProvider.getUriForFile(this, "$packageName.fileprovider", file)
-                val intent = Intent(Intent.ACTION_SEND).apply {
-                    type = "text/plain"
-                    putExtra(Intent.EXTRA_STREAM, uri)
-                    addFlags(Intent.FLAG_GRANT_READ_URI_PERMISSION)
+    private fun showReport(text: String = report, title: String = getString(R.string.camp_test_report_title)) {
+        // Backgrounded results stay saved and can be reopened with the pinned Show results button.
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) || isFinishing || isDestroyed) return
+        reportDialog?.dismiss()
+        val message =
+            "${AppUpdater.currentVersionName(this)}\n\n${text.ifEmpty { getString(R.string.camp_test_empty) }}"
+        reportDialog = MaterialAlertDialogBuilder(this, R.style.ThemeOverlay_OpenDiKey_ReportDialog)
+            .setTitle(title)
+            .setMessage(message)
+            .setPositiveButton(android.R.string.ok, null)
+            .show().also { dialog ->
+                requireNotNull(dialog.findViewById<TextView>(android.R.id.message)).apply {
+                    typeface = Typeface.MONOSPACE
+                    setTextSize(14f)
+                    setTextColor(ContextCompat.getColor(this@CampTestsActivity, R.color.text_primary))
+                    setTextIsSelectable(true)
                 }
-                startActivity(Intent.createChooser(intent, getString(R.string.camp_test_share)))
-            } else {
-                throw IOException("Return to the test page and tap Share test report again.")
+                dialog.setOnDismissListener { reportDialog = null }
             }
-        }
     }
 
     private fun showError(e: Exception) {

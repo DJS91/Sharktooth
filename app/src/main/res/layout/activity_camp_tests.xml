@@ -27,6 +27,11 @@
                 android:text="@string/camp_test_title"
                 android:textColor="@color/text_primary"
                 android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6" />
+            <Button
+                android:id="@+id/campTestShowReport"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/camp_test_show_report" />
         </LinearLayout>
         <ScrollView
             android:layout_width="match_parent"
@@ -92,6 +97,26 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/camp_test_drl_on" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_lighting_note"
+                    android:textColor="@color/text_primary" />
+                <Button
+                    android:id="@+id/campTestLightingInspect"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_lighting_inspect" />
+                <Button
+                    android:id="@+id/campTestHeadlightsNamed"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_headlights_named" />
+                <Button
+                    android:id="@+id/campTestHeadlightsFeature"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_headlights_feature" />
                 <Button
                     android:id="@+id/campTestDim"
                     android:layout_width="match_parent"
@@ -122,11 +147,6 @@
                     android:layout_height="wrap_content"
                     android:enabled="false"
                     android:text="@string/camp_test_theme_locked" />
-                <Button
-                    android:id="@+id/campTestShare"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/camp_test_share" />
                 <Button
                     android:id="@+id/campTestClear"
                     android:layout_width="match_parent"

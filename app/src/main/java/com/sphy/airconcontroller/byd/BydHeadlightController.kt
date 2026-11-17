@@ -15,6 +15,7 @@ class BydHeadlightController internal constructor(
 
     data class CommandResult(val success: Boolean, val detail: String)
     data class Reading(val mode: Int?, val detail: String)
+    enum class TestPath { NAMED, FEATURE }
 
     /** 1=OFF, 2=AUTO, 3=parking lights, 4=low beam; all other readings are unavailable. */
     fun mode(): Int? = readMode().mode
@@ -92,28 +93,63 @@ class BydHeadlightController internal constructor(
                 null
             }
             if (named != null) {
-                val raw = named.invoke(dev, mode) as? Number
-                CommandResult(raw?.toInt() == 0, "setHeadlightControlMode($mode) result=$raw")
+                writeMode(dev, mode, TestPath.NAMED)
             } else {
                 // Only use the legacy selector command with readable, validated selector feedback.
                 if (readFeedback(dev, problems).mode == null) {
                     CommandResult(false, "Legacy headlight selector feedback unavailable; no command sent. ${problems.joinToString("; ")}")
                 } else {
-                    val id = featureId(dev, "INSTRUMENT_HEADLIGHT_CONTROL_SET", SET_FEATURE_ID)
-                    val eventType = Class.forName(EVENT_CLASS, true, dev.javaClass.classLoader)
-                    val event = eventType.getDeclaredConstructor().newInstance()
-                    eventType.getField("intValue").setInt(event, mode)
-                    val raw = findMethod(dev.javaClass, "set", IntArray::class.java, eventType)
-                        .invoke(dev, intArrayOf(id), event)
-                    val accepted = when (raw) {
-                        is Number -> raw.toInt() == 0
-                        is Boolean -> raw
-                        else -> false
-                    }
-                    CommandResult(accepted, "Instrument.set($id, $mode) result=$raw; read-back required")
+                    writeMode(dev, mode, TestPath.FEATURE)
                 }
             }
         } ?: CommandResult(false, problems.joinToString("; "))
+    }
+
+    /** Explicit debug test only: the user must confirm manual restoration when feedback is unavailable. */
+    fun testOff(
+        path: TestPath,
+        readGear: () -> BydVehicleInfoController.GearReads?,
+        inForeground: () -> Boolean,
+    ): CommandResult {
+        val problems = mutableListOf<String>()
+        return attempt("Headlight OFF test ($path)", problems) {
+            val dev = checkNotNull(device()) { "BYDAutoInstrumentDevice unavailable; no command sent" }
+            writeMode(dev, OFF, path) {
+                val gears = readGear()
+                check(inForeground()) { "Test screen lost foreground; no command sent" }
+                check(gears?.confirmedPark == true) { "Park could not be confirmed ($gears); no command sent" }
+            }
+        } ?: CommandResult(false, problems.joinToString("; "))
+    }
+
+    private fun writeMode(dev: Any, mode: Int, path: TestPath, beforeWrite: () -> Unit = {}): CommandResult {
+        val method: Method
+        val args: Array<Any>
+        val label: String
+        when (path) {
+            TestPath.NAMED -> {
+                method = findMethod(dev.javaClass, "setHeadlightControlMode", Int::class.java)
+                args = arrayOf(mode)
+                label = "setHeadlightControlMode($mode)"
+            }
+            TestPath.FEATURE -> {
+                val id = featureId(dev, "INSTRUMENT_HEADLIGHT_CONTROL_SET", SET_FEATURE_ID)
+                val eventType = Class.forName(EVENT_CLASS, true, dev.javaClass.classLoader)
+                val event = eventType.getDeclaredConstructor().newInstance()
+                eventType.getField("intValue").setInt(event, mode)
+                method = findMethod(dev.javaClass, "set", IntArray::class.java, eventType)
+                args = arrayOf(intArrayOf(id), event)
+                label = "Instrument.set($id, $mode)"
+            }
+        }
+        beforeWrite()
+        val raw = method.invoke(dev, *args)
+        val accepted = when (raw) {
+            is Number -> raw.toInt() == 0
+            is Boolean -> path == TestPath.FEATURE && raw
+            else -> false
+        }
+        return CommandResult(accepted, "$label result=$raw; read-back required")
     }
 
     private fun featureId(dev: Any, name: String, fallback: Int): Int {

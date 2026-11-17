@@ -212,4 +212,54 @@ class BydHeadlightControllerTest {
         assertTrue(reading.detail.contains("Instrument.get(1011875880, BYDAutoEventValue)"))
         assertTrue(selector.writes.isEmpty())
     }
+
+    @Test fun explicitDebugTestsCanTryOneOffCommandWithUnreadableSelectorButConfirmedPark() {
+        val named = Selector(0)
+        val feature = LegacySelector(0)
+        assertNull(controller(named).mode())
+        assertNull(controller(feature).mode())
+        val namedResult = controller(named).testOff(BydHeadlightController.TestPath.NAMED,
+            { BydVehicleInfoController.GearReads(1, null) }, { true })
+        val featureResult = controller(feature).testOff(BydHeadlightController.TestPath.FEATURE,
+            { BydVehicleInfoController.GearReads(null, 1) }, { true })
+        assertTrue(namedResult.detail, namedResult.success)
+        assertTrue(featureResult.detail, featureResult.success)
+        assertEquals(listOf(1), named.writes)
+        assertEquals(listOf(1), feature.writes)
+    }
+
+    @Test fun debugOffTestsNeverWriteWithoutForegroundAndUnambiguousPark() {
+        val invalidGears = listOf(null, BydVehicleInfoController.GearReads(null, null),
+            BydVehicleInfoController.GearReads(0, 0), BydVehicleInfoController.GearReads(2, null),
+            BydVehicleInfoController.GearReads(1, 2), BydVehicleInfoController.GearReads(3, 1))
+        for (path in BydHeadlightController.TestPath.entries) {
+            val named = Selector(0)
+            val feature = LegacySelector(0)
+            val controller = controller(if (path == BydHeadlightController.TestPath.NAMED) named else feature)
+            for (gears in invalidGears) {
+                val result = controller.testOff(path, { gears }, { true })
+                assertFalse(result.success)
+                assertTrue(result.detail.contains("Park could not be confirmed"))
+            }
+            val background = controller.testOff(path, { BydVehicleInfoController.GearReads(1, 1) }, { false })
+            assertFalse(background.success)
+            assertTrue(background.detail.contains("lost foreground"))
+            assertTrue(named.writes.isEmpty())
+            assertTrue(feature.writes.isEmpty())
+        }
+    }
+
+    @Test fun debugNamedFailureNeverFallsBackButAnExplicitFeatureTestUsesOnlyThatPath() {
+        val selector = RejectedNamedSelector().apply { throwOnWrite = true; current = 0 }
+        val controller = controller(selector)
+        val named = controller.testOff(BydHeadlightController.TestPath.NAMED,
+            { BydVehicleInfoController.GearReads(1, null) }, { true })
+        assertFalse(named.success)
+        assertTrue(named.detail.contains("instrument write denied"))
+        assertTrue(selector.writes.isEmpty())
+        val feature = controller.testOff(BydHeadlightController.TestPath.FEATURE,
+            { BydVehicleInfoController.GearReads(1, null) }, { true })
+        assertTrue(feature.detail, feature.success)
+        assertEquals(listOf(1), selector.writes)
+    }
 }
