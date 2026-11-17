@@ -23,7 +23,7 @@
         <item name="dkHeading">@color/classic_accent</item>
         <item name="dkTileRadius">20dp</item>
         <item name="dkCardRadius">16dp</item>
-        <item name="dkOutlineWidth">1dp</item>
+        <item name="dkOutlineWidth">0dp</item>
         <!-- Customize your theme here. -->
     </style>
 </resources>

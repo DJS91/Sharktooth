@@ -85,6 +85,9 @@ class DebugHubActivity : OpenDiKeyActivity() {
         findViewById<android.view.View>(R.id.openDiagnosticsButton).setOnClickListener {
             startActivity(Intent(this, DiagnosticsActivity::class.java))
         }
+        findViewById<View>(R.id.openCampTestsButton).setOnClickListener {
+            startActivity(Intent(this, CampTestsActivity::class.java))
+        }
         findViewById<android.view.View>(R.id.openBluetoothDiagnosticsButton).setOnClickListener {
             startActivity(Intent(this, BluetoothDiagnosticsActivity::class.java))
         }

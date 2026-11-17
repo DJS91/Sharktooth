@@ -1,0 +1,36 @@
+<resources>
+    <string name="camp_test_title">Camp Mode interactive tests</string>
+    <string name="camp_test_intro">Park safely before testing. Capture a baseline, change ONE thing using the car controls, choose its label below, then capture again. Return here after using another screen. Raw values and differences are evidence, not proof of a command mapping. Reports stay on this device unless you share them.</string>
+    <string name="camp_test_baseline">Capture / replace baseline</string>
+    <string name="camp_test_capture">Capture and compare</string>
+    <string name="camp_test_note">Optional observation: which screen changed, window position, etc.</string>
+    <string name="camp_test_busy">Reading vehicle and display settings...</string>
+    <string name="camp_test_empty">No captures yet. Start with a baseline. No vehicle commands run automatically.</string>
+    <string name="camp_test_baseline_needed">Capture a baseline first.</string>
+    <string name="camp_test_saved">Report saved locally.</string>
+    <string name="camp_test_failed">Test/report error: %1$s</string>
+    <string name="camp_test_controls">Explicit control tests</string>
+    <string name="camp_test_controls_note">Climate OFF sends a real command and leaves climate off; restore it using the car controls. Dim affects ONLY this app, never sets brightness to zero, and restores on touch, leaving this screen, or after 10 seconds. Window and vehicle-theme writes remain locked until their meanings are verified.</string>
+    <string name="camp_test_ac_off">Test climate OFF</string>
+    <string name="camp_test_ac_confirm">Vehicle parked, no occupants or pets relying on climate control? This turns the whole climate system OFF and does not restore it automatically. The report records the command result and a delayed read-back.</string>
+    <string name="camp_test_dim">Test temporary app dimming</string>
+    <string name="camp_test_restore">Tap anywhere to restore brightness\nAutomatically restores after 10 seconds</string>
+    <string name="camp_test_windows_locked">Window commands: awaiting verified mapping</string>
+    <string name="camp_test_theme_locked">Vehicle-theme commands: awaiting verified mapping</string>
+    <string name="camp_test_clear">Clear test session</string>
+    <string name="camp_test_clear_confirm">Delete this session\'s captures and baseline? This does not undo vehicle settings.</string>
+    <string name="camp_test_share">Share test report</string>
+    <string name="camp_test_share_note">The report includes display settings, raw vehicle readings and your observations. Review it before sharing. Nothing is uploaded automatically.</string>
+    <string-array name="camp_test_stages">
+        <item>All windows manually closed</item>
+        <item>Only front-left window slightly open</item>
+        <item>Only front-right window slightly open</item>
+        <item>Only rear-left window slightly open</item>
+        <item>Only rear-right window slightly open</item>
+        <item>Car display set to Light / Day</item>
+        <item>Car display set to Dark / Night</item>
+        <item>Car display set to Auto</item>
+        <item>Display brightness manually changed</item>
+        <item>Other change (describe below)</item>
+    </string-array>
+</resources>

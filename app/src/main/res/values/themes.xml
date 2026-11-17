@@ -24,7 +24,7 @@
         <item name="dkHeading">@color/classic_accent</item>
         <item name="dkTileRadius">20dp</item>
         <item name="dkCardRadius">16dp</item>
-        <item name="dkOutlineWidth">1dp</item>
+        <item name="dkOutlineWidth">0dp</item>
         <!-- Customize your theme here. -->
     </style>
 
@@ -47,7 +47,7 @@
         <item name="dkHeading">@color/classic_accent</item>
         <item name="dkTileRadius">20dp</item>
         <item name="dkCardRadius">16dp</item>
-        <item name="dkOutlineWidth">1dp</item>
+        <item name="dkOutlineWidth">0dp</item>
 
         <item name="colorPrimary">?attr/dkAccent</item>
         <item name="colorPrimaryVariant">?attr/dkBgBase</item>
@@ -67,7 +67,7 @@
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.OpenDiKey.MaterialAlertDialog</item>
     </style>
 
-    <!-- Dashboard look: near-black solid background, flat bordered cards with small corners, blue accent. -->
+    <!-- Dashboard look: near-black solid background, borderless cards with small corners, blue accent. -->
     <style name="Theme.OpenDiKey.Modern" parent="Theme.OpenDiKey">
         <item name="dkBgBase">@color/modern_bg</item>
         <item name="dkSurface">@color/modern_surface</item>

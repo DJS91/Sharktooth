@@ -171,6 +171,11 @@
       android:parentActivityName=".MainActivity"
       android:theme="@style/Theme.OpenDiKey" />
     <activity
+      android:name=".CampTestsActivity"
+      android:exported="false"
+      android:parentActivityName=".DebugHubActivity"
+      android:theme="@style/Theme.OpenDiKey" />
+    <activity
       android:name=".CampModeActivity"
       android:exported="false"
       android:parentActivityName=".MainActivity"

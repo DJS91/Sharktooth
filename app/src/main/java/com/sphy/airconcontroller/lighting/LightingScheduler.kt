@@ -25,6 +25,7 @@ object LightingScheduler {
 
     @Volatile private var probe: AmbientLightProbe? = null
     @Volatile private var lastApplied: LightingPeriod? = null
+    @Volatile private var previewPeriod: LightingPeriod? = null
     @Volatile private var pendingApply = false
     @Volatile private var waitingForCabin = false
     private var waitStartedElapsed = 0L
@@ -50,7 +51,26 @@ object LightingScheduler {
     @Volatile private var appContext: Context? = null
     @Volatile private var started = false
 
-    fun currentPeriod(): LightingPeriod? = lastApplied
+    fun currentPeriod(): LightingPeriod? = previewPeriod ?: lastApplied
+
+    fun preview(context: Context, period: LightingPeriod) {
+        previewPeriod = period
+        main.removeCallbacks(waitPollRunnable)
+        val ok = OpenDiKeyApp.from(context).dikey.applyLightingPeriod(period)
+        Log.i(TAG, "Preview $period ok=$ok")
+    }
+
+    fun endPreview(context: Context) {
+        if (previewPeriod == null) return
+        previewPeriod = null
+        // Restore the known ambient profile even if the cabin sensor is temporarily unavailable.
+        lastApplied?.let { period ->
+            val ok = OpenDiKeyApp.from(context).dikey.applyLightingPeriod(period)
+            pendingApply = !ok
+            Log.i(TAG, "Restore $period after preview ok=$ok")
+        }
+        sync(context, forceApply = lastApplied == null || pendingApply)
+    }
 
     fun start(context: Context) {
         val app = context.applicationContext
@@ -92,6 +112,7 @@ object LightingScheduler {
     }
 
     private fun evaluate(context: Context, forceApply: Boolean) {
+        if (previewPeriod != null) return
         val p = probe ?: AmbientLightProbe(context).also {
             it.startAndroidSensor()
             probe = it

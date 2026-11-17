@@ -51,6 +51,13 @@ class ColorConfigActivity : HomeActivity() {
 
     private val mainHandler = Handler(Looper.getMainLooper())
     private val applyBarRunnables = Array<Runnable?>(4) { null }
+    private val applyDispatchers = Array(4) { index ->
+        Runnable {
+            val task = applyBarRunnables[index]
+            applyBarRunnables[index] = null
+            task?.run()
+        }
+    }
     private var suppressUi = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -99,12 +106,13 @@ class ColorConfigActivity : HomeActivity() {
 
     override fun onResume() {
         super.onResume()
-        LightingScheduler.sync(this, forceApply = false)
+        LightingScheduler.preview(this, settings.editingLightingPeriod)
     }
 
-    override fun onDestroy() {
+    override fun onPause() {
         flushScheduled()
-        super.onDestroy()
+        LightingScheduler.endPreview(this)
+        super.onPause()
     }
 
     override fun onSaveInstanceState(outState: Bundle) {
@@ -163,6 +171,7 @@ class ColorConfigActivity : HomeActivity() {
             flushScheduled()
             settings.editingLightingPeriod =
                 if (checkedId == R.id.colorPeriodNight) LightingPeriod.NIGHT else LightingPeriod.DAY
+            LightingScheduler.preview(this, settings.editingLightingPeriod)
             reloadCardsFromEditingProfile()
         }
     }
@@ -227,28 +236,29 @@ class ColorConfigActivity : HomeActivity() {
     }
 
     private fun scheduleApply(slot: Int, r: Int, g: Int, b: Int, mode: Int?) {
-        cancelSchedule(slot)
+        val index = slotIndex(slot)
+        val scheduled = applyBarRunnables[index] != null
         val task = Runnable {
-            applyBarRunnables[slotIndex(slot)] = null
             if (slot == BACKLIGHT_SLOT) {
                 session.applyBacklight(r, g, b)
             } else {
                 session.applyBarColor(slot, r, g, b, mode)
             }
         }
-        applyBarRunnables[slotIndex(slot)] = task
-        mainHandler.postDelayed(task, APPLY_DEBOUNCE_MS)
+        applyBarRunnables[index] = task
+        if (!scheduled) mainHandler.postDelayed(applyDispatchers[index], APPLY_INTERVAL_MS)
     }
 
     private fun cancelSchedule(slot: Int) {
-        applyBarRunnables[slotIndex(slot)]?.let(mainHandler::removeCallbacks)
-        applyBarRunnables[slotIndex(slot)] = null
+        val index = slotIndex(slot)
+        mainHandler.removeCallbacks(applyDispatchers[index])
+        applyBarRunnables[index] = null
     }
 
     private fun flushScheduled() {
         for (slot in 0..3) {
             val task = applyBarRunnables[slot] ?: continue
-            mainHandler.removeCallbacks(task)
+            mainHandler.removeCallbacks(applyDispatchers[slot])
             applyBarRunnables[slot] = null
             task.run()
         }
@@ -257,7 +267,7 @@ class ColorConfigActivity : HomeActivity() {
     private fun slotIndex(slot: Int) = if (slot == BACKLIGHT_SLOT) 3 else slot - 1
 
     companion object {
-        private const val APPLY_DEBOUNCE_MS = 80L
+        private const val APPLY_INTERVAL_MS = 80L
         private const val BACKLIGHT_SLOT = 0
         private const val STATE_SELECTED_CARD = "selected_color_card"
     }

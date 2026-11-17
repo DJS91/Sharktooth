@@ -14,8 +14,8 @@ import com.sphy.airconcontroller.storage.ThemeStyle
  * Base for every screen. Applies the style chosen in Settings (Classic or Modern) before the layout
  * is inflated, and in Classic puts the cabin photo behind the content.
  * Photo CSS equivalent: `opacity: 0.2` on a `blur(5px)` image over the window color.
- * Blur is baked into [R.drawable.bg_interior]; alpha comes from [R.dimen.bg_photo_alpha], which is
- * lower in the light theme because the photo is dark. Modern uses a solid background instead.
+ * Blur is baked into [R.drawable.bg_interior]; [R.dimen.bg_photo_alpha] gives the photo the same
+ * opacity in light and dark palettes. Modern uses a solid background instead.
  */
 open class OpenDiKeyActivity : AppCompatActivity() {
     private var appliedStyle = ThemeStyle.CLASSIC
@@ -38,7 +38,10 @@ open class OpenDiKeyActivity : AppCompatActivity() {
     }
 
     override fun setContentView(view: View?) {
-        val frame = FrameLayout(this)
+        val frame = FrameLayout(this).apply {
+            clipChildren = false
+            clipToPadding = false
+        }
         if (appliedStyle == ThemeStyle.CLASSIC) {
             val bg = ImageView(this).apply {
                 scaleType = ImageView.ScaleType.CENTER_CROP

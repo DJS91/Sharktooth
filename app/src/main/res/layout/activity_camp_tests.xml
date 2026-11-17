@@ -1,0 +1,140 @@
+<?xml version="1.0" encoding="utf-8"?>
+<FrameLayout xmlns:android="http://schemas.android.com/apk/res/android"
+    android:layout_width="match_parent"
+    android:layout_height="match_parent">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:orientation="vertical"
+        android:padding="16dp">
+        <LinearLayout
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:gravity="center_vertical"
+            android:orientation="horizontal">
+            <ImageButton
+                android:id="@+id/campTestBack"
+                android:layout_width="48dp"
+                android:layout_height="48dp"
+                android:background="?attr/selectableItemBackgroundBorderless"
+                android:contentDescription="@string/navigate_back"
+                android:src="@drawable/ic_arrow_back"
+                android:tint="@color/text_primary" />
+            <TextView
+                android:layout_width="0dp"
+                android:layout_height="wrap_content"
+                android:layout_weight="1"
+                android:text="@string/camp_test_title"
+                android:textColor="@color/text_primary"
+                android:textAppearance="@style/TextAppearance.MaterialComponents.Headline6" />
+        </LinearLayout>
+        <ScrollView
+            android:layout_width="match_parent"
+            android:layout_height="0dp"
+            android:layout_weight="1">
+            <LinearLayout
+                android:layout_width="match_parent"
+                android:layout_height="wrap_content"
+                android:orientation="vertical">
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_intro"
+                    android:textColor="@color/text_primary" />
+                <Button
+                    android:id="@+id/campTestBaseline"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_baseline" />
+                <Spinner
+                    android:id="@+id/campTestStage"
+                    android:layout_width="match_parent"
+                    android:layout_height="48dp"
+                    android:entries="@array/camp_test_stages" />
+                <EditText
+                    android:id="@+id/campTestNote"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:minHeight="48dp"
+                    android:gravity="top"
+                    android:hint="@string/camp_test_note"
+                    android:inputType="textCapSentences|textMultiLine"
+                    android:maxLength="1000"
+                    android:textColor="@color/text_primary" />
+                <Button
+                    android:id="@+id/campTestCapture"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_capture" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_controls"
+                    android:textColor="@color/text_primary"
+                    android:textStyle="bold" />
+                <TextView
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_controls_note"
+                    android:textColor="@color/text_muted" />
+                <Button
+                    android:id="@+id/campTestAcOff"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_ac_off" />
+                <Button
+                    android:id="@+id/campTestDim"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_dim" />
+                <Button
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:enabled="false"
+                    android:text="@string/camp_test_windows_locked" />
+                <Button
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:enabled="false"
+                    android:text="@string/camp_test_theme_locked" />
+                <Button
+                    android:id="@+id/campTestShare"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_share" />
+                <Button
+                    android:id="@+id/campTestClear"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_clear" />
+                <TextView
+                    android:id="@+id/campTestStatus"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:accessibilityLiveRegion="polite"
+                    android:textColor="@color/text_primary" />
+                <TextView
+                    android:id="@+id/campTestReport"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:fontFamily="monospace"
+                    android:text="@string/camp_test_empty"
+                    android:textColor="@color/text_primary"
+                    android:textIsSelectable="true"
+                    android:textSize="14sp" />
+            </LinearLayout>
+        </ScrollView>
+    </LinearLayout>
+    <TextView
+        android:id="@+id/campTestDimOverlay"
+        android:layout_width="match_parent"
+        android:layout_height="match_parent"
+        android:background="#FF000000"
+        android:clickable="true"
+        android:focusable="true"
+        android:gravity="center"
+        android:text="@string/camp_test_restore"
+        android:textColor="#FFFFFFFF"
+        android:textSize="24sp"
+        android:visibility="gone" />
+</FrameLayout>

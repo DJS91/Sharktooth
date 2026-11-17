@@ -96,6 +96,13 @@
         </LinearLayout>
 
         <Button
+            android:id="@+id/openCampTestsButton"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginBottom="12dp"
+            android:text="@string/camp_test_title" />
+
+        <Button
             android:id="@+id/openBluetoothDiagnosticsButton"
             android:layout_width="match_parent"
             android:layout_height="wrap_content"

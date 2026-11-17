@@ -5,6 +5,7 @@ import android.graphics.Canvas
 import android.graphics.Color
 import android.graphics.Rect
 import android.graphics.drawable.GradientDrawable
+import android.content.res.Configuration
 import android.view.ContextThemeWrapper
 import android.view.Gravity
 import android.view.LayoutInflater
@@ -14,6 +15,8 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.core.content.ContextCompat
+import com.sphy.airconcontroller.ui.ColorSettingCard
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -76,7 +79,7 @@ class HomeLayoutTest {
 
                 val page = root.findViewById<View>(R.id.homePageContainer)
                 val vehicle = root.findViewById<View>(R.id.homeVehicleInfoButton)
-                val rail = fridge.parent as View
+                val rail = root.findViewById<View>(R.id.homeSidebar)
                 val navigationItems = listOf(
                     vehicle, controls,
                     root.findViewById(R.id.homeAdasButton), root.findViewById(R.id.homeSentryButton),
@@ -92,6 +95,10 @@ class HomeLayoutTest {
                 assertTrue(Color.alpha(surfaceColor) in 1..254)
                 assertEquals(surfaceColor, (page.background as GradientDrawable).color!!.defaultColor)
                 for (panel in listOf(page, rail)) {
+                    val parent = panel.parent as ViewGroup
+                    assertFalse("Panel shadows must escape their parent's bounds", parent.clipChildren)
+                    assertFalse("Panel shadows must extend through the outer padding", parent.clipToPadding)
+                    assertTrue("Keep content inside the rounded panels", panel.clipToOutline)
                     val image = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888)
                     panel.background.setBounds(0, 0, 100, 100)
                     panel.background.draw(Canvas(image))
@@ -99,6 +106,7 @@ class HomeLayoutTest {
                     assertEquals("Panel should have no border", image.getPixel(50, 50), image.getPixel(inset, 50))
                     image.recycle()
                 }
+                assertFalse("Shadows must not be clipped at the top of the content row", (root as ViewGroup).clipChildren)
 
                 val temperatures = fridge.findViewById<TextView>(R.id.homeFridgeTemperatures)
                 val status = fridge.findViewById<TextView>(R.id.homeFridgeStatus)
@@ -146,6 +154,32 @@ class HomeLayoutTest {
                 root.layout(0, 0, root.measuredWidth, root.measuredHeight)
                 assertTrue(reconnect.bottom <= fridge.height - fridge.paddingBottom)
                 assertEquals(0, disconnected.layout.getEllipsisCount(disconnected.layout.lineCount - 1))
+            }
+        }
+    }
+
+    @Test fun cardsAndSectionsAreBorderlessInBothStylesAndLightModes() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            for (nightMode in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
+                val config = Configuration(instrumentation.targetContext.resources.configuration)
+                config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightMode
+                val base = instrumentation.targetContext.createConfigurationContext(config)
+                for (theme in listOf(R.style.Theme_OpenDiKey, R.style.Theme_OpenDiKey_Modern)) {
+                    val context = ContextThemeWrapper(base, theme)
+                    for (id in listOf(R.drawable.bg_feature_tile, R.drawable.bg_info_block)) {
+                        val drawable = ContextCompat.getDrawable(context, id)!!
+                        val image = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888)
+                        drawable.setBounds(0, 0, 100, 100)
+                        drawable.draw(Canvas(image))
+                        assertEquals("A section edge should match its fill", image.getPixel(50, 50), image.getPixel(0, 50))
+                        image.recycle()
+                    }
+                    val page = LayoutInflater.from(context).inflate(R.layout.activity_color_config, null)
+                    for (id in listOf(R.id.colorLeft, R.id.colorMiddle, R.id.colorRight, R.id.colorKeys)) {
+                        assertEquals(0, page.findViewById<ColorSettingCard>(id).strokeWidth)
+                    }
+                }
             }
         }
     }
