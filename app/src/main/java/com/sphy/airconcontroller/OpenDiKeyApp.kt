@@ -5,6 +5,7 @@ import android.content.Context
 import com.sphy.airconcontroller.adb.AdbKeepAlive
 import com.sphy.airconcontroller.boot.BootAppLauncher
 import com.sphy.airconcontroller.boot.DiKeyListenService
+import com.sphy.airconcontroller.camp.CampModeController
 import com.sphy.airconcontroller.dikey.DiKeySession
 import com.sphy.airconcontroller.diagnostics.DiagnosticUpload
 import com.sphy.airconcontroller.fridge.FridgeController
@@ -34,6 +35,7 @@ class OpenDiKeyApp : Application() {
         telemetry = TelemetrySender(this, dikey.usbBridge)
         com.sphy.airconcontroller.lighting.LightingScheduler.scheduleNext(this)
         DiKeyListenService.start(this)
+        CampModeController.get(this)
     }
 
     companion object {

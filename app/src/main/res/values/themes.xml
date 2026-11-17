@@ -62,6 +62,13 @@
         <item name="android:colorBackground">?attr/dkBgBase</item>
         <item name="colorSurface">?attr/dkSurface</item>
         <item name="colorOnSurface">?attr/dkTextPrimary</item>
+        <item name="android:textColorPrimary">?attr/dkTextPrimary</item>
+        <item name="android:textColorPrimaryDisableOnly">?attr/dkTextPrimary</item>
+        <item name="android:textColorSecondary">?attr/dkTextMuted</item>
+        <item name="android:textColorTertiary">?attr/dkTextMuted</item>
+        <item name="android:textColorHint">?attr/dkTextMuted</item>
+        <item name="android:colorBackgroundFloating">?attr/dkSurface</item>
+        <item name="colorBackgroundFloating">?attr/dkSurface</item>
         <item name="materialButtonStyle">@style/Widget.OpenDiKey.Button</item>
         <item name="alertDialogTheme">@style/ThemeOverlay.OpenDiKey.AlertDialog</item>
         <item name="materialAlertDialogTheme">@style/ThemeOverlay.OpenDiKey.MaterialAlertDialog</item>
@@ -81,6 +88,13 @@
         <item name="dkTileRadius">6dp</item>
         <item name="dkCardRadius">6dp</item>
         <item name="dkOutlineWidth">0dp</item>
+    </style>
+
+    <style name="Widget.OpenDiKey.CampStep" parent="Widget.MaterialComponents.CompoundButton.CheckBox">
+        <item name="android:clickable">false</item>
+        <item name="android:focusable">false</item>
+        <item name="android:minHeight">36dp</item>
+        <item name="android:textColor">?attr/dkTextPrimary</item>
     </style>
 
     <style name="Widget.OpenDiKey.Button" parent="Widget.MaterialComponents.Button.OutlinedButton">

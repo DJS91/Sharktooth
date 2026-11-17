@@ -308,10 +308,11 @@ class HomeNavigationTest {
                 assertTrue(activity.findViewById<View>(R.id.homeModesButton).isSelected)
                 assertEquals(R.id.modesCamp, activity.findViewById<MaterialButtonToggleGroup>(R.id.modesTabs).checkedButtonId)
                 assertTrue(activity.findViewById<View>(R.id.modesPet).isEnabled)
-                val toggle = activity.findViewById<android.widget.CompoundButton>(R.id.campModeToggle)
-                assertFalse(toggle.isEnabled)
-                assertFalse(toggle.isChecked)
-                assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.campModeUnavailable).visibility)
+                val enable = activity.findViewById<android.widget.Button>(R.id.campModeEnable)
+                assertTrue(enable.isEnabled)
+                assertEquals("Enable Camping Mode", enable.text.toString())
+                assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.campModeStatus).visibility)
+                assertEquals("", activity.findViewById<android.widget.TextView>(R.id.campModeReport).text.toString())
             }
         } finally {
             instrumentation.removeMonitor(monitor)

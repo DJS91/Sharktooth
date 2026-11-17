@@ -1,12 +1,14 @@
 package com.sphy.airconcontroller.ui
 
 import android.os.Bundle
+import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
 import android.widget.FrameLayout
 import android.widget.ImageView
 import androidx.appcompat.app.AppCompatActivity
 import com.sphy.airconcontroller.R
+import com.sphy.airconcontroller.camp.CampModeController
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.storage.ThemeStyle
 
@@ -19,6 +21,7 @@ import com.sphy.airconcontroller.storage.ThemeStyle
  */
 open class OpenDiKeyActivity : AppCompatActivity() {
     private var appliedStyle = ThemeStyle.CLASSIC
+    private var swallowingCampWakeTouch = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         // Must run before super.onCreate so the right theme is in place when views are inflated.
@@ -31,6 +34,22 @@ open class OpenDiKeyActivity : AppCompatActivity() {
         super.onResume()
         // The style can be changed on another screen (Settings) while this one waits in the back stack.
         if (AppSettings(this).themeStyle != appliedStyle) recreate()
+    }
+
+    protected fun consumeCampWakeTouch(event: MotionEvent): Boolean {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN && CampModeController.get(this).onScreenWake()) {
+            swallowingCampWakeTouch = true
+        }
+        if (!swallowingCampWakeTouch) return false
+        if (event.actionMasked == MotionEvent.ACTION_UP || event.actionMasked == MotionEvent.ACTION_CANCEL) {
+            swallowingCampWakeTouch = false
+        }
+        return true
+    }
+
+    override fun dispatchTouchEvent(event: MotionEvent): Boolean {
+        if (consumeCampWakeTouch(event)) return true
+        return super.dispatchTouchEvent(event)
     }
 
     override fun setContentView(layoutResID: Int) {

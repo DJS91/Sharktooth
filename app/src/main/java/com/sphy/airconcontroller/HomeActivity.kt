@@ -513,6 +513,7 @@ open class HomeActivity : OpenDiKeyActivity() {
      * stray tap meant to stop the countdown can't also press a tile underneath.
      */
     override fun dispatchTouchEvent(ev: MotionEvent): Boolean {
+        if (consumeCampWakeTouch(ev)) return true
         if (ev.actionMasked == MotionEvent.ACTION_DOWN && autoSwitchCountdown?.isActive == true) {
             autoSwitchCountdown?.cancel()
             swallowingCancelTouch = true

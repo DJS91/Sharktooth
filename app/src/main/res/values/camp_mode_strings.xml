@@ -1,0 +1,16 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="camp_mode_confirm">Use only while safely parked with the vehicle ON. Keep hands and objects clear of all windows.\n\nThis turns climate OFF, closes all four windows, sets headlights OFF (including AUTO), turns DRLs OFF, mutes media, then sends the car\'s Screen off shortcut command.\n\nTouch the screen to wake it and automatically disable Camping Mode, restoring the saved climate, media volume, headlight selection and DRLs; windows stay closed. Call, alarm and safety audio are not targeted. This does not keep the vehicle powered or monitor occupants.</string>
+    <string name="camp_mode_idle">Park with the vehicle ON before enabling. Wake the screen to automatically restore saved settings; windows stay closed.</string>
+    <string name="camp_mode_working">Updating settings. Please wait. STOP WINDOWS remains available.</string>
+    <string name="camp_mode_waiting">Camping Mode active. Touch the screen to wake it and automatically restore saved settings.</string>
+    <string name="camp_mode_session">Saved settings need restoration. Check results below and tap Retry restoring settings. Saved settings are kept until restoration succeeds.</string>
+    <string name="camp_mode_retry_restore">Retry restoring settings</string>
+    <string name="camp_mode_step_climate">Turn climate off</string>
+    <string name="camp_mode_step_windows">Close all windows</string>
+    <string name="camp_mode_step_headlights">Turn headlights off</string>
+    <string name="camp_mode_step_drls">Turn DRLs off</string>
+    <string name="camp_mode_step_media">Mute media audio</string>
+    <string name="camp_mode_step_screen">Turn screen off</string>
+    <string name="camp_mode_step_running">%1$s (applying...)</string>
+</resources>

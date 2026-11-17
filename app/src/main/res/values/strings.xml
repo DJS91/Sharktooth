@@ -541,8 +541,7 @@
   <string name="listen_notification_body">Listening for the key</string>
   <string name="modes_title">Modes</string>
   <string name="camp_mode_title">Camp Mode</string>
-  <string name="camp_mode_enable">Enable Camp Mode</string>
-  <string name="camp_mode_unavailable">Camp Mode is unavailable until vehicle window and display-mode controls are verified.</string>
+  <string name="camp_mode_enable">Enable Camping Mode</string>
   <string name="pet_mode_title">Pet Mode</string>
   <string name="pet_mode_home_subtitle">Keep your pet comfortable while you are away</string>
   <string name="pet_mode_owner_message">My owner will be back soon</string>

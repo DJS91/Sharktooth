@@ -24,10 +24,14 @@
         </FrameLayout>
     </LinearLayout>
 
-    <LinearLayout
+    <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
+        android:fillViewport="true">
+    <LinearLayout
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
         android:gravity="center"
         android:orientation="vertical"
         android:padding="24dp">
@@ -40,22 +44,84 @@
             android:textColor="@color/text_primary"
             android:textStyle="bold" />
 
-        <com.google.android.material.switchmaterial.SwitchMaterial
-            android:id="@+id/campModeToggle"
+        <Button
+            android:id="@+id/campModeEnable"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:enabled="false"
             android:text="@string/camp_mode_enable" />
 
         <TextView
-            android:id="@+id/campModeUnavailable"
+            android:id="@+id/campModeStatus"
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="16dp"
             android:gravity="center"
-            android:text="@string/camp_mode_unavailable"
+            android:text="@string/camp_mode_idle"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
             android:textColor="@color/text_muted" />
+
+        <LinearLayout
+            android:id="@+id/campModeChecklist"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:orientation="vertical">
+
+            <CheckBox
+                android:id="@+id/campStepClimate"
+                style="@style/Widget.OpenDiKey.CampStep"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/camp_mode_step_climate" />
+            <CheckBox
+                android:id="@+id/campStepWindows"
+                style="@style/Widget.OpenDiKey.CampStep"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/camp_mode_step_windows" />
+            <CheckBox
+                android:id="@+id/campStepHeadlights"
+                style="@style/Widget.OpenDiKey.CampStep"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/camp_mode_step_headlights" />
+            <CheckBox
+                android:id="@+id/campStepDrls"
+                style="@style/Widget.OpenDiKey.CampStep"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/camp_mode_step_drls" />
+            <CheckBox
+                android:id="@+id/campStepMedia"
+                style="@style/Widget.OpenDiKey.CampStep"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/camp_mode_step_media" />
+            <CheckBox
+                android:id="@+id/campStepScreen"
+                style="@style/Widget.OpenDiKey.CampStep"
+                android:layout_width="wrap_content"
+                android:layout_height="wrap_content"
+                android:text="@string/camp_mode_step_screen" />
+        </LinearLayout>
+
+        <Button
+            android:id="@+id/campModeStopWindows"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:text="@string/camp_test_windows_stop" />
+
+        <TextView
+            android:id="@+id/campModeReport"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:textIsSelectable="true"
+            android:textColor="@color/text_primary"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body1" />
     </LinearLayout>
+    </ScrollView>
 </LinearLayout>

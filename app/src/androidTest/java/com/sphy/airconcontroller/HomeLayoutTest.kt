@@ -23,6 +23,71 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class HomeLayoutTest {
+    @Test fun campContentIsCenteredAndRemainsScrollableOnSmallScreens() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            val context = ContextThemeWrapper(instrumentation.targetContext, R.style.Theme_OpenDiKey)
+            val density = context.resources.displayMetrics.density
+            for ((width, height) in listOf(640 to 360, 1120 to 640)) {
+                val root = LayoutInflater.from(context).inflate(R.layout.activity_camp_mode, null)
+                root.measure(
+                    View.MeasureSpec.makeMeasureSpec((width * density).toInt(), View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec((height * density).toInt(), View.MeasureSpec.EXACTLY),
+                )
+                root.layout(0, 0, root.measuredWidth, root.measuredHeight)
+                val enable = root.findViewById<View>(R.id.campModeEnable)
+                val content = enable.parent as ViewGroup
+                assertEquals("Enable button should be horizontally centered", content.width / 2f,
+                    (enable.left + enable.right) / 2f, 1f)
+                val first = content.getChildAt(0)
+                val last = content.getChildAt(content.childCount - 1)
+                assertEquals("Content should be vertically centered below the tabs",
+                    first.top.toFloat(), (content.height - last.bottom).toFloat(), 1f)
+                assertTrue(first.top >= content.paddingTop)
+                assertTrue(last.bottom <= content.height - content.paddingBottom)
+                assertTrue("Long content must remain scrollable", content.parent is android.widget.ScrollView)
+            }
+        }
+    }
+
+    @Test fun defaultControlLabelsAndDimOverlayFollowBothThemePalettes() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            for (nightMode in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
+                val config = Configuration(instrumentation.targetContext.resources.configuration)
+                config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightMode
+                val base = instrumentation.targetContext.createConfigurationContext(config)
+                for (theme in listOf(R.style.Theme_OpenDiKey, R.style.Theme_OpenDiKey_Modern)) {
+                    val context = ContextThemeWrapper(base, theme)
+                    val colors = context.obtainStyledAttributes(intArrayOf(R.attr.dkTextPrimary, R.attr.dkTextMuted)).let {
+                        try { intArrayOf(it.getColor(0, Color.MAGENTA), it.getColor(1, Color.MAGENTA)) }
+                        finally { it.recycle() }
+                    }
+                    val expected = colors[0]
+                    val page = LayoutInflater.from(context).inflate(R.layout.activity_camp_mode, null)
+                    val checklist = page.findViewById<ViewGroup>(R.id.campModeChecklist)
+                    val labels = listOf(
+                        page.findViewById<TextView>(R.id.campModeEnable) to
+                            page.findViewById<TextView>(R.id.campModeStopWindows).currentTextColor,
+                        com.google.android.material.switchmaterial.SwitchMaterial(context) to expected,
+                        TextView(context) to colors[1], android.widget.CheckBox(context) to expected,
+                        android.widget.RadioButton(context) to expected, android.widget.EditText(context) to expected,
+                        LayoutInflater.from(context).inflate(R.layout.activity_camp_tests, null)
+                            .findViewById<TextView>(R.id.campTestDimOverlay) to expected,
+                    ) + (0 until checklist.childCount).map { (checklist.getChildAt(it) as TextView) to expected }
+                    for ((label, color) in labels) {
+                        assertEquals("${label.javaClass.simpleName} must follow the selected text palette",
+                            color, label.currentTextColor)
+                    }
+                    if (nightMode == Configuration.UI_MODE_NIGHT_NO) {
+                        assertTrue("Light-mode labels must be dark",
+                            androidx.core.graphics.ColorUtils.calculateLuminance(expected) < 0.2)
+                    }
+                }
+            }
+        }
+    }
+
     @Test fun wifiStatusStaysNextToButtonStatus() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val context = ContextThemeWrapper(
