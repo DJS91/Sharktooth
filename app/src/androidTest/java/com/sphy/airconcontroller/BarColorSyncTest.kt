@@ -23,6 +23,7 @@ import com.sphy.airconcontroller.storage.LightingProfile
 import com.sphy.airconcontroller.ui.ColorSettingCard
 import org.junit.Assert.*
 import org.junit.Assume.assumeFalse
+import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
 import java.util.UUID
@@ -31,11 +32,15 @@ import java.util.concurrent.TimeUnit
 
 @RunWith(AndroidJUnit4::class)
 class BarColorSyncTest {
-    @Test fun changingTheOtherProfileStreamsLatestColoursBeforeDragEnds() {
+    @Test fun pageEditsTheProfileOnTheBarAndKeepsItAfterLeaving() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val context = instrumentation.targetContext
         val session = OpenDiKeyApp.from(context).dikey
         assumeFalse("Avoid changing a connected DiKey during this test", session.isConnected)
+        val live = LightingScheduler.currentPeriod()
+        assumeTrue("Needs an ambient profile already applied to the bar", live != null)
+        live!!
+        val other = if (live == LightingPeriod.DAY) LightingPeriod.NIGHT else LightingPeriod.DAY
         val prefs = context.getSharedPreferences("aircon_settings", Context.MODE_PRIVATE)
         val original = prefs.all.filterKeys {
             it.startsWith("lighting_") || it.startsWith("dikey_led_") || it.startsWith("dikey_bl_")
@@ -46,10 +51,9 @@ class BarColorSyncTest {
         try {
             instrumentation.runOnMainSync {
                 if (session.settings.barsSynced) session.settings.setBarsSynced(false)
-                session.settings.saveLightingProfile(LightingPeriod.DAY, profile(10))
-                session.settings.saveLightingProfile(LightingPeriod.NIGHT, profile(60))
-                session.settings.editingLightingPeriod = LightingPeriod.NIGHT
-                LightingScheduler.preview(context, LightingPeriod.DAY)
+                session.settings.saveLightingProfile(live, profile(10))
+                session.settings.saveLightingProfile(other, profile(60))
+                session.settings.editingLightingPeriod = other
             }
             val page = instrumentation.startActivitySync(
                 Intent(context, ColorConfigActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
@@ -58,7 +62,10 @@ class BarColorSyncTest {
             instrumentation.waitForIdleSync()
             val changed = CountDownLatch(1)
             instrumentation.runOnMainSync {
-                assertEquals(LightingPeriod.NIGHT, LightingScheduler.currentPeriod())
+                assertEquals("The page must open on the profile shown on the bar", live, session.settings.editingLightingPeriod)
+                assertEquals(live, LightingScheduler.currentPeriod())
+                val shown = page.findViewById<ColorSettingCard>(R.id.colorLeft)
+                assertEquals(profile(10).bars.getValue(1).color, LedRgb(shown.red, shown.green, shown.blue))
                 session.controller.attachSink(object : DiKeyFrameSink {
                     override fun writeFrame(bytes: ByteArray): Boolean {
                         writes.add(bytes.copyOf())
@@ -87,19 +94,32 @@ class BarColorSyncTest {
                 assertTrue("Backlight writes must continue during a drag", backlights.size >= 3)
                 val left = page.findViewById<ColorSettingCard>(R.id.colorLeft)
                 left.onColorCommitted?.invoke(left.red, left.green, left.blue)
-                assertEquals(profile(10), session.settings.lightingProfile(LightingPeriod.DAY))
-                assertEquals(LedRgb(115, 30, 40), session.settings.lightingProfile(LightingPeriod.NIGHT).bars.getValue(1).color)
+                assertEquals(profile(60), session.settings.lightingProfile(other))
+                assertEquals(LedRgb(115, 30, 40), session.settings.lightingProfile(live).bars.getValue(1).color)
             }
             // Let the last queued strip and backlight frames finish before inspecting the sink.
             Thread.sleep(150)
             instrumentation.runOnMainSync {
                 assertTrue(writes.any { it.contentEquals(DiKeyProtocol.buildLedStrip(LedMode.ON.code, 1, 115, 30, 40)) })
                 assertTrue(writes.any { it.contentEquals(DiKeyProtocol.buildButtonBacklight(20, 50, 115)) })
-                session.controller.onTransportDown("Disconnected")
-                session.controller.attachSink(null)
+                writes.clear()
                 page.finish()
             }
             instrumentation.waitForIdleSync()
+            Thread.sleep(150)
+            instrumentation.runOnMainSync {
+                val leftBar = writes.lastOrNull { it[3] == DiKeyProtocol.CMD_LED_STRIP && it[5].toInt() == 1 }
+                assertArrayEquals(
+                    "Leaving the page must keep the edited colours on the bar",
+                    DiKeyProtocol.buildLedStrip(LedMode.ON.code, 1, 115, 30, 40),
+                    leftBar,
+                )
+                val backlight = writes.lastOrNull { it[3] == DiKeyProtocol.CMD_BUTTON_BACKLIGHT }
+                assertArrayEquals(DiKeyProtocol.buildButtonBacklight(20, 50, 115), backlight)
+                assertEquals(live, LightingScheduler.currentPeriod())
+                session.controller.onTransportDown("Disconnected")
+                session.controller.attachSink(null)
+            }
         } finally {
             instrumentation.runOnMainSync {
                 handler.removeCallbacksAndMessages(null)
@@ -193,6 +213,8 @@ class BarColorSyncTest {
                 settings.saveLightingProfile(LightingPeriod.DAY, day)
                 settings.saveLightingProfile(LightingPeriod.NIGHT, night)
                 settings.editingLightingPeriod = LightingPeriod.DAY
+                // The page opens on the profile shown on the bar.
+                LightingScheduler.preview(context, LightingPeriod.DAY)
             }
             val page = instrumentation.startActivitySync(
                 Intent(context, ColorConfigActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
@@ -243,6 +265,7 @@ class BarColorSyncTest {
             instrumentation.runOnMainSync { activity?.finish() }
             instrumentation.waitForIdleSync()
             instrumentation.runOnMainSync {
+                LightingScheduler.endPreview(context)
                 val edit = prefs.edit()
                 prefs.all.keys.filter(::isLightingKey).forEach(edit::remove)
                 for ((key, value) in original) {

@@ -88,6 +88,10 @@ class ColorConfigActivity : HomeActivity() {
 
         setupSyncControl()
         selectCard(savedInstanceState?.getInt(STATE_SELECTED_CARD, 0) ?: 0)
+        if (savedInstanceState == null) {
+            // Start on the profile currently on the bar so edits stay after leaving the page.
+            LightingScheduler.currentPeriod()?.let { settings.editingLightingPeriod = it }
+        }
         setupPeriodControls()
         reloadCardsFromEditingProfile()
 

@@ -83,15 +83,35 @@
                     android:layout_height="wrap_content"
                     android:text="@string/camp_test_ac_off" />
                 <Button
+                    android:id="@+id/campTestDrlOff"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_drl_off" />
+                <Button
+                    android:id="@+id/campTestDrlOn"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_drl_on" />
+                <Button
                     android:id="@+id/campTestDim"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/camp_test_dim" />
                 <Button
+                    android:id="@+id/campTestScreenOff"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
-                    android:enabled="false"
-                    android:text="@string/camp_test_windows_locked" />
+                    android:text="@string/camp_test_screen_off" />
+                <Button
+                    android:id="@+id/campTestWindowsClose"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_windows_close" />
+                <Button
+                    android:id="@+id/campTestWindowsStop"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_windows_stop" />
                 <Button
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"

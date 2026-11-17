@@ -2,7 +2,9 @@ package com.sphy.airconcontroller
 
 import android.content.ActivityNotFoundException
 import android.content.Intent
+import android.net.Uri
 import android.os.Bundle
+import android.provider.Settings
 import android.os.Handler
 import android.os.Looper
 import android.util.AtomicFile
@@ -14,10 +16,14 @@ import android.widget.EditText
 import android.widget.Spinner
 import android.widget.TextView
 import android.widget.Toast
+import androidx.annotation.VisibleForTesting
 import androidx.core.content.FileProvider
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.sphy.airconcontroller.byd.BydDisplayController
+import com.sphy.airconcontroller.byd.BydDrlController
+import com.sphy.airconcontroller.byd.BydWindowController
 import com.sphy.airconcontroller.diagnostics.CampTestReader
 import com.sphy.airconcontroller.diagnostics.CampTestSnapshot
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
@@ -37,13 +43,18 @@ import java.util.Date
 
 class CampTestsActivity : OpenDiKeyActivity() {
     private lateinit var reader: CampTestReader
+    private lateinit var windows: BydWindowController
+    private lateinit var drl: BydDrlController
     private lateinit var status: TextView
     private lateinit var reportView: TextView
     private lateinit var buttons: List<Button>
     private var baseline: CampTestSnapshot? = null
     private var report = ""
     private var busy = false
-    private var originalBrightness: Float? = null
+    private lateinit var display: BydDisplayController
+    internal enum class DisplayTest { DIM, OFF }
+    private var displayTest: DisplayTest? = null
+    private var savedDisplay: BydDisplayController.Saved? = null
     private var consumeDimTouch = false
     private val handler = Handler(Looper.getMainLooper())
     private val restoreDim = Runnable { restoreBrightness("10-second timeout") }
@@ -54,11 +65,15 @@ class CampTestsActivity : OpenDiKeyActivity() {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_camp_tests)
         reader = CampTestReader(this)
+        windows = BydWindowController(this)
+        drl = BydDrlController(this)
+        display = BydDisplayController(this)
         status = findViewById(R.id.campTestStatus)
         reportView = findViewById(R.id.campTestReport)
         buttons = listOf(
-            R.id.campTestBaseline, R.id.campTestCapture, R.id.campTestAcOff,
-            R.id.campTestDim, R.id.campTestShare, R.id.campTestClear,
+            R.id.campTestBaseline, R.id.campTestCapture, R.id.campTestAcOff, R.id.campTestWindowsClose,
+            R.id.campTestDrlOff, R.id.campTestDrlOn,
+            R.id.campTestDim, R.id.campTestScreenOff, R.id.campTestShare, R.id.campTestClear,
         ).map { findViewById(it) }
         findViewById<View>(R.id.campTestBack).setOnClickListener { finish() }
         findViewById<View>(R.id.campTestBaseline).setOnClickListener { capture(true) }
@@ -71,7 +86,34 @@ class CampTestsActivity : OpenDiKeyActivity() {
                 .setPositiveButton(R.string.camp_test_ac_off) { _, _ -> climateOff() }
                 .show()
         }
+        findViewById<View>(R.id.campTestWindowsClose).setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.camp_test_windows_close)
+                .setMessage(R.string.camp_test_windows_confirm)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.camp_test_windows_close) { _, _ -> closeWindows() }
+                .show()
+        }
+        // Not in [buttons]: STOP must stay usable while a close is in progress.
+        findViewById<View>(R.id.campTestWindowsStop).setOnClickListener { stopWindows() }
+        findViewById<View>(R.id.campTestDrlOff).setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.camp_test_drl_off)
+                .setMessage(R.string.camp_test_drl_confirm)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.camp_test_drl_off) { _, _ -> setDrl(false) }
+                .show()
+        }
+        findViewById<View>(R.id.campTestDrlOn).setOnClickListener { setDrl(true) }
         findViewById<View>(R.id.campTestDim).setOnClickListener { dim() }
+        findViewById<View>(R.id.campTestScreenOff).setOnClickListener {
+            MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.camp_test_screen_off)
+                .setMessage(R.string.camp_test_screen_off_confirm)
+                .setNegativeButton(android.R.string.cancel, null)
+                .setPositiveButton(R.string.camp_test_screen_off) { _, _ -> startDisplayTest(DisplayTest.OFF) }
+                .show()
+        }
         findViewById<View>(R.id.campTestShare).setOnClickListener {
             MaterialAlertDialogBuilder(this)
                 .setTitle(R.string.camp_test_share)
@@ -94,6 +136,7 @@ class CampTestsActivity : OpenDiKeyActivity() {
                 }.show()
         }
         operation {
+            withContext(Dispatchers.IO) { display.prepare() }
             val saved = withContext(Dispatchers.IO) {
                 if (sessionFile.baseFile.exists()) {
                     JSONObject(sessionFile.openRead().bufferedReader().use { it.readText() })
@@ -161,20 +204,132 @@ class CampTestsActivity : OpenDiKeyActivity() {
         }
     }
 
+    private fun closeWindows() = operation {
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            append("Close windows skipped", "Test screen lost foreground before the command.")
+            persist()
+            return@operation
+        }
+        withContext(NonCancellable) {
+            val before = withContext(Dispatchers.IO) { windows.positions() }
+            val result = withContext(Dispatchers.IO) { windows.closeAll() }
+            append("Explicit close all windows command", "${result.method} -> ${result.detail}\nOpen % before: ${formatWindows(before)}")
+            persist()
+            render()
+            var after = before
+            if (result.success) {
+                // Windows take several seconds to travel; poll until all report closed.
+                for (i in 0 until 10) {
+                    delay(1000)
+                    after = withContext(Dispatchers.IO) { windows.positions() }
+                    if (after.values.all { it == 0 }) break
+                }
+            }
+            val observed = when {
+                !result.success -> "NOT SENT: ${result.detail}"
+                after.values.all { it == 0 } -> "Read-back reports all windows closed."
+                after.values.all { it == null } -> "NOT CONFIRMED: window position read-back unavailable."
+                else -> "NOT CONFIRMED: some windows still report open."
+            }
+            append("Close windows read-back", "$observed\nOpen % after: ${formatWindows(after)}")
+            persist()
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && !after.values.all { it == 0 }) {
+                Toast.makeText(this@CampTestsActivity, observed, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun stopWindows() {
+        lifecycleScope.launch(NonCancellable) {
+            val result = withContext(Dispatchers.IO) { windows.stopAll() }
+            append("STOP windows command", "${result.method} -> ${result.detail}")
+            render()
+            runCatching { persist() }.onFailure { Log.w("CampTestsActivity", "Cannot save stop", it) }
+            Toast.makeText(this@CampTestsActivity, if (result.success) "Windows stop sent" else "Stop failed: ${result.detail}", Toast.LENGTH_LONG).show()
+        }
+    }
+
+    private fun formatWindows(positions: Map<String, Int?>) =
+        positions.entries.joinToString { (name, open) -> "$name=${open?.let { "$it%" } ?: "?"}" }
+
+    private fun setDrl(on: Boolean) = operation {
+        val target = if (on) "ON" else "OFF"
+        if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+            append("DRL $target skipped", "Test screen lost foreground before the command.")
+            persist()
+            return@operation
+        }
+        withContext(NonCancellable) {
+            val before = withContext(Dispatchers.IO) { drl.isOn() }
+            val result = withContext(Dispatchers.IO) { drl.set(on) }
+            append("Explicit DRL $target command", "${result.method} -> ${result.detail}\nDRL before: ${formatDrl(before)}")
+            persist()
+            var after = before
+            if (result.success) {
+                // The car may accept the write but switch only after a moment, or not at all outside Park.
+                for (i in 0 until 10) {
+                    delay(150)
+                    after = withContext(Dispatchers.IO) { drl.isOn() }
+                    if (after == on) break
+                }
+            }
+            val observed = when {
+                !result.success -> "NOT SENT: ${result.detail}"
+                after == on -> "Read-back reports DRL $target."
+                after == null -> "NOT CONFIRMED: DRL read-back unavailable."
+                else -> "NOT CONFIRMED: car accepted the command but kept DRL ${formatDrl(after)} (it changes them only in Park)."
+            }
+            append("DRL $target read-back", "$observed\nDRL after: ${formatDrl(after)}")
+            persist()
+            if (lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) && after != on) {
+                Toast.makeText(this@CampTestsActivity, observed, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
+
+    private fun formatDrl(on: Boolean?) = when (on) {
+        true -> "ON"
+        false -> "OFF"
+        null -> "unknown"
+    }
+
     private fun dim() {
-        if (busy) return
-        originalBrightness = window.attributes.screenBrightness
-        window.attributes = window.attributes.apply { screenBrightness = 0.1f }
-        findViewById<View>(R.id.campTestDimOverlay).visibility = View.VISIBLE
+        if (busy || displayTest != null) return
+        if (display.canWriteSystem()) {
+            startDisplayTest(DisplayTest.DIM)
+            return
+        }
+        MaterialAlertDialogBuilder(this)
+            .setTitle(R.string.camp_test_dim)
+            .setMessage(R.string.camp_test_write_settings)
+            .setNegativeButton(R.string.camp_test_byd_only) { _, _ -> startDisplayTest(DisplayTest.DIM) }
+            .setPositiveButton(R.string.camp_test_allow) { _, _ ->
+                startActivity(Intent(Settings.ACTION_MANAGE_WRITE_SETTINGS, Uri.parse("package:$packageName")))
+            }.show()
+    }
+
+    @VisibleForTesting
+    internal fun startDisplayTest(test: DisplayTest) {
+        if (busy || displayTest != null) return
+        val saved = display.save()
+        savedDisplay = saved
+        displayTest = test
+        val result = if (test == DisplayTest.DIM) display.setBrightness(DIM_PERCENT) else display.backlight(false)
+        findViewById<TextView>(R.id.campTestDimOverlay).apply {
+            // Dimming stays see-through so the real panel change is visible; screen off is fully black.
+            setBackgroundColor(if (test == DisplayTest.DIM) 0x33000000 else 0xFF000000.toInt())
+            visibility = View.VISIBLE
+        }
         handler.postDelayed(restoreDim, 10_000)
         operation {
-            append("Temporary dim started", "App-window brightness override = 0.1; previous override = $originalBrightness. System brightness settings unchanged.")
+            val label = if (test == DisplayTest.DIM) "Display dim to $DIM_PERCENT% started" else "Screen backlight OFF started"
+            append(label, "Accepted: ${result.success}\n${result.detail}\nPrevious system brightness=${saved.brightness ?: "?"} mode=${saved.mode ?: "?"}\nIf the panel did not visibly change, note that in the observation.")
             persist()
         }
     }
 
     override fun dispatchTouchEvent(event: MotionEvent): Boolean {
-        if (originalBrightness != null && event.actionMasked == MotionEvent.ACTION_DOWN) {
+        if (displayTest != null && event.actionMasked == MotionEvent.ACTION_DOWN) {
             consumeDimTouch = true
             restoreBrightness("touch")
         }
@@ -188,13 +343,17 @@ class CampTestsActivity : OpenDiKeyActivity() {
     }
 
     private fun restoreBrightness(reason: String) {
-        val previous = originalBrightness ?: return
+        val test = displayTest ?: return
         handler.removeCallbacks(restoreDim)
-        window.attributes = window.attributes.apply { screenBrightness = previous }
-        originalBrightness = null
-        findViewById<View>(R.id.campTestDimOverlay).visibility = View.GONE
+        displayTest = null
         // Restoration itself is synchronous and never depends on a coroutine completing.
-        append("Brightness restored", "Reason: $reason; app-window override restored to $previous.")
+        val result = if (test == DisplayTest.DIM) {
+            display.restore(savedDisplay ?: BydDisplayController.Saved(null, null))
+        } else {
+            display.backlight(true)
+        }
+        findViewById<View>(R.id.campTestDimOverlay).visibility = View.GONE
+        append("Display restored", "Reason: $reason\nAccepted: ${result.success}\n${result.detail}")
         lifecycleScope.launch {
             try {
                 persist()
@@ -301,4 +460,8 @@ class CampTestsActivity : OpenDiKeyActivity() {
 
     private fun readMap(json: JSONObject): Map<String, String> =
         json.keys().asSequence().associateWith { json.getString(it) }
+
+    private companion object {
+        const val DIM_PERCENT = 10
+    }
 }
