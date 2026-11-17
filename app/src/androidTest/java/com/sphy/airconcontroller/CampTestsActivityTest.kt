@@ -125,8 +125,8 @@ class CampTestsActivityTest {
             val text = page.findViewById<TextView>(R.id.campTestReport).text.toString()
             assertTrue(text.contains("Differences from baseline:"))
             assertTrue(text.contains("Manual test observation"))
-            assertTrue(text.contains("Headlights.selector"))
-            assertTrue(text.contains("Headlights.readPaths = "))
+            assertTrue(text.contains("Headlight selector:"))
+            assertFalse(text.contains("Full raw snapshot:"))
             page.finish()
         }
         instrumentation.waitForIdleSync()
@@ -134,8 +134,7 @@ class CampTestsActivityTest {
         instrumentation.runOnMainSync {
             val text = page.findViewById<TextView>(R.id.campTestReport).text.toString()
             assertTrue(text.contains("Manual test observation"))
-            assertTrue("Headlight diagnostics must survive reopening", text.contains("Headlights.readPaths = "))
-            page.findViewById<View>(R.id.campTestCapture).performClick()
+            assertTrue("Summary must survive reopening", text.contains("Headlight selector:"))
         }
         awaitReady(page)
         instrumentation.runOnMainSync {
@@ -152,16 +151,23 @@ class CampTestsActivityTest {
                 val body = view as TextView
                 assertTrue("On-screen results must be selectable", body.isTextSelectable)
                 assertEquals(page.getColor(R.color.text_primary), body.currentTextColor)
-                assertTrue("Long results must scroll within the viewer",
-                    generateSequence(body.parent) { it.parent }.filterIsInstance<View>()
-                        .any { it.canScrollVertically(1) })
+                assertTrue("Default results must be short", body.text.length < 1200)
             }
+        onView(withText(R.string.camp_test_raw_details)).perform(click())
+        onView(withId(android.R.id.message)).check(matches(withText(containsString("Headlights.readPaths = "))))
         onView(withId(androidx.appcompat.R.id.scrollView)).perform(swipeUp()).check { view, error ->
             if (error != null) throw error
             assertTrue("Swiping must reveal more of the saved report", view.scrollY > 0)
         }
+        onView(withText(R.string.camp_test_summary)).perform(click())
+        onView(withId(android.R.id.message)).check(matches(withText(containsString("Manual test observation"))))
         onView(withText(android.R.string.ok)).perform(click())
-        instrumentation.runOnMainSync { assertTrue("Viewing results must stay in the app", page.hasWindowFocus()) }
+        instrumentation.runOnMainSync {
+            assertTrue("Viewing results must stay in the app", page.hasWindowFocus())
+            page.findViewById<View>(R.id.campTestCapture).performClick()
+        }
+        awaitReady(page)
+        assertTrue(awaitReport(page, "Differences from baseline:").contains("Differences from baseline:"))
     }
 
     @Test fun displayDimSetsRealBrightnessAndRestoresOnTouchAndForegroundLoss() {
@@ -270,8 +276,12 @@ class CampTestsActivityTest {
         awaitReady(page)
         instrumentation.runOnMainSync {
             val text = page.findViewById<TextView>(R.id.campTestReport).text.toString()
-            assertTrue(text, text.contains("setDayTimeLightState(1)") && text.contains("NOT SENT"))
+            assertTrue(text, text.contains("BYDAutoLightDevice unavailable") && text.contains("NOT SENT"))
         }
+        onView(withId(R.id.campTestShowReport)).perform(click())
+        onView(withText(R.string.camp_test_raw_details)).perform(click())
+        onView(withId(android.R.id.message)).check(matches(withText(containsString("setDayTimeLightState(1)"))))
+        onView(withText(android.R.string.ok)).perform(click())
     }
 
     @Test fun lightingInspectionReportsApisAndRawReadFailuresWithoutSendingControls() {
@@ -279,15 +289,74 @@ class CampTestsActivityTest {
         instrumentation.runOnMainSync { page.findViewById<View>(R.id.campTestLightingInspect).performClick() }
         awaitReady(page)
         val text = awaitReport(page, "Lighting and daylight inspection")
-        assertTrue(text, text.contains("no vehicle methods or settings are invoked"))
-        assertTrue(text, text.contains("No daylight-sensor or theme writes are performed"))
-        assertTrue(text, text.contains("Headlights.readPaths"))
-        assertTrue(text, text.contains("Sensor (android.hardware.bydauto.sensor.BYDAutoSensorDevice)"))
+        assertTrue(text, text.contains("Read-only: no settings changed"))
+        assertTrue(text, text.contains("Headlight selector:"))
+        assertTrue(text, text.contains("Watch headlight stalk"))
+        assertFalse(text, text.contains("Headlights.readPaths"))
+        assertTrue("Inspection summary must not be a dump", text.length < 1000)
         assertFalse(text, text.contains("Headlight OFF test ("))
         onView(withId(android.R.id.message))
             .check(matches(isDisplayed()))
-            .check(matches(withText(containsString("Headlights.readPaths"))))
-            .check(matches(withText(containsString("no vehicle methods or settings are invoked"))))
+            .check(matches(withText(containsString("Watch headlight stalk"))))
+        onView(withText(R.string.camp_test_raw_details)).perform(click())
+        onView(withId(android.R.id.message))
+            .check(matches(withText(containsString("Sensor (android.hardware.bydauto.sensor.BYDAutoSensorDevice)"))))
+        onView(withText(android.R.string.ok)).perform(click())
+    }
+
+    @Test fun liveStalkWatchIsBoundedStopsAndSurvivesReopeningWithoutVehicleSdk() {
+        sessionFile.writeText("""{"report":"OLD RAW DATA SHOULD NOT OPEN AUTOMATICALLY"}""")
+        var page = open()
+        instrumentation.runOnMainSync {
+            assertTrue(page.findViewById<TextView>(R.id.campTestReport).text.contains("Older results"))
+            page.findViewById<View>(R.id.campTestHeadlightsWatch).performClick()
+        }
+        onView(withId(android.R.id.message))
+            .check(matches(isDisplayed()))
+            .check(matches(withText(containsString("LIVE - turn the stalk"))))
+            .check(matches(withText(containsString("NOT verified commands"))))
+        fun liveText(): String {
+            var text = ""
+            onView(withId(android.R.id.message)).check { view, error ->
+                if (error != null) throw error
+                text = (view as TextView).text.toString()
+            }
+            return text
+        }
+        var live = ""
+        val deadline = SystemClock.uptimeMillis() + 10_000
+        while (!live.contains("Car logs: connected") && !live.contains("Car logs: unavailable") &&
+            SystemClock.uptimeMillis() < deadline) {
+            live = liveText()
+            Thread.sleep(50)
+        }
+        assertTrue("The live view must show whether real car log access works: $live",
+            live.contains("Car logs: connected") || live.contains("Car logs: unavailable"))
+        assertFalse(live.contains("Last sample: waiting"))
+        if (live.contains("Car logs: connected") && Build.HARDWARE in setOf("ranchu", "goldfish")) {
+            val marker = "headlight simulated stalk event ${SystemClock.uptimeMillis()}"
+            shell("log -t SharktoothStalkTest '$marker'")
+            val until = SystemClock.uptimeMillis() + 10_000
+            while (!live.contains(marker) && SystemClock.uptimeMillis() < until) {
+                live = liveText()
+                Thread.sleep(50)
+            }
+            assertTrue("A new emulator log event must appear live without reopening the view: $live", live.contains(marker))
+            assertTrue(live.contains(" LOG "))
+        }
+        onView(withText(R.string.camp_test_headlights_stop_watch)).perform(click())
+        awaitReady(page)
+        assertTrue(awaitReport(page, "STOPPED").contains("STOPPED"))
+        instrumentation.runOnMainSync {
+            assertTrue(page.findViewById<TextView>(R.id.campTestReport).text.length < 2200)
+            page.findViewById<View>(R.id.campTestHeadlightsWatch).performClick()
+            page.finish()
+        }
+        awaitReady(page)
+        page = open()
+        assertTrue(awaitReport(page, "STOPPED").contains("STOPPED"))
+        onView(withId(R.id.campTestShowReport)).perform(click())
+        onView(withId(android.R.id.message)).check(matches(withText(containsString("STOPPED"))))
         onView(withText(android.R.string.ok)).perform(click())
     }
 

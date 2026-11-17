@@ -15,7 +15,12 @@
     <string name="camp_test_ac_confirm">Vehicle parked, no occupants or pets relying on climate control? This turns the whole climate system OFF and does not restore it automatically. The report records the command result and a delayed read-back.</string>
     <string name="camp_test_drl_off">Test daytime running lights OFF</string>
     <string name="camp_test_drl_on">Restore daytime running lights ON</string>
-    <string name="camp_test_lighting_note">Headlight / daylight debugging: capture a baseline, move the physical stalk between OFF, AUTO and low beam, then capture each state. Raw Light, Sensor and Instrument readings and SDK constants are included when available. Display Day/Night mode is not proof of an ambient-light override. No daylight-sensor or theme writes are performed.</string>
+    <string name="camp_test_lighting_note">Use Watch headlight stalk while safely parked. Turn the physical stalk through OFF, AUTO and low beam, pausing 2 seconds at each position. Only changed readings and matching car log events appear; no commands are sent. The car may not expose stalk events. Display Day/Night mode is not a daylight override.</string>
+    <string name="camp_test_headlights_watch">Watch headlight stalk (live)</string>
+    <string name="camp_test_headlights_stop_watch">Stop capture</string>
+    <string name="camp_test_raw_details">Raw details</string>
+    <string name="camp_test_summary">Summary</string>
+    <string name="camp_test_legacy_result">Older results contain raw data only. Use Watch headlight stalk for a short live view. Raw details are optional.</string>
     <string name="camp_test_lighting_inspect">Inspect headlight and daylight APIs (read only)</string>
     <string name="camp_test_headlights_named">Test headlights OFF (named API)</string>
     <string name="camp_test_headlights_feature">Test headlights OFF (feature API)</string>
@@ -38,7 +43,7 @@
     <string name="camp_test_clear">Clear test session</string>
     <string name="camp_test_clear_confirm">Delete this session\'s captures and baseline? This does not undo vehicle settings.</string>
     <string name="camp_test_show_report">Show results</string>
-    <string name="camp_test_report_title">Test results</string>
+    <string name="camp_test_report_title">Latest test result</string>
     <string name="camp_test_lighting_results">Headlight / daylight inspection results</string>
     <string name="camp_test_headlights_results">Headlight OFF test results (%1$s)</string>
     <string-array name="camp_test_stages">

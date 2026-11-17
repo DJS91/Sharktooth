@@ -30,10 +30,15 @@ import com.sphy.airconcontroller.byd.BydVehicleInfoController
 import com.sphy.airconcontroller.byd.BydWindowController
 import com.sphy.airconcontroller.diagnostics.CampTestReader
 import com.sphy.airconcontroller.diagnostics.CampTestSnapshot
+import com.sphy.airconcontroller.diagnostics.HeadlightLiveCapture
+import com.sphy.airconcontroller.diagnostics.headlightSelectorLabel
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import com.sphy.airconcontroller.update.AppUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.NonCancellable
+import kotlinx.coroutines.Job
+import kotlinx.coroutines.ensureActive
+import kotlinx.coroutines.isActive
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
@@ -58,6 +63,8 @@ class CampTestsActivity : OpenDiKeyActivity() {
     private lateinit var buttons: List<Button>
     private var baseline: CampTestSnapshot? = null
     private var report = ""
+    private var latestResult = ""
+    private var watchJob: Job? = null
     private var busy = false
     private var grantingDim = false
     private var shortcutStart: String? = null
@@ -85,7 +92,7 @@ class CampTestsActivity : OpenDiKeyActivity() {
         buttons = listOf(
             R.id.campTestBaseline, R.id.campTestCapture, R.id.campTestAcOff, R.id.campTestWindowsClose,
             R.id.campTestDrlOff, R.id.campTestDrlOn,
-            R.id.campTestLightingInspect, R.id.campTestHeadlightsNamed, R.id.campTestHeadlightsFeature,
+            R.id.campTestHeadlightsWatch, R.id.campTestLightingInspect, R.id.campTestHeadlightsNamed, R.id.campTestHeadlightsFeature,
             R.id.campTestDim, R.id.campTestScreenOff, R.id.campTestShortcut, R.id.campTestShowReport, R.id.campTestClear,
         ).map { findViewById(it) }
         findViewById<View>(R.id.campTestShortcut).setOnClickListener {
@@ -121,14 +128,18 @@ class CampTestsActivity : OpenDiKeyActivity() {
                 .show()
         }
         findViewById<View>(R.id.campTestDrlOn).setOnClickListener { setDrl(true) }
+        findViewById<View>(R.id.campTestHeadlightsWatch).setOnClickListener { watchHeadlightStalk() }
         findViewById<View>(R.id.campTestLightingInspect).setOnClickListener {
             operation {
                 val snapshot = withContext(Dispatchers.IO) { reader.capture() }
                 val inventory = withContext(Dispatchers.IO) { reader.lightingApiInventory() }
                 val result = "${getString(R.string.camp_test_lighting_note)}\n\n$inventory\n\nFull raw snapshot:\n${snapshot.report()}"
-                append("Lighting and daylight inspection", result)
+                val summary = "Read-only: no settings changed.\nHeadlight selector: ${headlightSelectorLabel(snapshot)}\n" +
+                    "Named raw reading: ${snapshot.values["Instrument.getHeadlightControlMode"] ?: "unavailable"}\n" +
+                    "No verified daylight override is implemented.\nNext: use Watch headlight stalk to see changes live."
+                append("Lighting and daylight inspection", result, summary)
                 persist()
-                showReport(result, getString(R.string.camp_test_lighting_results))
+                showReport(title = getString(R.string.camp_test_lighting_results))
             }
         }
         for ((id, path) in listOf(
@@ -163,6 +174,7 @@ class CampTestsActivity : OpenDiKeyActivity() {
                     operation {
                         baseline = null
                         report = ""
+                        latestResult = ""
                         persist()
                     }
                 }.show()
@@ -179,6 +191,8 @@ class CampTestsActivity : OpenDiKeyActivity() {
                     CampTestSnapshot(readMap(it.getJSONObject("values")), readMap(it.getJSONObject("errors")))
                 }
                 report = saved.getString("report")
+                latestResult = saved.optString("latestResult",
+                    if (report.isEmpty()) "" else getString(R.string.camp_test_legacy_result))
             }
         }
     }
@@ -195,6 +209,15 @@ class CampTestsActivity : OpenDiKeyActivity() {
             val snapshot = withContext(Dispatchers.IO) { reader.capture() }
             val previous = baseline
             if (replaceBaseline) baseline = snapshot
+            val changes = if (previous == null || replaceBaseline) "Baseline saved." else {
+                val changed = snapshot.values.filter { (key, value) ->
+                    key != "Headlights.readPaths" && previous.values[key]?.let { it != value } == true
+                }
+                "Differences from baseline: ${changed.size} readable values changed.\n" +
+                    changed.entries.take(4).joinToString("\n") { (key, value) ->
+                        "$key: ${previous.values[key]} -> $value".take(160)
+                    }
+            }
             append(label, buildString {
                 appendLine("User observation: $note")
                 if (!replaceBaseline && previous != null) {
@@ -203,7 +226,7 @@ class CampTestsActivity : OpenDiKeyActivity() {
                 }
                 appendLine("Full raw snapshot:")
                 appendLine(snapshot.report())
-            })
+            }, "User observation: ${note.take(120)}\nHeadlight selector: ${headlightSelectorLabel(snapshot)}\n$changes")
             persist()
         }
     }
@@ -346,9 +369,12 @@ class CampTestsActivity : OpenDiKeyActivity() {
             }
             val readback = "$observed\nCommand accepted: ${result.success}\n${result.detail}\n" +
                 "${getString(R.string.camp_test_headlights_restore)}\n${after.changesFrom(before)}\nAfter:\n${after.report()}"
-            append("Headlight OFF test ($path) read-back", readback)
+            append("Headlight OFF test ($path) read-back", readback,
+                "$observed\nCommand accepted: ${result.success}\n${result.detail.take(180)}\n" +
+                    "Selector before: ${headlightSelectorLabel(before)}\nSelector after: ${headlightSelectorLabel(after)}\n" +
+                    getString(R.string.camp_test_headlights_restore))
             persist()
-            showReport("$readback\nBefore:\n${before.report()}", getString(R.string.camp_test_headlights_results, path.name))
+            showReport(title = getString(R.string.camp_test_headlights_results, path.name))
         }
     }
 
@@ -439,6 +465,7 @@ class CampTestsActivity : OpenDiKeyActivity() {
     }
 
     override fun onPause() {
+        watchJob?.cancel()
         restoreBrightness("screen left / foreground lost")
         super.onPause()
     }
@@ -470,6 +497,79 @@ class CampTestsActivity : OpenDiKeyActivity() {
                 buttons.forEach { it.isEnabled = true }
                 render()
             }
+        }
+    }
+
+    private fun watchHeadlightStalk() {
+        if (busy) return
+        busy = true
+        buttons.forEach { it.isEnabled = false }
+        val capture = HeadlightLiveCapture(System.currentTimeMillis(), android.os.Process.myPid())
+        val stamp = SimpleDateFormat("MM-dd HH:mm:ss.SSS", Locale.US)
+        val clock = SimpleDateFormat("HH:mm:ss", Locale.US)
+        var since = stamp.format(Date())
+        val dialog = MaterialAlertDialogBuilder(this, R.style.ThemeOverlay_OpenDiKey_ReportDialog)
+            .setTitle(R.string.camp_test_headlights_watch)
+            .setMessage(capture.report())
+            .setPositiveButton(R.string.camp_test_headlights_stop_watch, null)
+            .show()
+        reportDialog = dialog
+        watchJob = lifecycleScope.launch {
+            try {
+                var readLogs = true
+                while (isActive && lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED)) {
+                    val nextSince = stamp.format(Date())
+                    val snapshot = withContext(Dispatchers.IO) { reader.captureLighting() }
+                    capture.sample(snapshot, clock.format(Date()))
+                    if (readLogs) {
+                        val result = withContext(Dispatchers.IO) {
+                            AdbPermissionManager.runShellCommandQuick(this@CampTestsActivity,
+                                "logcat -d -v epoch -b main,system,events -T '$since'")
+                        }
+                        ensureActive()
+                        if (result.exitCode == 0) {
+                            capture.logStatus = "connected; filtered lighting events"
+                            capture.logs(result.output)
+                        } else {
+                            readLogs = false
+                            capture.logStatus = "unavailable; SDK readings only (${result.output.take(120)})"
+                            Log.w("CampTestsActivity", "Live headlight logs unavailable: ${result.output}")
+                        }
+                    }
+                    since = nextSince
+                    ensureActive()
+                    dialog.setMessage(capture.report())
+                    delay(1000)
+                }
+            } catch (e: IOException) {
+                capture.logStatus = "read failed: ${e.message?.take(120)}"
+                showError(e)
+            } catch (e: SecurityException) {
+                capture.logStatus = "access denied: ${e.message?.take(120)}"
+                showError(e)
+            } finally {
+                withContext(NonCancellable) {
+                    capture.stopped = true
+                    append("Live headlight stalk capture", capture.report(), capture.report())
+                    try {
+                        persist()
+                    } catch (e: IOException) {
+                        showError(e)
+                    }
+                    if (dialog.isShowing) {
+                        dialog.setMessage(capture.report())
+                        dialog.getButton(AlertDialog.BUTTON_POSITIVE).setText(android.R.string.ok)
+                    }
+                    busy = false
+                    watchJob = null
+                    buttons.forEach { it.isEnabled = true }
+                    render()
+                }
+            }
+        }
+        dialog.setOnDismissListener {
+            watchJob?.cancel()
+            if (reportDialog === dialog) reportDialog = null
         }
     }
 
@@ -512,18 +612,20 @@ class CampTestsActivity : OpenDiKeyActivity() {
         }
     }
 
-    private fun append(label: String, text: String) {
+    private fun append(label: String, text: String, summary: String = text.lineSequence().take(6)
+        .joinToString("\n") { it.take(160) }) {
         report += "\n=== ${Date()} | $label ===\n$text\n"
+        latestResult = "$label\n$summary"
     }
 
     private fun render() {
-        reportView.text = report.ifEmpty { getString(R.string.camp_test_empty) }
+        reportView.text = latestResult.ifEmpty { getString(R.string.camp_test_empty) }
     }
 
     private suspend fun persist() = withContext(NonCancellable) {
         persistenceMutex.withLock {
             val snapshot = baseline
-            val json = JSONObject().put("report", report)
+            val json = JSONObject().put("report", report).put("latestResult", latestResult)
             if (snapshot != null) {
                 json.put("baseline", JSONObject()
                     .put("values", JSONObject(snapshot.values))
@@ -542,7 +644,8 @@ class CampTestsActivity : OpenDiKeyActivity() {
         }
     }
 
-    private fun showReport(text: String = report, title: String = getString(R.string.camp_test_report_title)) {
+    private fun showReport(text: String = latestResult, title: String = getString(R.string.camp_test_report_title),
+                           raw: Boolean = false) {
         // Backgrounded results stay saved and can be reopened with the pinned Show results button.
         if (!lifecycle.currentState.isAtLeast(Lifecycle.State.RESUMED) || isFinishing || isDestroyed) return
         reportDialog?.dismiss()
@@ -551,6 +654,9 @@ class CampTestsActivity : OpenDiKeyActivity() {
         reportDialog = MaterialAlertDialogBuilder(this, R.style.ThemeOverlay_OpenDiKey_ReportDialog)
             .setTitle(title)
             .setMessage(message)
+            .setNeutralButton(if (raw) R.string.camp_test_summary else R.string.camp_test_raw_details) { _, _ ->
+                if (raw) showReport() else showReport(report, title, raw = true)
+            }
             .setPositiveButton(android.R.string.ok, null)
             .show().also { dialog ->
                 requireNotNull(dialog.findViewById<TextView>(android.R.id.message)).apply {
@@ -559,7 +665,7 @@ class CampTestsActivity : OpenDiKeyActivity() {
                     setTextColor(ContextCompat.getColor(this@CampTestsActivity, R.color.text_primary))
                     setTextIsSelectable(true)
                 }
-                dialog.setOnDismissListener { reportDialog = null }
+                dialog.setOnDismissListener { if (reportDialog === dialog) reportDialog = null }
             }
     }
 

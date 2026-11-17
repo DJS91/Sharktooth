@@ -16,7 +16,11 @@ class CampTestReader(context: Context) {
     val climate = BydAcController(app)
     private val headlights = BydHeadlightController(app)
 
-    fun capture(): CampTestSnapshot {
+    fun capture(): CampTestSnapshot = capture(lightingOnly = false)
+
+    fun captureLighting(): CampTestSnapshot = capture(lightingOnly = true)
+
+    private fun capture(lightingOnly: Boolean): CampTestSnapshot {
         val values = linkedMapOf<String, String>()
         val errors = linkedMapOf<String, String>()
         fun read(key: String, block: () -> Any?) {
@@ -39,7 +43,7 @@ class CampTestReader(context: Context) {
             }
         }
         read("SDK.loaded") { Dilink5SdkInjector.ensure(app) || Dilink5SdkInjector.isLoadable(app) }
-        read("Climate.powerOn") {
+        if (!lightingOnly) read("Climate.powerOn") {
             val state = climate.snapshot()
             state.powerOn ?: throw IllegalArgumentException("Climate power unavailable: ${state.bindError}")
         }
@@ -48,7 +52,7 @@ class CampTestReader(context: Context) {
             values["Headlights.readPaths"] = reading.detail
             reading.mode ?: throw IllegalArgumentException(reading.detail)
         }
-        read("Lighting.featureIds") {
+        if (!lightingOnly) read("Lighting.featureIds") {
             val type = Class.forName("android.hardware.bydauto.BYDAutoFeatureIds", false, app.classLoader)
             (listOf(type) + type.declaredClasses.filter {
                 it.simpleName in setOf("Instrument", "Light", "Sensor", "Bodywork", "Setting")
@@ -61,11 +65,16 @@ class CampTestReader(context: Context) {
             "read-only SDK constants; not validated command mappings"
         }
         for ((label, className) in DEVICES) {
+            if (lightingOnly && label !in setOf("Instrument", "Light", "Sensor")) continue
             read("$label.binding") {
                 val type = Class.forName(className, false, app.classLoader)
                 val device = type.getMethod("getInstance", Context::class.java)
                     .invoke(null, BydPermissionContext(app))
                     ?: throw IllegalArgumentException("getInstance returned null")
+                if (lightingOnly) {
+                    readLightingGetters(label, device, ::read)
+                    return@read "bound"
+                }
                 values["$label.runtimeClass"] = device.javaClass.name
                 values["$label.classLoader"] = device.javaClass.classLoader?.toString() ?: "boot class loader"
                 val constants = type.fields.filter {
@@ -95,6 +104,7 @@ class CampTestReader(context: Context) {
                 "bound; raw getter values are not validated command mappings"
             }
         }
+        if (lightingOnly) return CampTestSnapshot(values, errors)
         for ((namespace, uri) in listOf(
             "system" to Settings.System.CONTENT_URI,
             "secure" to Settings.Secure.CONTENT_URI,

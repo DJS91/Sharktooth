@@ -103,6 +103,11 @@
                     android:text="@string/camp_test_lighting_note"
                     android:textColor="@color/text_primary" />
                 <Button
+                    android:id="@+id/campTestHeadlightsWatch"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_test_headlights_watch" />
+                <Button
                     android:id="@+id/campTestLightingInspect"
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
