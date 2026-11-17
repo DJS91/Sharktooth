@@ -2,6 +2,7 @@ package com.sphy.airconcontroller.byd
 
 import android.content.Context
 import android.util.Log
+import kotlinx.coroutines.delay
 import java.lang.reflect.InvocationTargetException
 import java.lang.reflect.Method
 
@@ -23,24 +24,47 @@ class BydHeadlightController internal constructor(
         val dev = attempt("Instrument binding", problems) { device() }
             ?: return Reading(null, problems.joinToString("; ").ifEmpty { "BYDAutoInstrumentDevice unavailable" })
         val named = attempt("getHeadlightControlMode", problems) {
-            validMode(findMethod(dev.javaClass, "getHeadlightControlMode").invoke(dev), problems)
+            validMode(findMethod(dev.javaClass, "getHeadlightControlMode").invoke(dev), problems, "getHeadlightControlMode")
         }
         if (named != null) return Reading(named, "getHeadlightControlMode=$named")
-        val feedback = attempt("get($FEEDBACK_FEATURE_ID, int)", problems) {
-            validMode(readFeedback(dev), problems)
-        }
-        return Reading(feedback, (problems + if (feedback != null) {
-            "Instrument headlight feedback=$feedback"
-        } else {
-            "No valid headlight selector feedback"
-        }).joinToString("; "))
+        val feedback = readFeedback(dev, problems)
+        return feedback.copy(detail = (problems + feedback.detail).joinToString("; "))
     }
 
-    private fun readFeedback(dev: Any): Any? =
-        findMethod(dev.javaClass, "get", IntArray::class.java, Class::class.java)
-            .invoke(dev, intArrayOf(FEEDBACK_FEATURE_ID), Int::class.java)
+    suspend fun awaitMode(): Reading {
+        var reading = readMode()
+        repeat(10) {
+            if (reading.mode != null) return reading
+            delay(150)
+            reading = readMode()
+        }
+        return if (reading.mode != null) reading else reading.copy(
+            detail = "Still unavailable after waiting 1.5s for SDK feedback: ${reading.detail}")
+    }
 
-    private fun validMode(raw: Any?, problems: MutableList<String>): Int? {
+    private fun readFeedback(dev: Any, problems: MutableList<String>): Reading {
+        val unavailable = Reading(null, "No valid headlight selector feedback")
+        val id = attempt("Resolve instrument headlight feedback ID", problems) {
+            featureId(dev, "INSTRUMENT_HEADLIGHT_CONTROL_FEEDBACK", FEEDBACK_FEATURE_ID)
+        } ?: return unavailable
+        val getter = attempt("Instrument.get(int[], Class)", problems) {
+            findMethod(dev.javaClass, "get", IntArray::class.java, Class::class.java)
+        } ?: return unavailable
+        fun read(type: Class<*>): Reading? {
+            val label = "Instrument.get($id, ${type.simpleName})"
+            val mode = attempt(label, problems) {
+                validMode(getter.invoke(dev, intArrayOf(id), type), problems, label)
+            } ?: return null
+            return Reading(mode, "Instrument headlight feedback=$mode via $label")
+        }
+        read(Int::class.java)?.let { return it }
+        val eventType = attempt("Load $EVENT_CLASS for feedback", problems) {
+            Class.forName(EVENT_CLASS, true, dev.javaClass.classLoader)
+        } ?: return unavailable
+        return read(eventType) ?: unavailable
+    }
+
+    private fun validMode(raw: Any?, problems: MutableList<String>, label: String): Int? {
         val value = when (raw) {
             null -> null
             is Number -> raw.toInt()
@@ -48,7 +72,7 @@ class BydHeadlightController internal constructor(
         }
         return value?.takeIf { it in OFF..LOW_BEAM }.also {
             if (it == null) {
-                val detail = "Invalid headlight selector reading: $value"
+                val detail = "$label: Invalid headlight selector reading: $value"
                 problems += detail
                 log(detail, null)
             }
@@ -72,23 +96,39 @@ class BydHeadlightController internal constructor(
                 CommandResult(raw?.toInt() == 0, "setHeadlightControlMode($mode) result=$raw")
             } else {
                 // Only use the legacy selector command with readable, validated selector feedback.
-                if (validMode(readFeedback(dev), problems) == null) {
+                if (readFeedback(dev, problems).mode == null) {
                     CommandResult(false, "Legacy headlight selector feedback unavailable; no command sent. ${problems.joinToString("; ")}")
                 } else {
+                    val id = featureId(dev, "INSTRUMENT_HEADLIGHT_CONTROL_SET", SET_FEATURE_ID)
                     val eventType = Class.forName(EVENT_CLASS, true, dev.javaClass.classLoader)
                     val event = eventType.getDeclaredConstructor().newInstance()
                     eventType.getField("intValue").setInt(event, mode)
                     val raw = findMethod(dev.javaClass, "set", IntArray::class.java, eventType)
-                        .invoke(dev, intArrayOf(SET_FEATURE_ID), event)
+                        .invoke(dev, intArrayOf(id), event)
                     val accepted = when (raw) {
                         is Number -> raw.toInt() == 0
                         is Boolean -> raw
                         else -> false
                     }
-                    CommandResult(accepted, "Instrument.set($SET_FEATURE_ID, $mode) result=$raw; read-back required")
+                    CommandResult(accepted, "Instrument.set($id, $mode) result=$raw; read-back required")
                 }
             }
         } ?: CommandResult(false, problems.joinToString("; "))
+    }
+
+    private fun featureId(dev: Any, name: String, fallback: Int): Int {
+        val id = try {
+            Class.forName(INSTRUMENT_FEATURES_CLASS, true, dev.javaClass.classLoader)
+                .getField(name).getInt(null)
+        } catch (_: ClassNotFoundException) {
+            log("$INSTRUMENT_FEATURES_CLASS unavailable; using compatibility $name=$fallback", null)
+            fallback
+        } catch (_: NoSuchFieldException) {
+            log("SDK does not export $name; using compatibility ID=$fallback", null)
+            fallback
+        }
+        check(id > 0) { "SDK exports invalid $name=$id; no feature command sent" }
+        return id
     }
 
     private fun findMethod(type: Class<*>, name: String, vararg parameters: Class<*>): Method {
@@ -124,6 +164,9 @@ class BydHeadlightController internal constructor(
         } catch (e: IllegalStateException) {
             failed(e)
             null
+        } catch (e: IllegalArgumentException) {
+            failed(e)
+            null
         } catch (e: LinkageError) {
             failed(e)
             null
@@ -138,6 +181,7 @@ class BydHeadlightController internal constructor(
         private const val TAG = "BydHeadlightController"
         private const val INSTRUMENT_CLASS = "android.hardware.bydauto.instrument.BYDAutoInstrumentDevice"
         private const val EVENT_CLASS = "android.hardware.bydauto.BYDAutoEventValue"
+        private const val INSTRUMENT_FEATURES_CLASS = "android.hardware.bydauto.BYDAutoFeatureIds\$Instrument"
         private const val FEEDBACK_FEATURE_ID = 1011875880
         private const val SET_FEATURE_ID = 1276153912
 

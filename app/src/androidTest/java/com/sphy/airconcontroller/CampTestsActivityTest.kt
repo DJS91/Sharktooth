@@ -114,6 +114,8 @@ class CampTestsActivityTest {
             val text = page.findViewById<TextView>(R.id.campTestReport).text.toString()
             assertTrue(text.contains("Differences from baseline:"))
             assertTrue(text.contains("Manual test observation"))
+            assertTrue(text.contains("Headlights.selector"))
+            assertTrue(text.contains("Headlights.readPaths = "))
             page.finish()
         }
         instrumentation.waitForIdleSync()
@@ -121,6 +123,7 @@ class CampTestsActivityTest {
         instrumentation.runOnMainSync {
             val text = page.findViewById<TextView>(R.id.campTestReport).text.toString()
             assertTrue(text.contains("Manual test observation"))
+            assertTrue("Headlight diagnostics must survive reopening", text.contains("Headlights.readPaths = "))
             page.findViewById<View>(R.id.campTestCapture).performClick()
         }
         awaitReady(page)

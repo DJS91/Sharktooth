@@ -110,7 +110,7 @@ internal class CampModeController private constructor(context: Context) {
                 val climate = ac.snapshot()
                 check(climate.bound && climate.powerOn != null) { "Cannot read the previous climate state; nothing changed." }
                 val drlOn = checkNotNull(drl.isOn()) { "Cannot read the previous DRL state; nothing changed." }
-                val headlight = headlights.readMode()
+                val headlight = headlights.awaitMode()
                 val headlightMode = checkNotNull(headlight.mode) {
                     "Cannot read the previous headlight selector; nothing changed. ${headlight.detail}"
                 }
@@ -279,7 +279,7 @@ internal class CampModeController private constructor(context: Context) {
             instance ?: CampModeController(context).also { instance = it }
         }
 
-        private suspend fun <T> io(block: () -> T): T = kotlinx.coroutines.withContext(Dispatchers.IO) { block() }
+        private suspend fun <T> io(block: suspend () -> T): T = kotlinx.coroutines.withContext(Dispatchers.IO) { block() }
 
         internal fun encodeSaved(saved: CampSavedState): JSONObject {
             val ac = saved.climate

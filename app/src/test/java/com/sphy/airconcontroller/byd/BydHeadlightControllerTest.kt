@@ -1,6 +1,8 @@
 package com.sphy.airconcontroller.byd
 
 import android.hardware.bydauto.BYDAutoEventValue
+import android.hardware.bydauto.BYDAutoFeatureIds.Instrument
+import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
 import org.junit.Test
 
@@ -20,9 +22,19 @@ class BydHeadlightControllerTest {
 
     open class LegacyFeedback(var current: Int = 2) {
         var returnEvent = false
+        var needsEventToken = false
+        var rejectPrimitiveToken = false
+        var expectedFeedbackId = 1011875880
+        val readTypes = mutableListOf<Class<*>>()
         protected fun get(ids: IntArray, type: Class<*>): Any {
-            check(ids.contentEquals(intArrayOf(1011875880)))
-            check(type == Int::class.javaPrimitiveType)
+            check(ids.contentEquals(intArrayOf(expectedFeedbackId)))
+            readTypes += type
+            if (type == Int::class.java && rejectPrimitiveToken) throw IllegalArgumentException("EventValue required")
+            if (type == Int::class.java && needsEventToken) return -999999999
+            if (type == BYDAutoEventValue::class.java) {
+                return BYDAutoEventValue().also { it.intValue = if (needsEventToken) current else -999999999 }
+            }
+            check(type == Int::class.java)
             return if (returnEvent) BYDAutoEventValue().also { it.intValue = current } else current
         }
     }
@@ -30,12 +42,18 @@ class BydHeadlightControllerTest {
     open class LegacySelector(current: Int = 2) : LegacyFeedback(current) {
         val writes = mutableListOf<Int>()
         var result = 0
+        var expectedSetId = 1276153912
         fun set(ids: IntArray, event: BYDAutoEventValue): Int {
-            check(ids.contentEquals(intArrayOf(1276153912)))
+            check(ids.contentEquals(intArrayOf(expectedSetId)))
             writes += event.intValue
             if (result == 0) current = event.intValue
             return result
         }
+    }
+
+    class WarmingSelector {
+        var reads = 0
+        fun getHeadlightControlMode(): Int = if (++reads < 3) 0 else 2
     }
 
     class RejectedNamedSelector : LegacySelector() {
@@ -96,14 +114,16 @@ class BydHeadlightControllerTest {
     }
 
     @Test fun unreadableLegacyFeedbackNeverSendsACommandOrAssumesOff() {
-        for (mode in listOf(0, -1, 255)) {
-            val selector = LegacySelector(mode)
-            val controller = controller(selector)
-            val reading = controller.readMode()
-            assertNull(reading.mode)
-            assertTrue(reading.detail.contains("Invalid headlight selector reading: $mode"))
-            assertFalse(controller.setMode(1).success)
-            assertTrue(selector.writes.isEmpty())
+        for (mode in listOf(0, -1, 255, -999999999)) {
+            for (eventToken in listOf(false, true)) {
+                val selector = LegacySelector(mode).apply { needsEventToken = eventToken }
+                val controller = controller(selector)
+                val reading = controller.readMode()
+                assertNull(reading.mode)
+                assertTrue(reading.detail.contains("Invalid headlight selector reading: $mode"))
+                assertFalse(controller.setMode(1).success)
+                assertTrue(selector.writes.isEmpty())
+            }
         }
     }
 
@@ -131,5 +151,65 @@ class BydHeadlightControllerTest {
         assertNull(reading.mode)
         assertTrue(reading.detail.contains("Instrument binding: SecurityException: instrument read denied"))
         assertTrue(denied.setMode(1).detail.contains("instrument read denied"))
+    }
+
+    @Test fun sentinelOrRejectedPrimitiveReadUsesEventValueTokenAndRestoresOriginalSelector() {
+        for (rejectPrimitive in listOf(false, true)) {
+            val selector = LegacySelector().apply {
+                needsEventToken = true
+                rejectPrimitiveToken = rejectPrimitive
+            }
+            val controller = controller(selector)
+            val saved = controller.readMode()
+            assertEquals(2, saved.mode)
+            assertEquals(listOf(Int::class.java, BYDAutoEventValue::class.java), selector.readTypes)
+            assertTrue(saved.detail.contains("BYDAutoEventValue"))
+            assertTrue(controller.setMode(1).success)
+            assertEquals(1, controller.mode())
+            assertTrue(controller.setMode(saved.mode!!).success)
+            assertEquals(2, controller.mode())
+        }
+    }
+
+    @Test fun runtimeSdkFeatureIdsOverrideCompatibilityIdsForReadsAndWrites() {
+        val feedback = Instrument.INSTRUMENT_HEADLIGHT_CONTROL_FEEDBACK
+        val command = Instrument.INSTRUMENT_HEADLIGHT_CONTROL_SET
+        try {
+            Instrument.INSTRUMENT_HEADLIGHT_CONTROL_FEEDBACK = 12345
+            Instrument.INSTRUMENT_HEADLIGHT_CONTROL_SET = 67890
+            val selector = LegacySelector().apply { expectedFeedbackId = 12345; expectedSetId = 67890 }
+            val controller = controller(selector)
+            assertEquals(2, controller.mode())
+            assertTrue(controller.setMode(1).success)
+            assertEquals(1, controller.mode())
+            Instrument.INSTRUMENT_HEADLIGHT_CONTROL_SET = 0
+            assertFalse(controller.setMode(2).success)
+            assertEquals(listOf(1), selector.writes)
+            val reads = selector.readTypes.size
+            Instrument.INSTRUMENT_HEADLIGHT_CONTROL_FEEDBACK = 0
+            assertNull(controller.mode())
+            assertEquals("Invalid SDK IDs must not be sent to the device", reads, selector.readTypes.size)
+        } finally {
+            Instrument.INSTRUMENT_HEADLIGHT_CONTROL_FEEDBACK = feedback
+            Instrument.INSTRUMENT_HEADLIGHT_CONTROL_SET = command
+        }
+    }
+
+    @Test fun coldSdkGetsTimeToReturnRealFeedbackWithoutIssuingAnyCommand() = runBlocking {
+        val selector = WarmingSelector()
+        val reading = controller(selector).awaitMode()
+        assertEquals(2, reading.mode)
+        assertEquals(3, selector.reads)
+    }
+
+    @Test fun reportedZeroAndUnavailableSentinelRemainFailuresAfterReadinessWait() = runBlocking {
+        val selector = RejectedNamedSelector().apply { current = -999999999 }
+        val reading = controller(selector).awaitMode()
+        assertNull(reading.mode)
+        assertTrue(reading.detail.contains("after waiting 1.5s"))
+        assertTrue(reading.detail.contains("getHeadlightControlMode: Invalid headlight selector reading: 0"))
+        assertTrue(reading.detail.contains("Instrument.get(1011875880, int): Invalid headlight selector reading: -999999999"))
+        assertTrue(reading.detail.contains("Instrument.get(1011875880, BYDAutoEventValue)"))
+        assertTrue(selector.writes.isEmpty())
     }
 }

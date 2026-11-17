@@ -4,6 +4,7 @@ import android.content.Context
 import android.provider.Settings
 import android.util.Log
 import com.sphy.airconcontroller.byd.BydAcController
+import com.sphy.airconcontroller.byd.BydHeadlightController
 import com.sphy.airconcontroller.byd.BydPermissionContext
 import com.sphy.airconcontroller.byd.Dilink5SdkInjector
 import java.lang.reflect.InvocationTargetException
@@ -13,6 +14,7 @@ import java.lang.reflect.Modifier
 class CampTestReader(context: Context) {
     private val app = context.applicationContext
     val climate = BydAcController(app)
+    private val headlights = BydHeadlightController(app)
 
     fun capture(): CampTestSnapshot {
         val values = linkedMapOf<String, String>()
@@ -40,6 +42,11 @@ class CampTestReader(context: Context) {
         read("Climate.powerOn") {
             val state = climate.snapshot()
             state.powerOn ?: throw IllegalArgumentException("Climate power unavailable: ${state.bindError}")
+        }
+        read("Headlights.selector") {
+            val reading = headlights.readMode()
+            values["Headlights.readPaths"] = reading.detail
+            reading.mode ?: throw IllegalArgumentException(reading.detail)
         }
         for ((label, className) in DEVICES) {
             read("$label.binding") {
