@@ -97,7 +97,7 @@ internal class CampCarPlay(private val connect: () -> Client?) {
             error("OEM connection manager connection timed out.")
         }
 
-        private fun bind(app: Context): Client? {
+        internal fun bind(app: Context): Client? {
             val info = try {
                 app.packageManager.getApplicationInfo(PACKAGE, 0)
             } catch (_: PackageManager.NameNotFoundException) {
@@ -119,7 +119,8 @@ internal class CampCarPlay(private val connect: () -> Client?) {
             try {
                 check(ready.await(5, TimeUnit.SECONDS)) { "OEM CarPlay service connection timed out." }
                 val serviceBinder = checkNotNull(binder.get()) { "OEM CarPlay service unavailable." }
-                val loader = PathClassLoader(info.sourceDir, app.classLoader)
+                // Vehicle SDK injection adds incompatible copies of the OEM provider to the app loader.
+                val loader = PathClassLoader(info.sourceDir, Context::class.java.classLoader)
                 val api = Class.forName(API, true, loader)
                 val service = checkNotNull(Class.forName("$API\$Stub", true, loader)
                     .getMethod("asInterface", IBinder::class.java).invoke(null, serviceBinder)) {

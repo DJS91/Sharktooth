@@ -11,6 +11,8 @@ import android.view.View
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.sphy.airconcontroller.byd.BydAcController
+import com.sphy.airconcontroller.byd.Dilink5SdkInjector
+import com.sphy.airconcontroller.camp.CampCarPlay
 import com.sphy.airconcontroller.camp.CampMediaAudio
 import com.sphy.airconcontroller.camp.CampHeadunitBluetooth
 import com.sphy.airconcontroller.camp.CampModeController
@@ -31,6 +33,20 @@ import org.junit.runner.RunWith
 @RunWith(AndroidJUnit4::class)
 class CampModeTest {
     private val context = InstrumentationRegistry.getInstrumentation().targetContext
+
+    @Test fun activeCarPlayIdLookupSurvivesVehicleSdkInjectionWithoutDisconnecting() =
+        runBlocking(kotlinx.coroutines.Dispatchers.IO) {
+            assumeTrue("Requires installed BYD vehicle SDK", Dilink5SdkInjector.ensure(context.applicationContext))
+            val client = CampCarPlay.bind(context.applicationContext)
+            assumeTrue("Requires installed OEM CarPlay", client != null)
+            checkNotNull(client).use {
+                assumeTrue("Requires an active CarPlay phone for the missing-ID fallback", it.state() == 2)
+                val ids = it.activeDeviceIds()
+                assertTrue("Active phone must resolve to a real device ID", ids.isNotEmpty())
+                assertTrue(ids.all { id -> id.isNotBlank() })
+                assertEquals("Read-only lookup must not disconnect CarPlay", 2, it.state())
+            }
+        }
 
     @Test fun headunitBluetoothSwitchesOffAndBackOnUsingAndroidAdapterReadback() = runBlocking {
         assumeTrue("Bluetooth toggling integration test is emulator-only",
