@@ -190,7 +190,7 @@ internal class CampModeSession(
                 "Restore media" to { actions.restoreMedia(original) },
                 "Restore headlights" to { actions.restoreHeadlights(original) },
                 "Restore DRLs" to { actions.restoreDrl(original) },
-                "Restore climate" to { actions.restoreClimate(original) },
+                "Leave climate OFF" to { actions.restoreClimate(original) },
             )
             for ((label, run) in steps) {
                 val result = try {
@@ -207,7 +207,7 @@ internal class CampModeSession(
                 restored = restored && result.success
             }
             if (restored) {
-                val report = state.value.report + "\nCamp Mode disabled. Windows remain closed."
+                val report = state.value.report + "\nCamp Mode disabled. Windows remain closed; climate remains OFF."
                 saved = null
                 actions.persist(null, report, emptySet())
                 mutableState.value = state.value.copy(active = false, report = report, completedSteps = emptySet())

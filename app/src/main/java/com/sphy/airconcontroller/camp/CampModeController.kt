@@ -87,6 +87,13 @@ internal class CampModeController private constructor(context: Context) {
 
     private inner class VehicleActions : CampActions {
         private val ac = BydAcController(app)
+        private val climatePower = CampClimatePower(
+            readPower = { io { ac.snapshot().powerOn } },
+            stop = {
+                val result = io { ac.stop() }
+                CampResult(result.success, "${result.method}: ${result.detail}")
+            },
+        )
         private val windows = BydWindowController(app)
         private val drl = BydDrlController(app)
         private val headlights = BydHeadlightController(app)
@@ -179,12 +186,7 @@ internal class CampModeController private constructor(context: Context) {
             }
         }
 
-        override suspend fun climateOff(): CampResult {
-            val result = io { ac.stop() }
-            delay(1500)
-            val off = io { ac.snapshot().powerOn == false }
-            return CampResult(result.success && off, "${result.detail}; climate OFF read-back=$off")
-        }
+        override suspend fun climateOff(): CampResult = climatePower.off()
 
         override suspend fun closeWindows(): CampResult {
             val result = windowCommands.withLock { io { windows.closeAll() } }
@@ -231,13 +233,7 @@ internal class CampModeController private constructor(context: Context) {
             }
         }
 
-        override suspend fun restoreClimate(saved: CampSavedState): CampResult = io {
-            val results = ac.restoreSnapshot(saved.climate)
-            val after = ac.snapshot()
-            CampResult(results.all { it.success } && after.powerOn == saved.climate.powerOn,
-                results.joinToString("\n") { "${it.method}: ${it.success} ${it.detail}" } +
-                    "\nClimate power read-back=${after.powerOn}")
-        }
+        override suspend fun restoreClimate(saved: CampSavedState): CampResult = climatePower.off()
 
         override suspend fun restoreMedia(saved: CampSavedState): CampResult =
             io { audio.restore(saved.mediaVolume, saved.mediaMuted, saved.mediaUsesCarMute) }
