@@ -34,6 +34,11 @@ enum class ThemeStyle {
     MODERN,
 }
 
+enum class SidebarSide {
+    LEFT,
+    RIGHT,
+}
+
 /**
  * Saved Custom ADAS profile (staged until Apply).
  * [laneDeparture] is [BydAdasController.LaneDepartureMode] name: OFF / WARNING / PREVENT / BOTH.
@@ -77,7 +82,7 @@ class AppSettings(context: Context) {
 
     var dashboardCards: List<DashboardCard>
         get() {
-            val saved = prefs.getString("dashboard_cards", null) ?: return DashboardCard.entries
+            val saved = prefs.getString("dashboard_cards", null) ?: return DashboardCard.defaultCards
             if (saved.isEmpty()) return emptyList()
             val cards = saved.split(",").mapNotNull { name ->
                 DashboardCard.entries.find { it.name == name }.also {
@@ -455,6 +460,13 @@ class AppSettings(context: Context) {
             prefs.edit().putString(KEY_THEME_STYLE, value.name).apply()
         }
 
+    var sidebarSide: SidebarSide
+        get() = SidebarSide.entries.firstOrNull { it.name == prefs.getString(KEY_SIDEBAR_SIDE, null) }
+            ?: SidebarSide.RIGHT
+        set(value) {
+            prefs.edit().putString(KEY_SIDEBAR_SIDE, value.name).apply()
+        }
+
     fun petModeProfile(): PetModeProfile = PetModeProfile(
         fanLevel = prefs.getInt(KEY_PET_FAN_LEVEL, 3).coerceIn(1, 7),
         temperatureC = prefs.getInt(KEY_PET_TEMPERATURE, 21).coerceIn(17, 32),
@@ -683,6 +695,7 @@ class AppSettings(context: Context) {
         private const val KEY_AUTO_SWITCH_CARPLAY = "auto_switch_carplay"
         private const val KEY_THEME_MODE = "theme_mode"
         private const val KEY_THEME_STYLE = "theme_style"
+        private const val KEY_SIDEBAR_SIDE = "sidebar_side"
         private const val KEY_PET_FAN_LEVEL = "pet_fan_level"
         private const val KEY_PET_TEMPERATURE = "pet_temperature"
         private const val KEY_PET_RECIRCULATING = "pet_recirculating"

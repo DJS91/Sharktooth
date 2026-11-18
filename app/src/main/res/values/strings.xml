@@ -39,6 +39,9 @@
   <string name="settings_style_classic">Classic</string>
   <string name="settings_style_modern">Alternative</string>
   <string name="settings_style_hint">Alternative uses a solid background and flat square tiles with no borders. Works with dark and light mode.</string>
+  <string name="settings_sidebar_side">Sidebar position</string>
+  <string name="settings_sidebar_left">Left</string>
+  <string name="settings_sidebar_right">Right</string>
   <string name="settings_startup_title">Startup</string>
   <string name="settings_open_on_boot">Open app when the car starts</string>
   <string name="settings_open_on_boot_hint"
@@ -306,6 +309,7 @@
   <string name="adas_title">ADAS</string>
   <string name="adas_home_subtitle">Custom ADAS profile, driver monitoring etc</string>
   <string name="sentry_title">Sentry</string>
+  <string name="companion_details">Details</string>
   <string name="sentry_home_subtitle">360° sentry recording</string>
   <string name="sentry_subtitle">Choose a 360° recording app</string>
   <string name="sentry_install_idle">Ready to download.</string>

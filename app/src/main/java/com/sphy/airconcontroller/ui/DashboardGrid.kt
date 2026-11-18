@@ -4,6 +4,7 @@ import android.content.ClipData
 import android.content.Context
 import android.graphics.Canvas
 import android.graphics.Paint
+import android.graphics.PointF
 import android.graphics.drawable.GradientDrawable
 import android.graphics.drawable.InsetDrawable
 import android.os.SystemClock
@@ -21,6 +22,7 @@ import android.widget.ScrollView
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
+import androidx.core.view.doOnPreDraw
 import com.sphy.airconcontroller.R
 
 class DashboardGrid @JvmOverloads constructor(
@@ -32,6 +34,20 @@ class DashboardGrid @JvmOverloads constructor(
     private var libraryDialog: AlertDialog? = null
     private var scrollStep = 0
     private var dropTarget: DropTarget? = null
+    private var dragSource: DashboardCard? = null
+    private var hoverTarget: DropTarget? = null
+    private var previewIndex: Int? = null
+    private var renderGeneration = 0
+    private val showHoverPreview = Runnable {
+        val target = hoverTarget
+        val source = dragSource
+        hoverTarget = null
+        if (editing && isAttachedToWindow && isShown && source != null &&
+            target != null && target == dropTarget && scrollStep == 0) {
+            previewIndex = target.index
+            render(animate = true)
+        }
+    }
     private var dragX = 0f
     private var dragViewportY = 0f
     private val insertionPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
@@ -40,7 +56,9 @@ class DashboardGrid @JvmOverloads constructor(
     private val autoScroll = object : Runnable {
         override fun run() {
             (parent as? ScrollView)?.let { scroll ->
+                val before = scroll.scrollY
                 scroll.scrollBy(0, scrollStep)
+                if (scroll.scrollY == before) stopAutoScroll()
                 updateDropTarget(dragX, scroll.scrollY + dragViewportY)
             }
             if (scrollStep != 0) postDelayed(this, 16)
@@ -54,6 +72,7 @@ class DashboardGrid @JvmOverloads constructor(
     init {
         orientation = VERTICAL
         layoutDirection = View.LAYOUT_DIRECTION_LTR
+        clipChildren = false
     }
 
     fun initialize(layout: DashboardLayout, views: Map<DashboardCard, View>) {
@@ -67,7 +86,8 @@ class DashboardGrid @JvmOverloads constructor(
         if (editing == value) return
         editing = value
         stopAutoScroll()
-        clearDropTarget()
+        clearDropTarget(restorePreview = false)
+        dragSource = null
         libraryDialog?.dismiss()
         render()
     }
@@ -77,15 +97,23 @@ class DashboardGrid @JvmOverloads constructor(
         render()
     }
 
-    private fun render() {
+    private fun render(animate: Boolean = false) {
+        val oldSlots = cardSlots()
+        oldSlots.forEach { it.animate().cancel() }
+        val previousPositions = if (animate) oldSlots.associate { slot ->
+            slot.tag to PointF(slot.x, (slot.parent as View).y + slot.y)
+        } else emptyMap()
+        val generation = ++renderGeneration
         cardViews.values.forEach { (it.parent as? ViewGroup)?.removeView(it) }
         removeAllViews()
-        val cards = dashboard.cards
+        val source = dragSource
+        val cards = previewIndex?.let { dashboard.previewMove(requireNotNull(source), it) } ?: dashboard.cards
         val slots = cards.size + if (editing) 1 else 0
         repeat((slots + 2) / 3) { rowIndex ->
             val row = LinearLayout(context).apply {
                 orientation = HORIZONTAL
                 layoutDirection = View.LAYOUT_DIRECTION_LTR
+                clipChildren = false
             }
             addView(row, LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT).apply {
                 if (rowIndex > 0) topMargin = dp(10)
@@ -97,7 +125,10 @@ class DashboardGrid @JvmOverloads constructor(
                     if (column < 2) rightMargin = dp(10)
                 })
                 when {
-                    index < cards.size -> bindSlot(slot, cards[index])
+                    index < cards.size -> {
+                        bindSlot(slot, cards[index])
+                        if (previewIndex != null && cards[index] == source) slot.visibility = INVISIBLE
+                    }
                     editing && index == cards.size -> {
                         slot.minimumHeight = dp(160)
                         slot.addView(Button(context).apply {
@@ -111,6 +142,27 @@ class DashboardGrid @JvmOverloads constructor(
                 }
             }
         }
+        if (animate) doOnPreDraw {
+            if (generation != renderGeneration) return@doOnPreDraw
+            cardSlots().forEach { slot ->
+                previousPositions[slot.tag]?.let { previous ->
+                    slot.translationX = previous.x - slot.left
+                    slot.translationY = previous.y - (slot.parent as View).top - slot.top
+                    slot.animate().translationX(0f).translationY(0f).setDuration(PREVIEW_ANIMATION_MS).start()
+                }
+            }
+            if (previewIndex != null && dropTarget?.index == previewIndex) {
+                cardSlots().find { it.tag == source }?.let { blank ->
+                    dropTarget = targetBefore(blank, requireNotNull(previewIndex))
+                }
+                invalidate()
+            }
+        }
+    }
+
+    private fun cardSlots(): List<View> = (0 until childCount).flatMap { rowIndex ->
+        val row = getChildAt(rowIndex) as ViewGroup
+        (0 until row.childCount).map { row.getChildAt(it) }.filter { it.tag is DashboardCard }
     }
 
     private fun bindSlot(slot: FrameLayout, card: DashboardCard) {
@@ -160,17 +212,22 @@ class DashboardGrid @JvmOverloads constructor(
         val source = event.localState as? DashboardCard
         if (!editing || source == null || source !in dashboard.cards) return false
         when (event.action) {
+            DragEvent.ACTION_DRAG_STARTED -> dragSource = source
             DragEvent.ACTION_DRAG_ENTERED, DragEvent.ACTION_DRAG_LOCATION -> {
                 updateDropTarget(event.x, event.y)
             }
             DragEvent.ACTION_DROP -> {
-                val target = findDropTarget(event.x, event.y) ?: return false
+                val target = dropTarget ?: findDropTarget(event.x, event.y) ?: return false
                 dashboard.move(source, target.index)
-                clearDropTarget()
+                clearDropTarget(restorePreview = false)
                 // Keep the grid attached until Android finishes dispatching this drag.
                 post { changed() }
             }
-            DragEvent.ACTION_DRAG_EXITED, DragEvent.ACTION_DRAG_ENDED -> clearDropTarget()
+            DragEvent.ACTION_DRAG_EXITED -> clearDropTarget()
+            DragEvent.ACTION_DRAG_ENDED -> {
+                clearDropTarget()
+                dragSource = null
+            }
         }
         return true
     }
@@ -182,27 +239,57 @@ class DashboardGrid @JvmOverloads constructor(
         } ?: return null
         val row = getChildAt(rowIndex) as LinearLayout
         val count = dashboard.cards.size
+        val blank = (0 until row.childCount).map { row.getChildAt(it) }.find {
+            previewIndex != null && it.tag == dragSource && x >= it.left && x <= it.right
+        }
+        if (blank != null) return targetBefore(blank, requireNotNull(previewIndex))
         for (column in 0 until row.childCount) {
             val slot = row.getChildAt(column)
-            val index = rowIndex * 3 + column
-            if (index >= count || x < slot.left + slot.width / 2f) {
-                val markerX = if (column == 0) slot.left + dp(2f) else slot.left - dp(5f)
-                return DropTarget(index.coerceAtMost(count), markerX, row.top.toFloat(), row.bottom.toFloat())
+            val card = slot.tag as? DashboardCard
+            if (card == null || x < slot.left + slot.width / 2f) {
+                val index = if (card == dragSource && previewIndex != null) requireNotNull(previewIndex)
+                    else card?.let { dashboard.cards.indexOf(it) } ?: count
+                return targetBefore(slot, index)
             }
         }
+        val lastCard = row.getChildAt(row.childCount - 1).tag as? DashboardCard
         return DropTarget(
-            ((rowIndex + 1) * 3).coerceAtMost(count),
+            lastCard?.let { dashboard.cards.indexOf(it) + 1 } ?: count,
             row.right - dp(2f), row.top.toFloat(), row.bottom.toFloat(),
         )
     }
 
+    private fun targetBefore(slot: View, index: Int): DropTarget {
+        val row = slot.parent as View
+        val x = slot.left + if (slot.left == 0) dp(2f) else -dp(5f)
+        return DropTarget(index, x, row.top.toFloat(), row.bottom.toFloat())
+    }
+
     private fun updateDropTarget(x: Float, y: Float) {
-        dropTarget = findDropTarget(x, y)
+        val candidate = findDropTarget(x, y)
+        val blank = if (previewIndex != null && candidate?.index == previewIndex)
+            cardSlots().find { it.tag == dragSource } else null
+        val target = if (blank != null) targetBefore(blank, requireNotNull(previewIndex)) else candidate
+        if (target != dropTarget || scrollStep != 0) {
+            removeCallbacks(showHoverPreview)
+            hoverTarget = null
+        }
+        dropTarget = target
+        if (target != null && target.index != previewIndex && hoverTarget == null && scrollStep == 0) {
+            hoverTarget = target
+            postDelayed(showHoverPreview, HOVER_PREVIEW_MS)
+        }
         invalidate()
     }
 
-    private fun clearDropTarget() {
+    private fun clearDropTarget(restorePreview: Boolean = true) {
+        removeCallbacks(showHoverPreview)
+        hoverTarget = null
         dropTarget = null
+        if (previewIndex != null) {
+            previewIndex = null
+            if (restorePreview) render(animate = true)
+        }
         invalidate()
     }
 
@@ -298,7 +385,12 @@ class DashboardGrid @JvmOverloads constructor(
 
     override fun onDetachedFromWindow() {
         stopAutoScroll()
-        clearDropTarget()
+        val hadPreview = previewIndex != null
+        clearDropTarget(restorePreview = false)
+        dragSource = null
+        renderGeneration++
+        cardSlots().forEach { it.animate().cancel() }
+        if (hadPreview) render()
         libraryDialog?.dismiss()
         super.onDetachedFromWindow()
     }
@@ -361,5 +453,7 @@ class DashboardGrid @JvmOverloads constructor(
 
     companion object {
         const val EDIT_HOLD_MS = 1_000L
+        private const val HOVER_PREVIEW_MS = 500L
+        private const val PREVIEW_ANIMATION_MS = 200L
     }
 }

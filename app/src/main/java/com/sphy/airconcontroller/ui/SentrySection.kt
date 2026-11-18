@@ -1,4 +1,4 @@
-package com.sphy.airconcontroller
+package com.sphy.airconcontroller.ui
 
 import android.content.ActivityNotFoundException
 import android.content.BroadcastReceiver
@@ -7,7 +7,6 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.content.res.ColorStateList
 import android.os.Build
-import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import android.widget.ImageView
@@ -15,10 +14,15 @@ import android.widget.ProgressBar
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
+import androidx.appcompat.app.AlertDialog
+import androidx.appcompat.app.AppCompatActivity
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import androidx.annotation.StringRes
 import androidx.lifecycle.lifecycleScope
+import androidx.lifecycle.DefaultLifecycleObserver
+import androidx.lifecycle.LifecycleOwner
+import com.sphy.airconcontroller.R
 import com.sphy.airconcontroller.adb.AdbPermissionManager
 import com.sphy.airconcontroller.update.AppUpdater
 import com.sphy.airconcontroller.update.CompanionAppInstaller
@@ -29,12 +33,13 @@ import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 
-/** Recording apps page: Overdrive on the left, Strike on the right. Install when missing, open when present. */
-class SentryActivity : HomeActivity() {
-    private lateinit var panels: List<CompanionPanel>
+/** Compact recording-app controls at the bottom of Settings. */
+class SentrySection(private val activity: AppCompatActivity, root: View) : DefaultLifecycleObserver {
+    private val panels: List<CompanionPanel>
+    private var detailsDialog: AlertDialog? = null
 
     private val installLauncher =
-        registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
+        activity.registerForActivityResult(ActivityResultContracts.StartActivityForResult()) {
             panels.forEach {
                 it.refresh()
                 it.watchForPackageChange()
@@ -48,13 +53,10 @@ class SentryActivity : HomeActivity() {
         }
     }
 
-    override fun onCreate(savedInstanceState: Bundle?) {
-        super.onCreate(savedInstanceState)
-        setContentView(R.layout.activity_sentry)
-
+    init {
         panels = listOf(
             CompanionPanel(
-                root = findViewById(R.id.overdrivePanel),
+                root = root.findViewById(R.id.overdrivePanel),
                 installer = CompanionApps.overdrive,
                 fallbackIcon = R.drawable.ic_sentry,
                 badge = R.string.overdrive_badge,
@@ -70,7 +72,7 @@ class SentryActivity : HomeActivity() {
                 openFailed = R.string.overdrive_open_failed,
             ),
             CompanionPanel(
-                root = findViewById(R.id.strikePanel),
+                root = root.findViewById(R.id.strikePanel),
                 installer = CompanionApps.strike,
                 fallbackIcon = R.drawable.ic_strike,
                 badge = R.string.strike_badge,
@@ -85,13 +87,10 @@ class SentryActivity : HomeActivity() {
             ),
         )
 
-        findViewById<android.widget.ImageButton>(R.id.sentryBackButton).setOnClickListener {
-            finish()
-        }
+        activity.lifecycle.addObserver(this)
     }
 
-    override fun onStart() {
-        super.onStart()
+    override fun onStart(owner: LifecycleOwner) {
         val filter = IntentFilter().apply {
             addAction(Intent.ACTION_PACKAGE_ADDED)
             addAction(Intent.ACTION_PACKAGE_REPLACED)
@@ -99,53 +98,53 @@ class SentryActivity : HomeActivity() {
             addDataScheme("package")
         }
         if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU) {
-            registerReceiver(packageChangeReceiver, filter, RECEIVER_NOT_EXPORTED)
+            activity.registerReceiver(packageChangeReceiver, filter, Context.RECEIVER_NOT_EXPORTED)
         } else {
             @Suppress("UnspecifiedRegisterReceiverFlag")
-            registerReceiver(packageChangeReceiver, filter)
+            activity.registerReceiver(packageChangeReceiver, filter)
         }
         panels.forEach { it.refresh() }
     }
 
-    override fun onResume() {
-        super.onResume()
+    override fun onResume(owner: LifecycleOwner) {
         panels.forEach { it.refresh() }
     }
 
-    override fun onStop() {
+    override fun onStop(owner: LifecycleOwner) {
+        detailsDialog?.dismiss()
+        detailsDialog = null
         panels.forEach { it.cancelWatch() }
         try {
-            unregisterReceiver(packageChangeReceiver)
+            activity.unregisterReceiver(packageChangeReceiver)
         } catch (_: IllegalArgumentException) {
             // Already unregistered.
         }
-        super.onStop()
     }
 
     private suspend fun ensureInstallAllowed(
         onBlocked: (String) -> Unit,
         onWarning: (String) -> Unit,
     ): Boolean {
-        if (AppUpdater.canInstallPackages(this)) return true
+        if (AppUpdater.canInstallPackages(activity)) return true
 
-        val pkg = packageName
+        val pkg = activity.packageName
         AdbPermissionManager.runShellBatch(
-            this,
+            activity,
             listOf(
                 "appops set ${AdbPermissionManager.userFlag()}$pkg REQUEST_INSTALL_PACKAGES allow",
                 "cmd appops set ${AdbPermissionManager.userFlag()}$pkg REQUEST_INSTALL_PACKAGES allow",
             ),
         )
-        if (AppUpdater.canInstallPackages(this)) return true
+        if (AppUpdater.canInstallPackages(activity)) return true
 
         val opened = withContext(Dispatchers.Main) {
-            AppUpdater.openInstallPermissionSettings(this@SentryActivity)
+            AppUpdater.openInstallPermissionSettings(activity)
         }
         withContext(Dispatchers.Main) {
             if (opened) {
-                onBlocked(getString(R.string.settings_updates_need_permission))
+                onBlocked(activity.getString(R.string.settings_updates_need_permission))
             } else {
-                onWarning(getString(R.string.settings_updates_install_anyway))
+                onWarning(activity.getString(R.string.settings_updates_install_anyway))
             }
         }
         return !opened
@@ -162,14 +161,13 @@ class SentryActivity : HomeActivity() {
         @StringRes private val installedTitle: Int,
         @StringRes private val installBody: Int,
         @StringRes private val installedBody: Int,
-        @StringRes caveatsTitle: Int? = null,
-        @StringRes caveats: Int? = null,
+        @StringRes private val caveatsTitle: Int? = null,
+        @StringRes private val caveats: Int? = null,
         @StringRes openButtonText: Int,
         @StringRes private val openFailed: Int,
     ) {
         private val icon: ImageView = root.findViewById(R.id.companionIcon)
         private val headline: TextView = root.findViewById(R.id.companionHeadline)
-        private val body: TextView = root.findViewById(R.id.companionBody)
         private val statusText: TextView = root.findViewById(R.id.companionStatus)
         private val progress: ProgressBar = root.findViewById(R.id.companionProgress)
         private val openButton: Button = root.findViewById(R.id.companionOpenButton)
@@ -180,17 +178,22 @@ class SentryActivity : HomeActivity() {
         init {
             root.findViewById<TextView>(R.id.companionBadge).apply {
                 setText(badge)
-                setTextColor(getColor(badgeColor))
-                backgroundTintList = ColorStateList.valueOf(getColor(badgeBackground))
+                setTextColor(activity.getColor(badgeColor))
+                backgroundTintList = ColorStateList.valueOf(activity.getColor(badgeBackground))
             }
-            val caveatsTitleView = root.findViewById<TextView>(R.id.companionCaveatsTitle)
-            val caveatsView = root.findViewById<TextView>(R.id.companionCaveats)
-            if (caveatsTitle != null && caveats != null) {
-                caveatsTitleView.setText(caveatsTitle)
-                caveatsView.setText(caveats)
-            } else {
-                caveatsTitleView.visibility = View.GONE
-                caveatsView.visibility = View.GONE
+            root.findViewById<Button>(R.id.companionDetailsButton).setOnClickListener {
+                val installed = installer.isInstalled(activity)
+                val message = listOfNotNull(
+                    activity.getString(if (installed) installedBody else installBody),
+                    caveatsTitle?.let { activity.getString(it) },
+                    caveats?.let { activity.getString(it) },
+                ).joinToString("\n\n")
+                detailsDialog?.dismiss()
+                detailsDialog = AlertDialog.Builder(activity)
+                    .setTitle(if (installed) installedTitle else installTitle)
+                    .setMessage(message)
+                    .setPositiveButton(android.R.string.ok, null)
+                    .show()
             }
             openButton.setText(openButtonText)
             openButton.setOnClickListener { open() }
@@ -198,25 +201,23 @@ class SentryActivity : HomeActivity() {
         }
 
         fun refresh() {
-            val installed = installer.isInstalled(this@SentryActivity)
+            val installed = installer.isInstalled(activity)
             openButton.visibility = if (installed) View.VISIBLE else View.GONE
-            val appIcon = if (installed) installer.appIcon(this@SentryActivity) else null
+            val appIcon = if (installed) installer.appIcon(activity) else null
             if (appIcon != null) icon.setImageDrawable(appIcon) else icon.setImageResource(fallbackIcon)
             if (installed) {
                 headline.setText(installedTitle)
-                body.setText(installedBody)
                 installButton.setText(R.string.sentry_reinstall_button)
                 if (!busy) {
-                    val version = installer.installedVersionName(this@SentryActivity)
+                    val version = installer.installedVersionName(activity)
                     statusText.text = if (version != null) {
-                        getString(R.string.companion_installed_status, version)
+                        activity.getString(R.string.companion_installed_status, version)
                     } else {
-                        getString(R.string.sentry_installed_status)
+                        activity.getString(R.string.sentry_installed_status)
                     }
                 }
             } else {
                 headline.setText(installTitle)
-                body.setText(installBody)
                 installButton.setText(R.string.sentry_install_button)
                 if (!busy) {
                     statusText.setText(R.string.sentry_install_idle)
@@ -227,11 +228,11 @@ class SentryActivity : HomeActivity() {
         /** PackageManager can lag briefly after the installer returns. */
         fun watchForPackageChange() {
             watchJob?.cancel()
-            watchJob = lifecycleScope.launch {
+            watchJob = activity.lifecycleScope.launch {
                 repeat(8) {
                     delay(750)
                     refresh()
-                    if (installer.isInstalled(this@SentryActivity)) return@launch
+                    if (installer.isInstalled(activity)) return@launch
                 }
             }
         }
@@ -242,28 +243,28 @@ class SentryActivity : HomeActivity() {
         }
 
         private fun open() {
-            val launch = installer.launchIntent(this@SentryActivity)
+            val launch = installer.launchIntent(activity)
             if (launch == null) {
-                Toast.makeText(this@SentryActivity, openFailed, Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, openFailed, Toast.LENGTH_SHORT).show()
                 refresh()
                 return
             }
             try {
-                startActivity(launch)
+                activity.startActivity(launch)
             } catch (_: ActivityNotFoundException) {
-                Toast.makeText(this@SentryActivity, openFailed, Toast.LENGTH_SHORT).show()
+                Toast.makeText(activity, openFailed, Toast.LENGTH_SHORT).show()
                 refresh()
             }
         }
 
         private fun downloadAndInstall() {
             if (busy) return
-            setBusy(true, getString(R.string.settings_updates_checking))
+            setBusy(true, activity.getString(R.string.settings_updates_checking))
             progress.visibility = View.VISIBLE
             progress.isIndeterminate = true
             progress.progress = 0
 
-            lifecycleScope.launch {
+            activity.lifecycleScope.launch {
                 try {
                     val allowed = ensureInstallAllowed(
                         onBlocked = { setBusy(false, it) },
@@ -272,22 +273,22 @@ class SentryActivity : HomeActivity() {
                     if (!allowed) return@launch
                     val release = installer.fetchLatestRelease()
                     withContext(Dispatchers.Main) {
-                        statusText.text = getString(
+                        statusText.text = activity.getString(
                             R.string.sentry_install_found,
                             release.versionName,
                         )
                     }
-                    val dest = installer.cacheFile(this@SentryActivity)
+                    val dest = installer.cacheFile(activity)
                     AppUpdater.downloadApk(release.apkUrl, dest) { downloaded, total ->
-                        lifecycleScope.launch(Dispatchers.Main) {
+                        activity.lifecycleScope.launch(Dispatchers.Main) {
                             if (total > 0L) {
                                 progress.isIndeterminate = false
                                 val pct = ((downloaded * 100L) / total).toInt().coerceIn(0, 100)
                                 progress.progress = pct
-                                statusText.text = getString(R.string.settings_updates_downloading, pct)
+                                statusText.text = activity.getString(R.string.settings_updates_downloading, pct)
                             } else {
                                 progress.isIndeterminate = true
-                                statusText.text = getString(
+                                statusText.text = activity.getString(
                                     R.string.settings_updates_downloading_bytes,
                                     downloaded / 1024L,
                                 )
@@ -295,16 +296,16 @@ class SentryActivity : HomeActivity() {
                         }
                     }
                     withContext(Dispatchers.Main) {
-                        setBusy(false, getString(R.string.settings_updates_installing))
+                        setBusy(false, activity.getString(R.string.settings_updates_installing))
                         try {
                             installLauncher.launch(
-                                AppUpdater.installApkIntent(this@SentryActivity, dest),
+                                AppUpdater.installApkIntent(activity, dest),
                             )
                             watchForPackageChange()
                         } catch (e: ActivityNotFoundException) {
                             setBusy(
                                 false,
-                                getString(
+                                activity.getString(
                                     R.string.settings_updates_failed,
                                     e.message ?: e.javaClass.simpleName,
                                 ),
@@ -315,13 +316,13 @@ class SentryActivity : HomeActivity() {
                     withContext(Dispatchers.Main) {
                         setBusy(
                             false,
-                            getString(
+                            activity.getString(
                                 R.string.settings_updates_failed,
                                 e.message ?: e.javaClass.simpleName,
                             ),
                         )
                         Toast.makeText(
-                            this@SentryActivity,
+                            activity,
                             R.string.settings_updates_signature_hint,
                             Toast.LENGTH_LONG,
                         ).show()

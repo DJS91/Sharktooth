@@ -166,11 +166,6 @@
       android:parentActivityName=".MainActivity"
       android:theme="@style/Theme.OpenDiKey" />
     <activity
-      android:name=".SentryActivity"
-      android:exported="false"
-      android:parentActivityName=".MainActivity"
-      android:theme="@style/Theme.OpenDiKey" />
-    <activity
       android:name=".PetModeActivity"
       android:exported="false"
       android:parentActivityName=".MainActivity"

@@ -10,10 +10,21 @@ class DashboardLayoutTest {
         val layout = DashboardLayout()
         val first = layout.cards.first()
         layout.remove(first)
-        assertEquals(listOf(first), layout.available)
+        assertEquals(listOf(first, DashboardCard.EVAKOOL_FRIDGE), layout.available)
         layout.add(first)
         assertEquals(first, layout.cards.last())
+        assertEquals(listOf(DashboardCard.EVAKOOL_FRIDGE), layout.available)
+    }
+
+    @Test fun fridgeIsAnOptionalLibraryCardAndItsSelectionPersists() {
+        val layout = DashboardLayout()
+        assertEquals(DashboardCard.defaultCards, layout.cards)
+        assertEquals(listOf(DashboardCard.EVAKOOL_FRIDGE), layout.available)
+        layout.add(DashboardCard.EVAKOOL_FRIDGE)
         assertTrue(layout.available.isEmpty())
+        assertEquals(layout.cards, DashboardLayout(layout.cards).cards)
+        layout.remove(DashboardCard.EVAKOOL_FRIDGE)
+        assertEquals(listOf(DashboardCard.EVAKOOL_FRIDGE), layout.available)
     }
 
     @Test fun movingForwardShiftsInterveningCardsLeftAndPreservesSavedOrder() {
@@ -45,6 +56,16 @@ class DashboardLayoutTest {
         assertEquals(original, layout.cards)
         layout.move(original[3], 4)
         assertEquals(original, layout.cards)
+    }
+
+    @Test fun previewShowsTheDropOrderWithoutChangingTheSavedLayout() {
+        val layout = DashboardLayout()
+        val original = layout.cards
+        val preview = layout.previewMove(original[3], 1)
+        assertEquals(original.toMutableList().apply { add(1, removeAt(3)) }, preview)
+        assertEquals(original, layout.cards)
+        layout.move(original[3], 1)
+        assertEquals(preview, layout.cards)
     }
 
     @Test fun emptyDashboardStaysEmptyAndCanBeRepopulated() {

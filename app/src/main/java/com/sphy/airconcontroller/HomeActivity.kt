@@ -23,6 +23,7 @@ import android.view.ViewGroup
 import android.view.ViewConfiguration
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.FrameLayout
+import android.widget.LinearLayout
 import android.widget.Toast
 import androidx.appcompat.app.AlertDialog
 import androidx.core.app.ActivityCompat
@@ -40,6 +41,7 @@ import com.sphy.airconcontroller.dikey.DiKeySession
 import com.sphy.airconcontroller.usb.DiKeyUsbBridge
 import com.sphy.airconcontroller.fridge.FridgeTile
 import com.sphy.airconcontroller.storage.AppSettings
+import com.sphy.airconcontroller.storage.SidebarSide
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import com.sphy.airconcontroller.ui.DashboardGrid
 import com.sphy.airconcontroller.update.AppUpdater
@@ -104,7 +106,7 @@ open class HomeActivity : OpenDiKeyActivity() {
         val shell = layoutInflater.inflate(R.layout.activity_main, null)
         listOf(
             R.id.colorBackButton, R.id.mappingBackButton,
-            R.id.adasBackButton, R.id.sentryBackButton, R.id.petBackButton,
+            R.id.adasBackButton, R.id.petBackButton,
             R.id.fridgeBack, R.id.backButtonEnd,
         ).forEach { page.findViewById<View>(it)?.visibility = View.GONE }
         shell.findViewById<FrameLayout>(R.id.homePageContainer).addView(
@@ -112,7 +114,31 @@ open class HomeActivity : OpenDiKeyActivity() {
             FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.MATCH_PARENT),
         )
         super.setContentView(shell)
+        applySidebarSide()
         setupHome()
+    }
+
+    private fun applySidebarSide() {
+        val sidebar = findViewById<View>(R.id.homeSidebar)
+        val row = sidebar.parent as LinearLayout
+        val left = AppSettings(this).sidebarSide == SidebarSide.LEFT
+        val direction = if (row.isLayoutDirectionResolved) row.layoutDirection else resources.configuration.layoutDirection
+        val sidebarFirst = left != (direction == View.LAYOUT_DIRECTION_RTL)
+        val index = if (sidebarFirst) 0 else row.childCount - 1
+        if (row.indexOfChild(sidebar) != index) {
+            row.removeView(sidebar)
+            row.addView(sidebar, index)
+        }
+        val page = findViewById<View>(R.id.homePageContainer)
+        val params = page.layoutParams as LinearLayout.LayoutParams
+        val gap = params.marginStart + params.marginEnd
+        val start = if (sidebarFirst) gap else 0
+        val end = if (sidebarFirst) 0 else gap
+        if (params.marginStart != start || params.marginEnd != end) {
+            params.marginStart = start
+            params.marginEnd = end
+            page.layoutParams = params
+        }
     }
 
     private fun setupHome() {
@@ -208,9 +234,6 @@ open class HomeActivity : OpenDiKeyActivity() {
                 }
             }
         }
-        findViewById<android.view.View>(R.id.homeSentryButton).setOnClickListener {
-            navigateTo(SentryActivity::class.java)
-        }
         findViewById<android.view.View>(R.id.homeModesButton).setOnClickListener {
             navigateTo(CampModeActivity::class.java)
         }
@@ -271,7 +294,6 @@ open class HomeActivity : OpenDiKeyActivity() {
             is VehicleInfoActivity -> R.id.homeVehicleInfoButton
             is ColorConfigActivity, is ButtonMappingActivity -> R.id.homeControlsBarButton
             is AdasActivity -> R.id.homeAdasButton
-            is SentryActivity -> R.id.homeSentryButton
             is PetModeActivity, is CampModeActivity -> R.id.homeModesButton
             is com.sphy.airconcontroller.fridge.FridgeActivity -> R.id.homeFridgeButton
             else -> null
@@ -359,7 +381,6 @@ open class HomeActivity : OpenDiKeyActivity() {
             MainActivity::class.java -> R.id.homeVehicleInfoButton
             ColorConfigActivity::class.java, ButtonMappingActivity::class.java -> R.id.homeControlsBarButton
             AdasActivity::class.java -> R.id.homeAdasButton
-            SentryActivity::class.java -> R.id.homeSentryButton
             CampModeActivity::class.java, PetModeActivity::class.java -> R.id.homeModesButton
             com.sphy.airconcontroller.fridge.FridgeActivity::class.java -> R.id.homeFridgeButton
             else -> null
@@ -401,6 +422,7 @@ open class HomeActivity : OpenDiKeyActivity() {
 
     override fun onResume() {
         super.onResume()
+        applySidebarSide()
         if (animatePageOnResume) {
             animatePageOnResume = false
             val page = findViewById<FrameLayout>(R.id.homePageContainer).getChildAt(0)

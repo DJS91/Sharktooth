@@ -19,11 +19,13 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.sphy.airconcontroller.adb.AdbPermissionManager
 import com.sphy.airconcontroller.storage.AppSettings
+import com.sphy.airconcontroller.storage.SidebarSide
 import com.sphy.airconcontroller.storage.ThemeMode
 import com.sphy.airconcontroller.storage.ThemeStyle
 import com.sphy.airconcontroller.telemetry.TelemetryConfig
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
 import com.sphy.airconcontroller.ui.ThemeManager
+import com.sphy.airconcontroller.ui.SentrySection
 import com.sphy.airconcontroller.update.AppUpdater
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.launch
@@ -74,8 +76,10 @@ class SettingsHubActivity : OpenDiKeyActivity() {
         }
         setUpThemeToggle(settings)
         setUpStyleToggle(settings)
+        setUpSidebarSideToggle(settings)
         setUpWifi(settings)
         setUpTelemetry(settings)
+        SentrySection(this, findViewById(R.id.settingsSentrySection))
     }
 
     private fun setUpTelemetry(settings: AppSettings) {
@@ -211,6 +215,19 @@ class SettingsHubActivity : OpenDiKeyActivity() {
                     }
                 }
             }
+        }
+    }
+
+    private fun setUpSidebarSideToggle(settings: AppSettings) {
+        val toggle = findViewById<MaterialButtonToggleGroup>(R.id.settingsSidebarSideToggle)
+        val buttonFor = mapOf(
+            SidebarSide.LEFT to R.id.settingsSidebarLeft,
+            SidebarSide.RIGHT to R.id.settingsSidebarRight,
+        )
+        toggle.check(buttonFor.getValue(settings.sidebarSide))
+        toggle.addOnButtonCheckedListener { _, checkedId, checked ->
+            if (!checked) return@addOnButtonCheckedListener
+            settings.sidebarSide = buttonFor.entries.first { it.value == checkedId }.key
         }
     }
 

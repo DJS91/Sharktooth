@@ -13,9 +13,14 @@ enum class DashboardCard(@param:StringRes val title: Int) {
     TABLET(R.string.vehicle_info_block_tablet),
     ENGINE(R.string.vehicle_info_block_engine),
     CHASSIS(R.string.vehicle_info_block_chassis),
+    EVAKOOL_FRIDGE(R.string.fridge_unknown_name);
+
+    companion object {
+        val defaultCards: List<DashboardCard> = entries.filterNot { it == EVAKOOL_FRIDGE }
+    }
 }
 
-class DashboardLayout(initial: List<DashboardCard> = DashboardCard.entries) {
+class DashboardLayout(initial: List<DashboardCard> = DashboardCard.defaultCards) {
     private val selected = initial.toMutableList()
     val cards: List<DashboardCard> get() = selected.toList()
     val available: List<DashboardCard> get() = DashboardCard.entries.filterNot { it in selected }
@@ -34,10 +39,18 @@ class DashboardLayout(initial: List<DashboardCard> = DashboardCard.entries) {
     }
 
     fun move(card: DashboardCard, insertionIndex: Int) {
+        val reordered = previewMove(card, insertionIndex)
+        selected.clear()
+        selected.addAll(reordered)
+    }
+
+    fun previewMove(card: DashboardCard, insertionIndex: Int): List<DashboardCard> {
         val from = selected.indexOf(card)
         require(from >= 0) { "Card must be on the dashboard" }
         require(insertionIndex in 0..selected.size) { "Invalid dashboard insertion index" }
-        selected.removeAt(from)
-        selected.add(if (insertionIndex > from) insertionIndex - 1 else insertionIndex, card)
+        return selected.toMutableList().apply {
+            removeAt(from)
+            add(if (insertionIndex > from) insertionIndex - 1 else insertionIndex, card)
+        }
     }
 }

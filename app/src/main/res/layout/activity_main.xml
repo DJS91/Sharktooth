@@ -199,14 +199,6 @@
                         </LinearLayout>
 
                         <LinearLayout
-                            android:id="@+id/homeSentryButton"
-                            style="@style/HomeNavigationItem"
-                            android:contentDescription="@string/sentry_title">
-                            <ImageView style="@style/HomeNavigationIcon" android:src="@drawable/ic_sentry" />
-                            <TextView style="@style/HomeNavigationLabel" android:text="@string/sentry_title" />
-                        </LinearLayout>
-
-                        <LinearLayout
                             android:id="@+id/homeModesButton"
                             style="@style/HomeNavigationItem"
                             android:contentDescription="@string/modes_title">

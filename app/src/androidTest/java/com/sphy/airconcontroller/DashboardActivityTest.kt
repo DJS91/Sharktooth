@@ -26,6 +26,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import com.sphy.airconcontroller.storage.AppSettings
+import com.sphy.airconcontroller.fridge.FridgeControlsFragment
 import com.sphy.airconcontroller.ui.DashboardCard
 import com.sphy.airconcontroller.ui.DashboardGrid
 import org.junit.After
@@ -96,7 +97,7 @@ class DashboardActivityTest {
             injectTouch(down, MotionEvent.ACTION_UP, point[0], point[1])
         }
         instrumentation.runOnMainSync {
-            assertEquals(DashboardCard.entries, AppSettings(context).dashboardCards)
+            assertEquals(DashboardCard.defaultCards, AppSettings(context).dashboardCards)
         }
     }
 
@@ -220,6 +221,10 @@ class DashboardActivityTest {
             assertEquals(DashboardCard.BATTERY, AppSettings(context).dashboardCards.last())
         }
         onView(withContentDescription(R.string.dashboard_add_card)).perform(scrollTo(), click())
+        onView(withContentDescription(page.getString(
+            R.string.dashboard_add_named_card, page.getString(R.string.fridge_unknown_name),
+        ))).inRoot(isDialog()).perform(scrollTo(), click())
+        onView(withContentDescription(R.string.dashboard_add_card)).perform(scrollTo(), click())
         onView(withText(R.string.dashboard_all_cards_added)).check(matches(isDisplayed()))
         onView(withText(android.R.string.cancel)).perform(click())
         instrumentation.runOnMainSync { page.finish() }
@@ -251,7 +256,7 @@ class DashboardActivityTest {
 
     @Test fun draggingIntoGapsAndOntoCardsInsertsRatherThanSwaps() {
         val page = open(edit = true)
-        val original = DashboardCard.entries
+        val original = DashboardCard.defaultCards
         dragCard(page, sourceIndex = 2, targetIndex = 1, gapBefore = true)
         instrumentation.runOnMainSync {
             assertEquals(original.toMutableList().apply { add(1, removeAt(2)) }, AppSettings(context).dashboardCards)
@@ -266,6 +271,55 @@ class DashboardActivityTest {
             val row = page.findViewById<DashboardGrid>(R.id.dashboardGrid).getChildAt(0) as ViewGroup
             assertEquals(expected.take(3), (0..2).map { row.getChildAt(it).tag })
         }
+    }
+
+    @Test fun offlineFridgeCanBeAddedFromTheLibraryAndOpensTheFullControlsPopup() {
+        AppSettings(context).dashboardCards = emptyList()
+        var page = open(edit = true)
+        assertNull("This case requires a disconnected fridge", OpenDiKeyApp.from(context).fridge.status)
+        onView(withContentDescription(R.string.dashboard_add_card)).perform(click())
+        onView(withId(R.id.dashboardFridgeLogo)).inRoot(isDialog()).perform(scrollTo())
+            .check(matches(isDisplayed()))
+        onView(withText(R.string.dashboard_fridge_disconnected)).inRoot(isDialog()).perform(scrollTo())
+            .check(matches(isDisplayed()))
+        onView(withContentDescription(page.getString(
+            R.string.dashboard_add_named_card, page.getString(R.string.fridge_unknown_name),
+        ))).inRoot(isDialog()).perform(scrollTo(), click())
+        instrumentation.runOnMainSync {
+            assertEquals(listOf(DashboardCard.EVAKOOL_FRIDGE), AppSettings(context).dashboardCards)
+        }
+        onView(withId(R.id.dashboardDone)).perform(click())
+        onView(withId(R.id.dashboardFridgeCard)).perform(click())
+        for (id in listOf(
+            R.id.fridgeGraph, R.id.fridgePower, R.id.fridgeLeftCard, R.id.fridgeRightCard,
+            R.id.fridgeModeEco, R.id.fridgeModeMax, R.id.fridgeRangeHour,
+            R.id.fridgeRangeDay, R.id.fridgeRangeWeek, R.id.fridgeMore,
+        )) {
+            onView(withId(id)).inRoot(isDialog()).check(matches(isDisplayed()))
+        }
+        instrumentation.runOnMainSync {
+            val popup = page.supportFragmentManager.fragments.filterIsInstance<FridgeControlsFragment>().single()
+            val decor = requireNotNull(popup.dialog).window!!.decorView
+            assertTrue("Fridge controls must be a popup, not another full page",
+                decor.width < page.window.decorView.width && decor.height < page.window.decorView.height)
+            assertNull(popup.requireView().findViewById<View>(R.id.homeFridgeButton))
+            assertFalse(page.findViewById<DashboardGrid>(R.id.dashboardGrid).editing)
+        }
+        onView(withId(R.id.fridgeMore)).inRoot(isDialog()).perform(scrollTo(), click())
+        onView(withText(R.string.fridge_details)).inRoot(isDialog()).perform(click())
+        onView(withText(android.R.string.ok)).inRoot(isDialog()).perform(click())
+        onView(withId(R.id.fridgeBack)).inRoot(isDialog()).perform(click())
+        instrumentation.runOnMainSync {
+            assertTrue(page.supportFragmentManager.fragments.none { it is FridgeControlsFragment })
+            page.finish()
+        }
+        instrumentation.waitForIdleSync()
+        page = open()
+        instrumentation.runOnMainSync {
+            assertEquals(listOf(DashboardCard.EVAKOOL_FRIDGE), AppSettings(context).dashboardCards)
+        }
+        onView(withText(R.string.dashboard_fridge_disconnected)).check(matches(isDisplayed()))
+        onView(withId(R.id.dashboardFridgeLogo)).check(matches(isDisplayed()))
     }
 
     @Test fun draggingAcrossRowsAndIntoTheNextFreeSlotKeepsCardsPacked() {
@@ -288,7 +342,145 @@ class DashboardActivityTest {
         }
     }
 
-    private fun dragCard(page: VehicleInfoActivity, sourceIndex: Int, targetIndex: Int, gapBefore: Boolean = false) {
+    @Test fun hoveringForHalfASecondOpensABlankSlotAndPreviewsTheActualDropLayout() {
+        val original = DashboardCard.entries.take(4)
+        AppSettings(context).dashboardCards = original
+        val page = open(edit = true)
+        val expected = listOf(original[0], original[3], original[1], original[2])
+        var previewBounds = emptyMap<DashboardCard, android.graphics.Rect>()
+        var sawAnimatedMovement = false
+        val grid = page.findViewById<DashboardGrid>(R.id.dashboardGrid)
+        val previewFrames = android.view.ViewTreeObserver.OnPreDrawListener {
+            if (dashboardSlots(page).any {
+                it.visibility == View.VISIBLE && (it.translationX != 0f || it.translationY != 0f)
+            }) sawAnimatedMovement = true
+            true
+        }
+        instrumentation.runOnMainSync { grid.viewTreeObserver.addOnPreDrawListener(previewFrames) }
+        dragCard(page, sourceIndex = 3, targetIndex = 1, gapBefore = true, duringHover = {
+            SystemClock.sleep(400)
+            instrumentation.runOnMainSync {
+                assertEquals("Do not shift cards before the hover delay", original, displayedCards(page))
+                assertTrue(dashboardSlots(page).all { it.visibility == View.VISIBLE })
+            }
+            SystemClock.sleep(450)
+            instrumentation.runOnMainSync {
+                grid.viewTreeObserver.removeOnPreDrawListener(previewFrames)
+                assertEquals(expected, displayedCards(page))
+                assertTrue("Cards should animate rather than jump into position",
+                    sawAnimatedMovement || !android.animation.ValueAnimator.areAnimatorsEnabled())
+                assertEquals(View.INVISIBLE, dashboardSlots(page)[1].visibility)
+                assertEquals("Hovering must not save a new order", original, AppSettings(context).dashboardCards)
+                previewBounds = slotBounds(page)
+                assertTrue("The right-hand card should move into the next column",
+                    previewBounds.getValue(original[1]).left > previewBounds.getValue(original[3]).left)
+                assertTrue("Following cards should wrap onto the next row",
+                    previewBounds.getValue(original[2]).top > previewBounds.getValue(original[1]).top)
+            }
+        })
+        instrumentation.runOnMainSync {
+            assertEquals(expected, AppSettings(context).dashboardCards)
+            assertEquals(previewBounds, slotBounds(page))
+            assertTrue(dashboardSlots(page).all { it.visibility == View.VISIBLE })
+        }
+        val appended = expected.drop(1) + expected.first()
+        dragCard(page, sourceIndex = 0, targetIndex = 4, duringHover = {
+            SystemClock.sleep(850)
+            instrumentation.runOnMainSync {
+                assertEquals(appended, displayedCards(page))
+                assertEquals(View.INVISIBLE, dashboardSlots(page).last().visibility)
+                assertEquals(expected, AppSettings(context).dashboardCards)
+                previewBounds = slotBounds(page)
+            }
+        })
+        instrumentation.runOnMainSync {
+            assertEquals(appended, AppSettings(context).dashboardCards)
+            assertEquals(previewBounds, slotBounds(page))
+            assertTrue(dashboardSlots(page).all { it.visibility == View.VISIBLE })
+        }
+    }
+
+    @Test fun changingTheInsertionMarkerRestartsTheDelayAndCancellingRestoresCards() {
+        val original = DashboardCard.entries.take(4)
+        AppSettings(context).dashboardCards = original
+        val page = open(edit = true)
+        dragCard(page, sourceIndex = 3, targetIndex = 1, gapBefore = true, cancel = true, duringHover = {
+            SystemClock.sleep(200)
+            lateinit var firstGap: FloatArray
+            lateinit var point: FloatArray
+            instrumentation.runOnMainSync {
+                val slots = dashboardSlots(page)
+                val position = IntArray(2)
+                slots[1].getLocationOnScreen(position)
+                firstGap = floatArrayOf(
+                    position[0] - 5 * page.resources.displayMetrics.density,
+                    position[1] + slots[1].height / 2f,
+                )
+                val slot = slots[2]
+                slot.getLocationOnScreen(position)
+                point = floatArrayOf(
+                    position[0] - 5 * page.resources.displayMetrics.density,
+                    position[1] + slot.height / 2f,
+                )
+            }
+            injectTouch(SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, point[0], point[1])
+            SystemClock.sleep(350)
+            instrumentation.runOnMainSync {
+                assertEquals("Moving the marker must restart the half-second delay", original, displayedCards(page))
+            }
+            SystemClock.sleep(500)
+            instrumentation.runOnMainSync {
+                assertEquals(listOf(original[0], original[1], original[3], original[2]), displayedCards(page))
+                assertEquals(View.INVISIBLE, dashboardSlots(page)[2].visibility)
+                assertEquals(original, AppSettings(context).dashboardCards)
+            }
+            injectTouch(SystemClock.uptimeMillis(), MotionEvent.ACTION_MOVE, firstGap[0], firstGap[1])
+            SystemClock.sleep(850)
+            instrumentation.runOnMainSync {
+                assertEquals(listOf(original[0], original[3], original[1], original[2]), displayedCards(page))
+                assertEquals(View.INVISIBLE, dashboardSlots(page)[1].visibility)
+                assertEquals(original, AppSettings(context).dashboardCards)
+            }
+        })
+        SystemClock.sleep(800)
+        instrumentation.runOnMainSync {
+            assertEquals(original, displayedCards(page))
+            assertEquals(original, AppSettings(context).dashboardCards)
+            dashboardSlots(page).forEach {
+                assertEquals("Cancelled drag should restore ${it.tag}", View.VISIBLE, it.visibility)
+                assertEquals("Cancelled drag should finish moving ${it.tag}", 0f, it.translationX, 0.1f)
+                assertEquals("Cancelled drag should finish moving ${it.tag}", 0f, it.translationY, 0.1f)
+            }
+        }
+    }
+
+    private fun dashboardSlots(page: VehicleInfoActivity): List<View> {
+        val grid = page.findViewById<DashboardGrid>(R.id.dashboardGrid)
+        return (0 until grid.childCount).flatMap { rowIndex ->
+            val row = grid.getChildAt(rowIndex) as ViewGroup
+            (0 until row.childCount).map { row.getChildAt(it) }.filter { it.tag is DashboardCard }
+        }
+    }
+
+    private fun displayedCards(page: VehicleInfoActivity): List<DashboardCard> =
+        dashboardSlots(page).map { it.tag as DashboardCard }
+
+    private fun slotBounds(page: VehicleInfoActivity): Map<DashboardCard, android.graphics.Rect> =
+        dashboardSlots(page).associate { slot ->
+            val row = slot.parent as View
+            slot.tag as DashboardCard to android.graphics.Rect(
+                slot.left, row.top + slot.top, slot.right, row.top + slot.bottom,
+            )
+        }
+
+    private fun dragCard(
+        page: VehicleInfoActivity,
+        sourceIndex: Int,
+        targetIndex: Int,
+        gapBefore: Boolean = false,
+        cancel: Boolean = false,
+        duringHover: (() -> Unit)? = null,
+    ) {
         lateinit var from: FloatArray
         lateinit var to: FloatArray
         instrumentation.runOnMainSync {
@@ -309,12 +501,14 @@ class DashboardActivityTest {
         send(MotionEvent.ACTION_DOWN, from[0], from[1])
         try {
             SystemClock.sleep(800)
-            for (step in 1..15) {
+            val steps = if (duringHover == null) 15 else 1
+            for (step in 1..steps) {
                 send(MotionEvent.ACTION_MOVE,
-                    from[0] + (to[0] - from[0]) * step / 15,
-                    from[1] + (to[1] - from[1]) * step / 15)
+                    from[0] + (to[0] - from[0]) * step / steps,
+                    from[1] + (to[1] - from[1]) * step / steps)
                 SystemClock.sleep(40)
             }
+            instrumentation.waitForIdleSync()
             if (gapBefore) instrumentation.runOnMainSync {
                 val grid = page.findViewById<DashboardGrid>(R.id.dashboardGrid)
                 val location = IntArray(2)
@@ -325,8 +519,9 @@ class DashboardActivityTest {
                     image.getPixel((to[0] - location[0]).toInt(), (to[1] - location[1]).toInt()))
                 image.recycle()
             }
+            duringHover?.invoke()
         } finally {
-            send(MotionEvent.ACTION_UP, to[0], to[1])
+            send(if (cancel) MotionEvent.ACTION_CANCEL else MotionEvent.ACTION_UP, to[0], to[1])
         }
         instrumentation.waitForIdleSync()
     }

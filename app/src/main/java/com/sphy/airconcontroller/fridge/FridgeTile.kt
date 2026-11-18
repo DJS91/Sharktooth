@@ -15,21 +15,29 @@ import com.sphy.airconcontroller.R
 /**
  * Home tile. Hidden until the fridge first delivers live readings in this app run; after that
  * it stays, showing temperatures and Eco/Max, or "Disconnected" with a Reconnect button.
- * Tapping opens [FridgeActivity]. Debug builds preview the tile until a real fridge is seen.
+ * The dashboard variant stays visible when disconnected and opens the same controls in a popup.
+ * Debug builds preview only the sidebar tile until a real fridge is seen.
  */
-class FridgeTile(private val activity: HomeActivity) {
-    private val tile = activity.findViewById<View>(R.id.homeFridgeButton)
-    private val temperatures = activity.findViewById<TextView>(R.id.homeFridgeTemperatures)
-    private val status = activity.findViewById<TextView>(R.id.homeFridgeStatus)
-    private val disconnected = activity.findViewById<TextView>(R.id.homeFridgeDisconnected)
-    private val reconnect = activity.findViewById<Button>(R.id.homeFridgeReconnect)
+class FridgeTile(
+    private val activity: HomeActivity,
+    private val tile: View = activity.findViewById(R.id.homeFridgeButton),
+    private val dashboard: Boolean = false,
+) {
+    private val temperatures = tile.findViewById<TextView>(R.id.homeFridgeTemperatures)
+    private val status = tile.findViewById<TextView>(R.id.homeFridgeStatus)
+    private val disconnected = tile.findViewById<TextView>(R.id.homeFridgeDisconnected)
+    private val reconnect = tile.findViewById<Button>(R.id.homeFridgeReconnect)
     private val controller = OpenDiKeyApp.from(activity).fridge
     private val listener: () -> Unit = { render() }
     private var active = false
 
     init {
         tile.setOnClickListener {
-            activity.navigateTo(FridgeActivity::class.java)
+            if (dashboard) {
+                if (activity.supportFragmentManager.findFragmentByTag(CONTROLS_TAG) == null) {
+                    FridgeControlsFragment().showNow(activity.supportFragmentManager, CONTROLS_TAG)
+                }
+            } else activity.navigateTo(FridgeActivity::class.java)
         }
         reconnect.setOnClickListener { controller.reconnect() }
         render()
@@ -54,12 +62,12 @@ class FridgeTile(private val activity: HomeActivity) {
 
     private fun render() {
         val actual = controller.status
-        val preview = isFridgeTilePreview(
+        val preview = !dashboard && isFridgeTilePreview(
             activity.applicationInfo.flags and ApplicationInfo.FLAG_DEBUGGABLE != 0,
             controller.seenConnected,
             actual,
         )
-        tile.visibility = if (controller.seenConnected || actual != null || preview) View.VISIBLE else View.GONE
+        tile.visibility = if (dashboard || controller.seenConnected || actual != null || preview) View.VISIBLE else View.GONE
         val value = if (preview) PREVIEW_STATUS else actual
         if (value != null) {
             temperatures.visibility = View.VISIBLE
@@ -114,6 +122,7 @@ class FridgeTile(private val activity: HomeActivity) {
     }
 
     companion object {
+        private const val CONTROLS_TAG = "dashboard_fridge_controls"
         private val PREVIEW_STATUS = EvakoolProtocol.Status(
             on = true, celsius = true, left = 4, right = -18,
             leftTarget = 4, rightTarget = -18, voltage = "13.8",

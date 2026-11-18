@@ -1,5 +1,6 @@
 package com.sphy.airconcontroller
 
+import android.content.Intent
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -15,11 +16,24 @@ import android.widget.Button
 import android.widget.TextView
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
+import androidx.test.espresso.Espresso.onView
+import androidx.test.espresso.action.ViewActions.click
+import androidx.test.espresso.action.ViewActions.scrollTo
+import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.matcher.RootMatchers.isDialog
+import androidx.test.espresso.matcher.ViewMatchers.isDescendantOfA
+import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
+import androidx.test.espresso.matcher.ViewMatchers.withId
+import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.core.content.ContextCompat
 import com.sphy.airconcontroller.ui.ColorSettingCard
 import com.sphy.airconcontroller.ui.DashboardCard
 import com.sphy.airconcontroller.ui.DashboardGrid
 import com.sphy.airconcontroller.ui.DashboardLayout
+import com.sphy.airconcontroller.update.CompanionApps
+import com.sphy.airconcontroller.storage.AppSettings
+import com.sphy.airconcontroller.storage.SidebarSide
+import org.hamcrest.Matchers.allOf
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -181,9 +195,13 @@ class HomeLayoutTest {
                 val page = root.findViewById<View>(R.id.homePageContainer)
                 val vehicle = root.findViewById<View>(R.id.homeVehicleInfoButton)
                 val rail = root.findViewById<View>(R.id.homeSidebar)
+                val sentryItems = ArrayList<View>()
+                root.findViewsWithText(sentryItems, context.getString(R.string.sentry_title),
+                    View.FIND_VIEWS_WITH_TEXT or View.FIND_VIEWS_WITH_CONTENT_DESCRIPTION)
+                assertTrue("Sentry belongs in Settings, not the sidebar", sentryItems.isEmpty())
                 val navigationItems = listOf(
                     vehicle, controls,
-                    root.findViewById(R.id.homeAdasButton), root.findViewById(R.id.homeSentryButton),
+                    root.findViewById(R.id.homeAdasButton),
                     root.findViewById(R.id.homeModesButton), fridge, projection,
                 )
                 assertTrue(page.left > 0 && page.width > rail.width)
@@ -317,7 +335,7 @@ class HomeLayoutTest {
                     assertEquals(3, row.childCount)
                     (0 until row.childCount).map { row.getChildAt(it) }
                 }
-                assertEquals(DashboardCard.entries, slots.map { it.tag })
+                assertEquals(DashboardCard.defaultCards, slots.map { it.tag })
                 slots.chunked(3).forEach { row ->
                     assertTrue(row[0].left < row[1].left && row[1].left < row[2].left)
                     assertEquals(row[0].width.toFloat(), row[2].width.toFloat(), 1f)
@@ -375,14 +393,13 @@ class HomeLayoutTest {
             Triple(R.layout.activity_color_config, R.id.controlsBarTabs, R.id.colorPeriodToggle),
             Triple(R.layout.activity_button_mapping, R.id.controlsBarTabs, null),
             Triple(R.layout.activity_adas, R.id.homePageTitle, R.id.adasModeToggle),
-            Triple(R.layout.activity_sentry, R.id.homePageTitle, null),
             Triple(R.layout.activity_pet_mode, R.id.modesTabs, R.id.petSettingsButton),
             Triple(R.layout.activity_camp_mode, R.id.modesTabs, null),
             Triple(R.layout.activity_fridge, R.id.fridgeName, null),
         )
         val backIds = listOf(
             R.id.colorBackButton, R.id.mappingBackButton,
-            R.id.adasBackButton, R.id.sentryBackButton, R.id.petBackButton,
+            R.id.adasBackButton, R.id.petBackButton,
             R.id.fridgeBack, R.id.backButtonEnd,
         )
         val density = context.resources.displayMetrics.density
@@ -424,7 +441,186 @@ class HomeLayoutTest {
                     assertTrue("Header control must fit", bounds.right <= page.width && bounds.width() > 0)
                 }
             }
+
         }
+        }
+    }
+
+    @Test fun settingsUpdatesAreFirstAndSentryStaysCompactAtTheBottom() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            for (theme in listOf(R.style.Theme_OpenDiKey, R.style.Theme_OpenDiKey_Modern)) {
+                val context = ContextThemeWrapper(InstrumentationRegistry.getInstrumentation().targetContext, theme)
+                val density = context.resources.displayMetrics.density
+                val page = LayoutInflater.from(context).inflate(R.layout.activity_settings_hub, null)
+                val updates = page.findViewById<View>(R.id.settingsUpdatesSection)
+                val sentry = page.findViewById<ViewGroup>(R.id.settingsSentrySection)
+                val sections = updates.parent as ViewGroup
+                assertSame(updates, sections.getChildAt(0))
+                assertSame(sentry, sections.getChildAt(sections.childCount - 1))
+                val panels = listOf(
+                    page.findViewById<ViewGroup>(R.id.overdrivePanel),
+                    page.findViewById<ViewGroup>(R.id.strikePanel),
+                )
+                for ((panel, titles) in panels.zip(listOf(
+                    R.string.overdrive_title to R.string.overdrive_open_button,
+                    R.string.strike_title to R.string.strike_open_button,
+                ))) {
+                    panel.findViewById<TextView>(R.id.companionHeadline).setText(titles.first)
+                    panel.findViewById<TextView>(R.id.companionBadge).setText(R.string.overdrive_badge)
+                    panel.findViewById<TextView>(R.id.companionStatus).text =
+                        context.getString(R.string.companion_installed_status, "2026.11.18-1605")
+                    panel.findViewById<Button>(R.id.companionOpenButton).apply {
+                        visibility = View.VISIBLE
+                        setText(titles.second)
+                    }
+                    panel.findViewById<Button>(R.id.companionInstallButton).setText(R.string.sentry_reinstall_button)
+                }
+                for (width in listOf(640, 1120)) {
+                    page.measure(
+                        View.MeasureSpec.makeMeasureSpec((width * density).toInt(), View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec((480 * density).toInt(), View.MeasureSpec.EXACTLY),
+                    )
+                    page.layout(0, 0, page.measuredWidth, page.measuredHeight)
+                    assertTrue("Sentry should be a compact section, not another full page",
+                        sentry.height < 360 * density)
+                    assertTrue(panels[0].right <= panels[1].left)
+                    for (panel in panels) {
+                        for (id in listOf(R.id.companionDetailsButton, R.id.companionOpenButton, R.id.companionInstallButton)) {
+                            val button = panel.findViewById<Button>(id)
+                            assertTrue("Keep actions large enough to tap", button.width >= 48 * density)
+                            assertTrue("Action labels must not be clipped",
+                                button.layout.height <= button.height - button.compoundPaddingTop - button.compoundPaddingBottom)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test fun settingsSentryRetainsAppControlsAndFullDetails() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val page = instrumentation.startActivitySync(
+            Intent(instrumentation.targetContext, SettingsHubActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        ) as SettingsHubActivity
+        try {
+            onView(withId(R.id.settingsCheckUpdateButton)).check(matches(isDisplayed()))
+            for ((panelId, installer, descriptions) in listOf(
+                Triple(R.id.overdrivePanel, CompanionApps.overdrive,
+                    R.string.overdrive_install_body to R.string.overdrive_installed_body),
+                Triple(R.id.strikePanel, CompanionApps.strike,
+                    R.string.strike_install_body to R.string.strike_installed_body),
+            )) {
+                val installed = installer.isInstalled(page)
+                instrumentation.runOnMainSync {
+                    val panel = page.findViewById<View>(panelId)
+                    assertEquals(if (installed) View.VISIBLE else View.GONE,
+                        panel.findViewById<View>(R.id.companionOpenButton).visibility)
+                    assertEquals(page.getString(if (installed) R.string.sentry_reinstall_button else R.string.sentry_install_button),
+                        panel.findViewById<Button>(R.id.companionInstallButton).text.toString())
+                }
+                onView(allOf(withId(R.id.companionDetailsButton), isDescendantOfA(withId(panelId))))
+                    .perform(scrollTo(), click())
+                onView(withId(android.R.id.message)).inRoot(isDialog()).check { view, error ->
+                    if (error != null) throw error
+                    val text = (view as TextView).text.toString()
+                    assertTrue(text.contains(page.getString(if (installed) descriptions.second else descriptions.first)))
+                    if (panelId == R.id.overdrivePanel) {
+                        assertTrue(text.contains(page.getString(R.string.overdrive_caveats_title)))
+                        assertTrue(text.contains(page.getString(R.string.overdrive_caveats)))
+                    }
+                }
+                onView(withText(android.R.string.ok)).inRoot(isDialog()).perform(click())
+            }
+        } finally {
+            instrumentation.runOnMainSync { page.finish() }
+            instrumentation.waitForIdleSync()
+        }
+    }
+
+    @Test fun sidebarPositionIsSavedAndMovesTheRailWithoutRebuildingThePage() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val context = instrumentation.targetContext
+        val prefs = context.getSharedPreferences("aircon_settings", android.content.Context.MODE_PRIVATE)
+        val previous = prefs.getString("sidebar_side", null)
+        var dashboard: VehicleInfoActivity? = null
+        var settingsPage: SettingsHubActivity? = null
+        fun assertPosition(page: VehicleInfoActivity, side: SidebarSide) {
+            instrumentation.runOnMainSync {
+                val sidebar = page.findViewById<View>(R.id.homeSidebar)
+                val content = page.findViewById<View>(R.id.homePageContainer)
+                val gap = if (side == SidebarSide.LEFT) content.left - sidebar.right
+                    else sidebar.left - content.right
+                assertEquals("Keep the rail separated from the page on either side",
+                    12 * page.resources.displayMetrics.density, gap.toFloat(), 1f)
+            }
+        }
+        try {
+            prefs.edit().remove("sidebar_side").commit()
+            val page = instrumentation.startActivitySync(
+                Intent(context, VehicleInfoActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            ) as VehicleInfoActivity
+            dashboard = page
+            instrumentation.waitForIdleSync()
+            assertPosition(page, SidebarSide.RIGHT)
+            lateinit var originalContent: View
+            lateinit var originalGrid: DashboardGrid
+            instrumentation.runOnMainSync {
+                originalContent = (page.findViewById<ViewGroup>(R.id.homePageContainer)).getChildAt(0)
+                originalGrid = page.findViewById(R.id.dashboardGrid)
+            }
+            var selected = SidebarSide.RIGHT
+            for ((direction, side) in listOf(
+                View.LAYOUT_DIRECTION_LTR to SidebarSide.LEFT,
+                View.LAYOUT_DIRECTION_LTR to SidebarSide.RIGHT,
+                View.LAYOUT_DIRECTION_RTL to SidebarSide.RIGHT,
+                View.LAYOUT_DIRECTION_RTL to SidebarSide.LEFT,
+            )) {
+                instrumentation.runOnMainSync {
+                    (page.findViewById<View>(R.id.homeSidebar).parent as View).layoutDirection = direction
+                }
+                instrumentation.waitForIdleSync()
+                val settingsScreen = instrumentation.startActivitySync(
+                    Intent(context, SettingsHubActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+                ) as SettingsHubActivity
+                settingsPage = settingsScreen
+                instrumentation.runOnMainSync {
+                    val checked = settingsScreen.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(
+                        R.id.settingsSidebarSideToggle,
+                    ).checkedButtonId
+                    assertEquals(if (selected == SidebarSide.LEFT) R.id.settingsSidebarLeft else R.id.settingsSidebarRight,
+                        checked)
+                }
+                onView(withId(if (side == SidebarSide.LEFT) R.id.settingsSidebarLeft else R.id.settingsSidebarRight))
+                    .perform(scrollTo(), click())
+                assertEquals(side, AppSettings(context).sidebarSide)
+                onView(withId(R.id.settingsBackButton)).perform(click())
+                settingsPage = null
+                instrumentation.waitForIdleSync()
+                assertPosition(page, side)
+                instrumentation.runOnMainSync {
+                    assertSame(originalContent, page.findViewById<ViewGroup>(R.id.homePageContainer).getChildAt(0))
+                    assertSame(originalGrid, page.findViewById<DashboardGrid>(R.id.dashboardGrid))
+                    assertEquals("Moving the rail must not mirror the dashboard cards",
+                        View.LAYOUT_DIRECTION_LTR, originalGrid.layoutDirection)
+                }
+                selected = side
+            }
+            instrumentation.runOnMainSync { page.finish() }
+            instrumentation.waitForIdleSync()
+            val reloaded = instrumentation.startActivitySync(
+                Intent(context, VehicleInfoActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            ) as VehicleInfoActivity
+            dashboard = reloaded
+            instrumentation.waitForIdleSync()
+            assertPosition(reloaded, SidebarSide.LEFT)
+        } finally {
+            instrumentation.runOnMainSync {
+                settingsPage?.finish()
+                dashboard?.finish()
+            }
+            instrumentation.waitForIdleSync()
+            prefs.edit().putString("sidebar_side", previous).commit()
         }
     }
 }

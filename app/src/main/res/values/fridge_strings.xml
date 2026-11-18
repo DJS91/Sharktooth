@@ -38,6 +38,7 @@
     <string name="fridge_select_hint">Tap to select your EVAKOOL fridge</string>
     <string name="fridge_no_readings">Left: &#8212; / Right: &#8212;\nNo live readings</string>
     <string name="fridge_disconnected_tile">Disconnected</string>
+    <string name="dashboard_fridge_disconnected">Fridge disconnected</string>
     <string name="fridge_alert_channel">Camping fridge alerts</string>
     <string name="fridge_alert_channel_description">Fridge disconnected for over 2 minutes, or a compartment warming well above its target.</string>
     <string name="fridge_alert_disconnected_title">%1$s disconnected</string>

@@ -1,5 +1,6 @@
 package com.sphy.airconcontroller.fridge
 
+import android.content.Intent
 import android.view.ContextThemeWrapper
 import android.view.LayoutInflater
 import android.view.View
@@ -16,6 +17,30 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class FridgePickerLayoutTest {
+    @Test fun fridgePageKeepsTheSharedControlsAndItsSidebar() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val page = instrumentation.startActivitySync(
+            Intent(instrumentation.targetContext, FridgeActivity::class.java)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        ) as FridgeActivity
+        try {
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync {
+                assertTrue(page.findViewById<View>(R.id.fridgeGraph).isShown)
+                assertTrue(page.findViewById<View>(R.id.fridgePower).isShown)
+                assertTrue(page.findViewById<View>(R.id.fridgeLeftCard).isShown)
+                assertTrue(page.findViewById<View>(R.id.fridgeRightCard).isShown)
+                assertTrue(page.findViewById<View>(R.id.fridgeMode).isShown)
+                assertTrue(page.findViewById<View>(R.id.homeVehicleInfoButton).isShown)
+                assertEquals(View.GONE, page.findViewById<View>(R.id.fridgeBack).visibility)
+                assertEquals(View.GONE, page.findViewById<View>(R.id.backButtonEnd).visibility)
+            }
+        } finally {
+            instrumentation.runOnMainSync { page.finish() }
+            instrumentation.waitForIdleSync()
+        }
+    }
+
     @Test fun emptyPickerHasVisibleInstructionsAndReservedListSpaceInBothThemes() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.runOnMainSync {

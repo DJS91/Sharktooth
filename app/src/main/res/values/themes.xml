@@ -146,6 +146,12 @@
         <item name="android:background">@color/dashboard_library_background</item>
     </style>
 
+    <style name="ThemeOverlay.OpenDiKey.FridgeControls" parent="ThemeOverlay.AppCompat.Dialog">
+        <item name="android:windowBackground">?attr/dkBgBase</item>
+        <item name="android:windowNoTitle">true</item>
+        <item name="android:backgroundDimEnabled">true</item>
+    </style>
+
     <style name="ThemeOverlay.OpenDiKey.MaterialAlertDialog" parent="ThemeOverlay.MaterialComponents.MaterialAlertDialog">
         <item name="colorSurface">?attr/dkSurface</item>
         <item name="colorOnSurface">?attr/dkTextPrimary</item>

@@ -22,6 +22,7 @@ import com.google.android.material.switchmaterial.SwitchMaterial
 import com.sphy.airconcontroller.byd.BydTyreController
 import com.sphy.airconcontroller.byd.BydVehicleInfoController
 import com.sphy.airconcontroller.byd.TabletSocReader
+import com.sphy.airconcontroller.fridge.FridgeTile
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.ui.AttitudeHorizonView
 import com.sphy.airconcontroller.ui.DashboardCard
@@ -42,6 +43,7 @@ open class VehicleInfoActivity : HomeActivity() {
     private lateinit var tabletSoc: TabletSocReader
     private lateinit var settings: AppSettings
     private lateinit var dashboardGrid: DashboardGrid
+    private lateinit var fridgeCard: FridgeTile
     private val editBackCallback = object : OnBackPressedCallback(false) {
         override fun handleOnBackPressed() = setDashboardEditing(false)
     }
@@ -141,6 +143,7 @@ open class VehicleInfoActivity : HomeActivity() {
 
     override fun onStart() {
         super.onStart()
+        fridgeCard.start()
         val sm = getSystemService(SensorManager::class.java)
         sensorManager = sm
         val accel = sm?.getDefaultSensor(Sensor.TYPE_ACCELEROMETER)
@@ -171,6 +174,7 @@ open class VehicleInfoActivity : HomeActivity() {
     }
 
     override fun onStop() {
+        fridgeCard.stop()
         sensorManager?.unregisterListener(accelListener)
         sensorManager = null
         super.onStop()
@@ -280,6 +284,8 @@ open class VehicleInfoActivity : HomeActivity() {
             getString(R.string.vehicle_info_block_chassis),
             R.drawable.ic_card_chassis,
         )
+        val fridgeView = inflater.inflate(R.layout.view_dashboard_fridge, blockHost, false)
+        fridgeCard = FridgeTile(this, fridgeView, dashboard = true)
         dashboardGrid.initialize(DashboardLayout(settings.dashboardCards), mapOf(
             DashboardCard.BATTERY to batteryBlock,
             DashboardCard.DRIVE to driveBlock,
@@ -290,6 +296,7 @@ open class VehicleInfoActivity : HomeActivity() {
             DashboardCard.TABLET to tabletMetaHost.parent as View,
             DashboardCard.ENGINE to engineHost.parent as View,
             DashboardCard.CHASSIS to chassisHost.parent as View,
+            DashboardCard.EVAKOOL_FRIDGE to fridgeView,
         ))
 
         dashboardReady = true
