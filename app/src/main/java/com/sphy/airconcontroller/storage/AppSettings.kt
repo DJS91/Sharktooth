@@ -372,13 +372,6 @@ class AppSettings(context: Context) {
         com.sphy.airconcontroller.lighting.LightingScheduler.currentPeriod()
             ?: editingLightingPeriod
 
-    /** Vehicle info pitch/roll: true = separate pitch and roll gauges. */
-    var vehicleInfoAttitudeSplit: Boolean
-        get() = prefs.getBoolean(KEY_VEHICLE_INFO_ATTITUDE_SPLIT, false)
-        set(value) {
-            prefs.edit().putBoolean(KEY_VEHICLE_INFO_ATTITUDE_SPLIT, value).apply()
-        }
-
     var adasEditMode: AdasEditMode
         get() = if (prefs.getString(KEY_ADAS_EDIT_MODE, AdasEditMode.DEFAULT.name) == AdasEditMode.CUSTOM.name) {
             AdasEditMode.CUSTOM
@@ -682,7 +675,6 @@ class AppSettings(context: Context) {
         private const val KEY_UNSYNCED_NIGHT = "lighting_unsynced_night"
         private const val KEY_SYNCED_COLOR_DAY = "lighting_synced_color_day"
         private const val KEY_SYNCED_COLOR_NIGHT = "lighting_synced_color_night"
-        private const val KEY_VEHICLE_INFO_ATTITUDE_SPLIT = "vehicle_info_attitude_split"
         private const val KEY_ADAS_EDIT_MODE = "adas_edit_mode"
         private const val KEY_ADAS_CUSTOM_ELKA = "adas_custom_elka"
         private const val KEY_ADAS_CUSTOM_LDA = "adas_custom_lda"

@@ -39,9 +39,11 @@
     <color name="accent_green_soft">#333DDC84</color>
     <color name="tyre_under">#FFFF5A1F</color>
     <color name="tyre_fault">#FFFF3B30</color>
-    <color name="horizon_sky">#FF2A6FBF</color>
-    <color name="horizon_ground">#FF6B4E2E</color>
-    <color name="horizon_line">#FFF4F6F8</color>
+    <color name="attitude_face">#663A5263</color>
+    <color name="attitude_edge">#33253545</color>
+    <color name="attitude_rim">#99769BAD</color>
+    <color name="attitude_ticks">#FFC6DFEB</color>
+    <color name="attitude_accent">#FF05BEF5</color>
     <color name="gauge_charge">#FF3D8BFF</color>
     <color name="gauge_fuel">#FF3DDC84</color>
     <color name="gauge_caution">#FFF5B400</color>

@@ -2,9 +2,12 @@ package com.sphy.airconcontroller
 
 import android.content.Intent
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Paint
 import android.graphics.Rect
+import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.content.res.Configuration
 import android.view.ContextThemeWrapper
@@ -26,7 +29,9 @@ import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withId
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import com.sphy.airconcontroller.ui.ColorSettingCard
+import com.sphy.airconcontroller.ui.AttitudeHorizonView
 import com.sphy.airconcontroller.ui.DashboardCard
 import com.sphy.airconcontroller.ui.DashboardGrid
 import com.sphy.airconcontroller.ui.DashboardLayout
@@ -40,6 +45,226 @@ import org.junit.runner.RunWith
 
 @RunWith(AndroidJUnit4::class)
 class HomeLayoutTest {
+    @Test fun attitudeFacesAreTranslucentAndScalesRemainReadableInBothThemes() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            for (night in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
+                val config = Configuration(instrumentation.targetContext.resources.configuration)
+                config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or night
+                val base = instrumentation.targetContext.createConfigurationContext(config)
+                for (theme in listOf(R.style.Theme_OpenDiKey, R.style.Theme_OpenDiKey_Modern)) {
+                    val context = ContextThemeWrapper(base, theme)
+                    val gauge = AttitudeHorizonView(context)
+                    gauge.setAttitude(0.0, 0.0)
+                    gauge.measure(
+                        View.MeasureSpec.makeMeasureSpec(240, View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(252, View.MeasureSpec.EXACTLY),
+                    )
+                    gauge.layout(0, 0, 240, 252)
+                    val image = Bitmap.createBitmap(240, 252, Bitmap.Config.ARGB_8888)
+                    gauge.draw(Canvas(image))
+                    val face = image.getPixel(60, 166)
+                    assertTrue("The gauge face must let the card show through", Color.alpha(face) in 1..220)
+                    val surface = ContextCompat.getColor(context, R.color.surface)
+                    val faceOnCard = ColorUtils.compositeColors(face, surface)
+                    val luminance = ColorUtils.calculateLuminance(faceOnCard)
+                    assertTrue("The gauge must follow the surrounding light/dark palette",
+                        if (night == Configuration.UI_MODE_NIGHT_NO) luminance > 0.65 else luminance < 0.15)
+                    for ((x, y) in listOf(66 to 166, 60 to 172)) {
+                        val background = ColorUtils.compositeColors(image.getPixel(x, y), surface)
+                        assertTrue("The face must stay smooth without horizontal or vertical grid lines",
+                            ColorUtils.calculateContrast(background, faceOnCard) < 1.04)
+                    }
+                    val tick = ContextCompat.getColor(context, R.color.attitude_ticks)
+                    assertTrue("The scale needs readable text contrast in either mode",
+                        ColorUtils.calculateContrast(tick, faceOnCard) >= 4.5)
+                    fun scaleInk(x: Int, y: Int): Boolean {
+                        val pixel = image.getPixel(x, y)
+                        return kotlin.math.abs(Color.red(pixel) - Color.red(tick)) +
+                            kotlin.math.abs(Color.green(pixel) - Color.green(tick)) +
+                            kotlin.math.abs(Color.blue(pixel) - Color.blue(tick)) < 75
+                    }
+                    val labelRows = (47..65).filter { y -> (115..125).any { x -> scaleInk(x, y) } }
+                    assertTrue("Upper scale numbers must render larger than the old seven-pixel glyphs",
+                        labelRows.isNotEmpty() && labelRows.last() - labelRows.first() + 1 >= 9)
+                    assertTrue("Major ticks must reach further into the dial and stay clearly visible",
+                        scaleInk(187, 69))
+                    image.recycle()
+                }
+            }
+        }
+    }
+
+    @Test fun vehicleGroundStaysAtTheTyresAndReadoutsAreTenPercentHigher() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            val context = ContextThemeWrapper(instrumentation.targetContext, R.style.Theme_OpenDiKey)
+            for (mode in AttitudeHorizonView.AxisMode.entries) {
+                val source = BitmapFactory.decodeResource(context.resources,
+                    if (mode == AttitudeHorizonView.AxisMode.ROLL) R.drawable.shark_front else R.drawable.shark_side)
+                val row = IntArray(source.width)
+                val tyreBottom = (source.height - 1 downTo 0).first { y ->
+                    source.getPixels(row, 0, source.width, 0, y, source.width, 1)
+                    row.any { Color.alpha(it) >= 128 }
+                } + 1
+                val photoWidth = if (mode == AttitudeHorizonView.AxisMode.ROLL) 104f * 0.8f else 146f
+                val photoHeight = photoWidth * source.height / source.width
+                val groundOffset = photoHeight * (tyreBottom.toFloat() / source.height - 0.5f)
+                val gauge = AttitudeHorizonView(context).apply { axisMode = mode }
+                for (width in listOf(240, 480)) {
+                    val scale = width / 240f
+                    val height = (252 * scale).toInt()
+                    fun render(angle: Double): Bitmap {
+                        gauge.setAttitude(angle, angle)
+                        gauge.measure(
+                            View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                            View.MeasureSpec.makeMeasureSpec(height, View.MeasureSpec.EXACTLY),
+                        )
+                        gauge.layout(0, 0, width, height)
+                        return Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                            .also { gauge.draw(Canvas(it)) }
+                    }
+                    for (angle in listOf(-45.0, -20.0, 0.0, 20.0, 45.0)) {
+                        val image = render(angle)
+                        val radians = Math.toRadians(angle)
+                        val outsideTyre = (photoWidth / 2 + 6) * if (angle < 0) 1 else -1
+                        val x = ((120 + outsideTyre * kotlin.math.cos(radians) -
+                            groundOffset * kotlin.math.sin(radians)) * scale).toInt()
+                        val y = ((126 + outsideTyre * kotlin.math.sin(radians) +
+                            groundOffset * kotlin.math.cos(radians)) * scale).toInt()
+                        val hasGround = (-1..1).any { dx ->
+                            (-1..1).any { dy ->
+                                val color = image.getPixel(x + dx, y + dy)
+                                Color.green(color) - Color.red(color) > 35 &&
+                                    Color.blue(color) - Color.red(color) > 55
+                            }
+                        }
+                        assertTrue("$mode ground must meet the tyres at $angle degrees ($width px)", hasGround)
+                        image.recycle()
+                    }
+                    val actual = render(0.0)
+                    // Use the same dial background for the reference text's antialiased edges.
+                    val original = requireNotNull(actual.copy(Bitmap.Config.ARGB_8888, true))
+                    val textPaint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
+                        color = ContextCompat.getColor(context, R.color.attitude_accent)
+                        textAlign = Paint.Align.CENTER
+                        textSize = 26f
+                        typeface = Typeface.create("sans-serif-light", Typeface.NORMAL)
+                    }
+                    Canvas(original).apply {
+                        scale(scale, scale)
+                        drawText(context.getString(R.string.vehicle_info_attitude_angle_fmt, 0.0),
+                            120f, 225f - 5f / scale, textPaint)
+                    }
+                    fun readoutBottom(image: Bitmap): Int =
+                        ((232 * scale).toInt() downTo (190 * scale).toInt()).first { y ->
+                            ((75 * scale).toInt()..(165 * scale).toInt()).any { x ->
+                                val color = image.getPixel(x, y)
+                                Color.alpha(color) > 220 &&
+                                    kotlin.math.abs(Color.red(color) - Color.red(textPaint.color)) +
+                                    kotlin.math.abs(Color.green(color) - Color.green(textPaint.color)) +
+                                    kotlin.math.abs(Color.blue(color) - Color.blue(textPaint.color)) < 60
+                            }
+                        }
+                    assertEquals("Raise the $mode readout by ten percent of the gauge height at $width px",
+                        height * 0.1f, (readoutBottom(original) - readoutBottom(actual)).toFloat(), 1f)
+                    actual.recycle()
+                    original.recycle()
+                }
+                source.recycle()
+            }
+        }
+    }
+
+    @Test fun attitudeCardKeepsBothVehicleGaugesVisibleAtDashboardWidths() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            for (night in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
+                val config = Configuration(instrumentation.targetContext.resources.configuration)
+                config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or night
+                val base = instrumentation.targetContext.createConfigurationContext(config)
+                for (theme in listOf(R.style.Theme_OpenDiKey, R.style.Theme_OpenDiKey_Modern)) {
+                    val context = ContextThemeWrapper(base, theme)
+                    val card = LayoutInflater.from(context).inflate(R.layout.view_attitude_block, null)
+                    val roll = card.findViewById<AttitudeHorizonView>(R.id.attitudeRollHorizon)
+                    val pitch = card.findViewById<AttitudeHorizonView>(R.id.attitudePitchHorizon)
+                    pitch.axisMode = AttitudeHorizonView.AxisMode.PITCH
+                    for (width in listOf(160, 300, 420)) {
+                        card.measure(
+                            View.MeasureSpec.makeMeasureSpec(
+                                (width * context.resources.displayMetrics.density).toInt(), View.MeasureSpec.EXACTLY,
+                            ),
+                            View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                        )
+                        card.layout(0, 0, card.measuredWidth, card.measuredHeight)
+                        assertEquals(View.VISIBLE, roll.visibility)
+                        assertEquals(View.VISIBLE, pitch.visibility)
+                        assertTrue("The front-view Roll dial belongs on the left", roll.right < pitch.left)
+                        for (gauge in listOf(roll, pitch)) {
+                            assertTrue("The full circle and title must fit without clipping",
+                                gauge.width > 0 && gauge.height >= gauge.width)
+                            assertTrue(gauge.bottom <= (gauge.parent as View).height)
+                        }
+                        val image = Bitmap.createBitmap(card.width, card.height, Bitmap.Config.ARGB_8888)
+                        card.draw(Canvas(image))
+                        image.recycle()
+                    }
+                }
+            }
+        }
+    }
+
+    @Test fun vehicleGaugesRotateIndependentlyAndKeepRealReadingsWhenVisuallyClamped() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            val context = ContextThemeWrapper(instrumentation.targetContext, R.style.Theme_OpenDiKey)
+            fun render(gauge: AttitudeHorizonView): Bitmap {
+                gauge.measure(
+                    View.MeasureSpec.makeMeasureSpec(240, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(252, View.MeasureSpec.EXACTLY),
+                )
+                gauge.layout(0, 0, 240, 252)
+                return Bitmap.createBitmap(240, 252, Bitmap.Config.ARGB_8888).also { gauge.draw(Canvas(it)) }
+            }
+            fun photo(image: Bitmap) = Bitmap.createBitmap(image, 30, 76, 180, 90)
+            for (mode in AttitudeHorizonView.AxisMode.entries) {
+                val gauge = AttitudeHorizonView(context).apply { axisMode = mode }
+                gauge.setAttitude(0.0, 0.0)
+                val level = render(gauge)
+                gauge.setAttitude(
+                    if (mode == AttitudeHorizonView.AxisMode.PITCH) 24.0 else 0.0,
+                    if (mode == AttitudeHorizonView.AxisMode.ROLL) 24.0 else 0.0,
+                )
+                val tilted = render(gauge)
+                val levelPhoto = photo(level)
+                val tiltedPhoto = photo(tilted)
+                assertFalse("The $mode vehicle must rotate with its own sensor reading", levelPhoto.sameAs(tiltedPhoto))
+                gauge.setAttitude(24.0, 24.0)
+                val otherAxisChanged = render(gauge)
+                assertTrue("The other sensor axis must not affect $mode", tilted.sameAs(otherAxisChanged))
+                gauge.setAttitude(-24.0, -24.0)
+                val opposite = render(gauge)
+                val oppositePhoto = photo(opposite)
+                assertFalse("Negative angles must tilt the photo the other way", tiltedPhoto.sameAs(oppositePhoto))
+                gauge.setAttitude(45.0, 45.0)
+                val limit = render(gauge)
+                gauge.setAttitude(90.0, 90.0)
+                val beyondLimit = render(gauge)
+                val limitPhoto = photo(limit)
+                val beyondPhoto = photo(beyondLimit)
+                assertTrue("Extreme angles must keep the vehicle inside the dial", limitPhoto.sameAs(beyondPhoto))
+                val format = if (mode == AttitudeHorizonView.AxisMode.PITCH)
+                    R.string.vehicle_info_pitch_fmt else R.string.vehicle_info_roll_fmt
+                assertEquals(context.getString(format, String.format(context.resources.configuration.locales[0], "%.1f", 90.0)),
+                    gauge.contentDescription)
+                gauge.setAttitude(null, null)
+                assertEquals(context.getString(format, "\u2014"), gauge.contentDescription)
+                for (image in listOf(level, tilted, levelPhoto, tiltedPhoto, otherAxisChanged, opposite,
+                    oppositePhoto, limit, beyondLimit, limitPhoto, beyondPhoto)) image.recycle()
+            }
+        }
+    }
+
     @Test fun campContentIsCenteredAndRemainsScrollableOnSmallScreens() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.runOnMainSync {

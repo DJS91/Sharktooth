@@ -29,4 +29,9 @@
     <color name="gauge_charge">#FF1F6FD6</color>
     <color name="gauge_fuel">#FF1E9E5A</color>
     <color name="gauge_caution">#FFE0A000</color>
+    <color name="attitude_face">#406FACC4</color>
+    <color name="attitude_edge">#186FACC4</color>
+    <color name="attitude_rim">#88608496</color>
+    <color name="attitude_ticks">#FF345A70</color>
+    <color name="attitude_accent">#FF007EA8</color>
 </resources>

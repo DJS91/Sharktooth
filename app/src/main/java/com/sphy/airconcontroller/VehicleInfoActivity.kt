@@ -18,7 +18,6 @@ import androidx.activity.OnBackPressedCallback
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
-import com.google.android.material.switchmaterial.SwitchMaterial
 import com.sphy.airconcontroller.byd.BydTyreController
 import com.sphy.airconcontroller.byd.BydVehicleInfoController
 import com.sphy.airconcontroller.byd.TabletSocReader
@@ -49,8 +48,6 @@ open class VehicleInfoActivity : HomeActivity() {
     }
     private var dashboardReady = false
     private var sensorManager: SensorManager? = null
-    private var lastPitchDeg: Double? = null
-    private var lastRollDeg: Double? = null
 
     private lateinit var socBar: PercentRow
     private lateinit var sohBar: PercentRow
@@ -70,13 +67,8 @@ open class VehicleInfoActivity : HomeActivity() {
 
     private lateinit var tyreSlots: List<TyreSlot>
     private lateinit var tyreUnboundHint: TextView
-    private lateinit var attitudeView: AttitudeHorizonView
     private lateinit var attitudePitchView: AttitudeHorizonView
     private lateinit var attitudeRollView: AttitudeHorizonView
-    private lateinit var attitudeSplitRow: View
-    private lateinit var attitudeSplitSwitch: SwitchMaterial
-    private lateinit var attitudePitch: TextView
-    private lateinit var attitudeRoll: TextView
     private lateinit var tabletMetaHost: LinearLayout
 
     private val accelListener = object : SensorEventListener {
@@ -87,8 +79,6 @@ open class VehicleInfoActivity : HomeActivity() {
             val az = event.values[2].toDouble()
             val pitch = Math.toDegrees(atan2(-ax, sqrt(ay * ay + az * az)))
             val roll = Math.toDegrees(atan2(ay, az))
-            lastPitchDeg = pitch
-            lastRollDeg = roll
             bindAttitude(pitch, roll)
         }
 
@@ -261,22 +251,10 @@ open class VehicleInfoActivity : HomeActivity() {
         blockHost.addView(tyresBlock)
 
         val attitudeBlock = inflater.inflate(R.layout.view_attitude_block, blockHost, false)
-        attitudeView = attitudeBlock.findViewById(R.id.attitudeHorizon)
         attitudePitchView = attitudeBlock.findViewById(R.id.attitudePitchHorizon)
         attitudeRollView = attitudeBlock.findViewById(R.id.attitudeRollHorizon)
-        attitudeSplitRow = attitudeBlock.findViewById(R.id.attitudeSplitRow)
-        attitudeSplitSwitch = attitudeBlock.findViewById(R.id.attitudeSplitSwitch)
-        attitudePitch = attitudeBlock.findViewById(R.id.attitudePitchText)
-        attitudeRoll = attitudeBlock.findViewById(R.id.attitudeRollText)
         attitudePitchView.axisMode = AttitudeHorizonView.AxisMode.PITCH
         attitudeRollView.axisMode = AttitudeHorizonView.AxisMode.ROLL
-        attitudeSplitSwitch.isChecked = settings.vehicleInfoAttitudeSplit
-        applyAttitudeSplitMode(settings.vehicleInfoAttitudeSplit)
-        attitudeSplitSwitch.setOnCheckedChangeListener { _, checked ->
-            settings.vehicleInfoAttitudeSplit = checked
-            applyAttitudeSplitMode(checked)
-            bindAttitude(lastPitchDeg, lastRollDeg)
-        }
         blockHost.addView(attitudeBlock)
 
         chassisHost = addSimpleBlock(
@@ -302,21 +280,10 @@ open class VehicleInfoActivity : HomeActivity() {
         dashboardReady = true
     }
 
-    private fun applyAttitudeSplitMode(split: Boolean) {
-        attitudeView.visibility = if (split) View.GONE else View.VISIBLE
-        attitudeSplitRow.visibility = if (split) View.VISIBLE else View.GONE
-    }
-
     private fun bindAttitude(pitch: Double?, roll: Double?) {
         if (!dashboardReady) return
-        if (settings.vehicleInfoAttitudeSplit) {
-            attitudePitchView.setAttitude(pitch, roll)
-            attitudeRollView.setAttitude(pitch, roll)
-        } else {
-            attitudeView.setAttitude(pitch, roll)
-        }
-        attitudePitch.text = getString(R.string.vehicle_info_pitch_fmt, fmt(pitch, ""))
-        attitudeRoll.text = getString(R.string.vehicle_info_roll_fmt, fmt(roll, ""))
+        attitudePitchView.setAttitude(pitch, roll)
+        attitudeRollView.setAttitude(pitch, roll)
     }
 
     /** Puts an icon before a card heading. The icons are bundled vectors, so no network is needed. */

@@ -29,6 +29,7 @@ import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.fridge.FridgeControlsFragment
 import com.sphy.airconcontroller.ui.DashboardCard
 import com.sphy.airconcontroller.ui.DashboardGrid
+import com.sphy.airconcontroller.ui.AttitudeHorizonView
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -132,31 +133,50 @@ class DashboardActivityTest {
         }
     }
 
-    @Test fun cardControlTapsStillWorkButHoldingDoesNotToggleTheControl() {
-        val settings = AppSettings(context)
-        val previous = settings.vehicleInfoAttitudeSplit
+    @Test fun bothVehicleGaugesAreShownAndHoldingOneEntersEditMode() {
+        AppSettings(context).dashboardCards = listOf(DashboardCard.ATTITUDE)
+        val page = open()
+        onView(withId(R.id.attitudeRollHorizon)).check(matches(isDisplayed()))
+        onView(withId(R.id.attitudePitchHorizon)).check(matches(isDisplayed()))
+        instrumentation.runOnMainSync {
+            val roll = page.findViewById<AttitudeHorizonView>(R.id.attitudeRollHorizon)
+            val pitch = page.findViewById<AttitudeHorizonView>(R.id.attitudePitchHorizon)
+            assertEquals(AttitudeHorizonView.AxisMode.ROLL, roll.axisMode)
+            assertEquals(AttitudeHorizonView.AxisMode.PITCH, pitch.axisMode)
+            assertTrue(roll.right < pitch.left)
+        }
+        val point = centerOnScreen(page.findViewById(R.id.attitudePitchHorizon))
+        val down = SystemClock.uptimeMillis()
+        injectTouch(down, MotionEvent.ACTION_DOWN, point[0], point[1])
         try {
-            val page = open()
-            onView(withId(R.id.attitudeSplitSwitch)).perform(scrollTo(), click())
-            SystemClock.sleep(1_100)
-            instrumentation.runOnMainSync {
-                assertEquals(!previous, settings.vehicleInfoAttitudeSplit)
-                assertFalse(page.findViewById<DashboardGrid>(R.id.dashboardGrid).editing)
-            }
-            val point = centerOnScreen(page.findViewById(R.id.attitudeSplitSwitch))
-            val down = SystemClock.uptimeMillis()
-            injectTouch(down, MotionEvent.ACTION_DOWN, point[0], point[1])
-            try {
-                SystemClock.sleep(1_200)
-            } finally {
-                injectTouch(down, MotionEvent.ACTION_UP, point[0], point[1])
-            }
-            instrumentation.runOnMainSync {
-                assertTrue(page.findViewById<DashboardGrid>(R.id.dashboardGrid).editing)
-                assertEquals("Holding a control must cancel its normal click", !previous, settings.vehicleInfoAttitudeSplit)
-            }
+            SystemClock.sleep(1_200)
         } finally {
-            settings.vehicleInfoAttitudeSplit = previous
+            injectTouch(down, MotionEvent.ACTION_UP, point[0], point[1])
+        }
+        instrumentation.runOnMainSync {
+            assertTrue(page.findViewById<DashboardGrid>(R.id.dashboardGrid).editing)
+            assertEquals(listOf(DashboardCard.ATTITUDE), AppSettings(context).dashboardCards)
+        }
+    }
+
+    @Test fun fridgeCardTapsOpenControlsButHoldingOnlyEntersEditMode() {
+        AppSettings(context).dashboardCards = listOf(DashboardCard.EVAKOOL_FRIDGE)
+        val page = open()
+        onView(withId(R.id.dashboardFridgeCard)).perform(click())
+        onView(withId(R.id.fridgeGraph)).inRoot(isDialog()).check(matches(isDisplayed()))
+        onView(withId(R.id.fridgeBack)).inRoot(isDialog()).perform(click())
+        val point = centerOnScreen(page.findViewById(R.id.dashboardFridgeCard))
+        val down = SystemClock.uptimeMillis()
+        injectTouch(down, MotionEvent.ACTION_DOWN, point[0], point[1])
+        try {
+            SystemClock.sleep(1_200)
+        } finally {
+            injectTouch(down, MotionEvent.ACTION_UP, point[0], point[1])
+        }
+        instrumentation.runOnMainSync {
+            assertTrue(page.findViewById<DashboardGrid>(R.id.dashboardGrid).editing)
+            assertTrue("Holding a card must cancel its normal action",
+                page.supportFragmentManager.fragments.none { it is FridgeControlsFragment })
         }
     }
 

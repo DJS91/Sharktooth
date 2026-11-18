@@ -392,7 +392,9 @@
   <string name="vehicle_info_block_tpms">TPMS</string>
   <string name="vehicle_info_block_imu">Tablet IMU</string>
   <string name="vehicle_info_block_attitude">Pitch / roll</string>
-  <string name="vehicle_info_attitude_split">Split</string>
+  <string name="vehicle_info_roll_label">Roll</string>
+  <string name="vehicle_info_pitch_label">Pitch</string>
+  <string name="vehicle_info_attitude_angle_fmt">%1$.1f°</string>
   <string name="vehicle_info_block_tablet">Head unit</string>
   <string name="vehicle_info_row_cpu">CPU</string>
   <string name="vehicle_info_row_ram">RAM</string>
