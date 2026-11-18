@@ -17,6 +17,9 @@ import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import androidx.core.content.ContextCompat
 import com.sphy.airconcontroller.ui.ColorSettingCard
+import com.sphy.airconcontroller.ui.DashboardCard
+import com.sphy.airconcontroller.ui.DashboardGrid
+import com.sphy.airconcontroller.ui.DashboardLayout
 import org.junit.Assert.*
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -282,7 +285,7 @@ class HomeLayoutTest {
         }
     }
 
-    @Test fun dashboardColumnsUsePageHeightWithoutAHeading() {
+    @Test fun dashboardFillsThreeColumnsLeftToRightAndUsesOneFullHeightScroll() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             val context = ContextThemeWrapper(
                 InstrumentationRegistry.getInstrumentation().targetContext,
@@ -291,20 +294,73 @@ class HomeLayoutTest {
             val density = context.resources.displayMetrics.density
             for ((width, height) in listOf(640 to 480, 1120 to 640)) {
                 val page = LayoutInflater.from(context).inflate(R.layout.activity_vehicle_info, null) as ViewGroup
+                val grid = page.findViewById<DashboardGrid>(R.id.dashboardGrid)
+                grid.initialize(DashboardLayout(), DashboardCard.entries.associateWith {
+                    TextView(context).apply {
+                        text = context.getString(it.title)
+                        minimumHeight = (100 * density).toInt()
+                    }
+                })
                 page.measure(
                     View.MeasureSpec.makeMeasureSpec((width * density).toInt(), View.MeasureSpec.EXACTLY),
                     View.MeasureSpec.makeMeasureSpec((height * density).toInt(), View.MeasureSpec.EXACTLY),
                 )
                 page.layout(0, 0, page.measuredWidth, page.measuredHeight)
                 assertNull(page.findViewById<View>(R.id.homePageTitle))
-                for (id in listOf(R.id.vehicleColBattery, R.id.vehicleColDynamics, R.id.vehicleColTyres)) {
-                    val scroll = page.findViewById<View>(id).parent as View
-                    val bounds = Rect()
-                    scroll.getDrawingRect(bounds)
-                    page.offsetDescendantRectToMyCoords(scroll, bounds)
-                    assertEquals("Cards should start at the page gutter, not below a title", (16 * density).toInt(), bounds.top)
-                    assertEquals(page.height - (16 * density).toInt(), bounds.bottom)
+                val scroll = page.findViewById<View>(R.id.dashboardScroll)
+                assertEquals((16 * density).toInt(), scroll.top)
+                assertEquals(page.height - (16 * density).toInt(), scroll.bottom)
+                assertSame(scroll, grid.parent)
+                assertEquals(3, grid.childCount)
+                val slots = (0 until grid.childCount).flatMap { rowIndex ->
+                    val row = grid.getChildAt(rowIndex) as ViewGroup
+                    assertEquals(3, row.childCount)
+                    (0 until row.childCount).map { row.getChildAt(it) }
                 }
+                assertEquals(DashboardCard.entries, slots.map { it.tag })
+                slots.chunked(3).forEach { row ->
+                    assertTrue(row[0].left < row[1].left && row[1].left < row[2].left)
+                    assertEquals(row[0].width.toFloat(), row[2].width.toFloat(), 1f)
+                    assertTrue(row.all { it.height >= (100 * density).toInt() })
+                }
+                grid.setEditing(true)
+                assertEquals("Plus occupies the first slot of a new row after nine cards", 4, grid.childCount)
+                val lastRow = grid.getChildAt(3) as ViewGroup
+                val plusSlot = lastRow.getChildAt(0) as ViewGroup
+                assertEquals(context.getString(R.string.dashboard_add_card), plusSlot.getChildAt(0).contentDescription)
+            }
+        }
+    }
+
+    @Test fun dashboardEditInstructionsMatchCardTitlesAndAreCenteredOnThePage() {
+        InstrumentationRegistry.getInstrumentation().runOnMainSync {
+            val context = ContextThemeWrapper(
+                InstrumentationRegistry.getInstrumentation().targetContext, R.style.Theme_OpenDiKey,
+            )
+            val title = LayoutInflater.from(context).inflate(R.layout.view_info_block, null)
+                .findViewById<TextView>(R.id.infoBlockTitle)
+            val density = context.resources.displayMetrics.density
+            for (width in listOf(640, 1120)) {
+                val page = LayoutInflater.from(context).inflate(R.layout.activity_vehicle_info, null) as ViewGroup
+                page.findViewById<View>(R.id.dashboardEditToolbar).visibility = View.VISIBLE
+                page.measure(
+                    View.MeasureSpec.makeMeasureSpec((width * density).toInt(), View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec((640 * density).toInt(), View.MeasureSpec.EXACTLY),
+                )
+                page.layout(0, 0, page.measuredWidth, page.measuredHeight)
+                val hint = page.findViewById<TextView>(R.id.dashboardEditHint)
+                val done = page.findViewById<View>(R.id.dashboardDone)
+                val bounds = Rect()
+                hint.getDrawingRect(bounds)
+                page.offsetDescendantRectToMyCoords(hint, bounds)
+                assertEquals(page.width / 2f, bounds.exactCenterX(), 1f)
+                assertEquals(Gravity.CENTER, hint.gravity)
+                assertEquals(title.textSize, hint.textSize, 0f)
+                assertEquals(title.typeface, hint.typeface)
+                assertEquals(title.currentTextColor, hint.currentTextColor)
+                assertTrue("Instructions must not overlap Done", hint.right <= done.left)
+                assertTrue("Wrapped instructions should fit without clipping",
+                    hint.layout.height <= hint.height - hint.compoundPaddingTop - hint.compoundPaddingBottom)
             }
         }
     }

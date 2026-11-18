@@ -1,5 +1,6 @@
 package com.sphy.airconcontroller
 
+import android.content.Intent
 import android.hardware.Sensor
 import android.hardware.SensorEvent
 import android.hardware.SensorEventListener
@@ -13,6 +14,7 @@ import android.widget.TextView
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
 import androidx.core.content.ContextCompat
+import androidx.activity.OnBackPressedCallback
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -22,6 +24,9 @@ import com.sphy.airconcontroller.byd.BydVehicleInfoController
 import com.sphy.airconcontroller.byd.TabletSocReader
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.ui.AttitudeHorizonView
+import com.sphy.airconcontroller.ui.DashboardCard
+import com.sphy.airconcontroller.ui.DashboardGrid
+import com.sphy.airconcontroller.ui.DashboardLayout
 import com.sphy.airconcontroller.ui.PercentBar
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.delay
@@ -31,14 +36,15 @@ import kotlinx.coroutines.withContext
 import kotlin.math.atan2
 import kotlin.math.sqrt
 
-/** Live vehicle dashboard — battery, dynamics, tyres in three blue-bordered columns. */
+/** Live vehicle cards in a saved, editable three-column dashboard. */
 open class VehicleInfoActivity : HomeActivity() {
     private lateinit var info: BydVehicleInfoController
     private lateinit var tabletSoc: TabletSocReader
     private lateinit var settings: AppSettings
-    private lateinit var colBattery: LinearLayout
-    private lateinit var colDynamics: LinearLayout
-    private lateinit var colTyres: LinearLayout
+    private lateinit var dashboardGrid: DashboardGrid
+    private val editBackCallback = object : OnBackPressedCallback(false) {
+        override fun handleOnBackPressed() = setDashboardEditing(false)
+    }
     private var dashboardReady = false
     private var sensorManager: SensorManager? = null
     private var lastPitchDeg: Double? = null
@@ -94,11 +100,16 @@ open class VehicleInfoActivity : HomeActivity() {
         info = BydVehicleInfoController(this)
         tabletSoc = TabletSocReader(this)
         settings = AppSettings(this)
-        colBattery = findViewById(R.id.vehicleColBattery)
-        colDynamics = findViewById(R.id.vehicleColDynamics)
-        colTyres = findViewById(R.id.vehicleColTyres)
+        dashboardGrid = findViewById(R.id.dashboardGrid)
 
         buildDashboard()
+        dashboardGrid.onCardsChanged = { settings.dashboardCards = it }
+        dashboardGrid.onEditRequested = ::enterDashboardEditMode
+        onBackPressedDispatcher.addCallback(this, editBackCallback)
+        findViewById<View>(R.id.dashboardDone).setOnClickListener { setDashboardEditing(false) }
+        setDashboardEditing(savedInstanceState?.getBoolean(STATE_EDITING) == true ||
+            intent.getBooleanExtra(EXTRA_EDIT_DASHBOARD, false))
+        intent.removeExtra(EXTRA_EDIT_DASHBOARD)
 
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
@@ -138,6 +149,27 @@ open class VehicleInfoActivity : HomeActivity() {
         }
     }
 
+    override fun onNewIntent(intent: Intent) {
+        super.onNewIntent(intent)
+        if (intent.getBooleanExtra(EXTRA_EDIT_DASHBOARD, false)) {
+            enterDashboardEditMode()
+            intent.removeExtra(EXTRA_EDIT_DASHBOARD)
+        }
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        outState.putBoolean(STATE_EDITING, dashboardGrid.editing)
+        super.onSaveInstanceState(outState)
+    }
+
+    fun enterDashboardEditMode() = setDashboardEditing(true)
+
+    private fun setDashboardEditing(editing: Boolean) {
+        dashboardGrid.setEditing(editing)
+        findViewById<View>(R.id.dashboardEditToolbar).visibility = if (editing) View.VISIBLE else View.GONE
+        editBackCallback.isEnabled = editing
+    }
+
     override fun onStop() {
         sensorManager?.unregisterListener(accelListener)
         sensorManager = null
@@ -147,9 +179,10 @@ open class VehicleInfoActivity : HomeActivity() {
     private fun buildDashboard() {
         if (dashboardReady) return
         val inflater = LayoutInflater.from(this)
+        // Build every card once; removing a card only detaches its view, preserving live bindings.
+        val blockHost = LinearLayout(this)
 
-        // —— Battery column ——
-        val batteryBlock = inflater.inflate(R.layout.view_info_block, colBattery, false)
+        val batteryBlock = inflater.inflate(R.layout.view_info_block, blockHost, false)
         batteryBlock.findViewById<TextView>(R.id.infoBlockTitle).apply {
             text = getString(R.string.vehicle_info_block_battery)
             setTitleIcon(R.drawable.ic_card_battery)
@@ -160,22 +193,20 @@ open class VehicleInfoActivity : HomeActivity() {
         socBar = addPercentRow(batteryMetaHost, getString(R.string.vehicle_info_row_soc), R.color.gauge_charge)
         sohBar = addPercentRow(batteryMetaHost, getString(R.string.vehicle_info_row_soh), R.color.gauge_charge)
         fuelBar = addPercentRow(batteryMetaHost, getString(R.string.vehicle_info_row_fuel), R.color.gauge_fuel)
-        colBattery.addView(batteryBlock)
+        blockHost.addView(batteryBlock)
 
         consumptionHost = addSimpleBlock(
-            colBattery,
+            blockHost,
             getString(R.string.vehicle_info_block_consumption),
             R.drawable.ic_card_consumption,
         )
         tabletMetaHost = addSimpleBlock(
-            colBattery,
+            blockHost,
             getString(R.string.vehicle_info_block_tablet),
             R.drawable.ic_card_head_unit,
         )
-        stretchColumnBlocks(colBattery)
 
-        // —— Dynamics column ——
-        val driveBlock = inflater.inflate(R.layout.view_info_block, colDynamics, false)
+        val driveBlock = inflater.inflate(R.layout.view_info_block, blockHost, false)
         driveBlock.findViewById<TextView>(R.id.infoBlockTitle).apply {
             text = getString(R.string.vehicle_info_block_drive)
             setTitleIcon(R.drawable.ic_card_drive)
@@ -185,22 +216,20 @@ open class VehicleInfoActivity : HomeActivity() {
         driveMetaHost = driveBlock.findViewById(R.id.infoBlockRows)
         accelBar = addPercentRow(driveMetaHost, getString(R.string.vehicle_info_row_accel), R.color.gauge_caution)
         brakeBar = addPercentRow(driveMetaHost, getString(R.string.vehicle_info_row_brake), R.color.gauge_caution)
-        colDynamics.addView(driveBlock)
+        blockHost.addView(driveBlock)
 
         mileageHost = addSimpleBlock(
-            colDynamics,
+            blockHost,
             getString(R.string.vehicle_info_block_mileage),
             R.drawable.ic_card_mileage,
         )
         engineHost = addSimpleBlock(
-            colDynamics,
+            blockHost,
             getString(R.string.vehicle_info_block_engine),
             R.drawable.ic_card_engine,
         )
-        stretchColumnBlocks(colDynamics)
 
-        // —— Tyres / attitude column ——
-        val tyresBlock = inflater.inflate(R.layout.view_tyres_block, colTyres, false)
+        val tyresBlock = inflater.inflate(R.layout.view_tyres_block, blockHost, false)
         val slotsRow = tyresBlock.findViewById<LinearLayout>(R.id.tyreSlotsRow)
         tyreUnboundHint = TextView(this).apply {
             setTextColor(ContextCompat.getColor(this@VehicleInfoActivity, R.color.text_muted))
@@ -225,9 +254,9 @@ open class VehicleInfoActivity : HomeActivity() {
                 temp = slot.findViewById(R.id.tyreTempText),
             )
         }
-        colTyres.addView(tyresBlock)
+        blockHost.addView(tyresBlock)
 
-        val attitudeBlock = inflater.inflate(R.layout.view_attitude_block, colTyres, false)
+        val attitudeBlock = inflater.inflate(R.layout.view_attitude_block, blockHost, false)
         attitudeView = attitudeBlock.findViewById(R.id.attitudeHorizon)
         attitudePitchView = attitudeBlock.findViewById(R.id.attitudePitchHorizon)
         attitudeRollView = attitudeBlock.findViewById(R.id.attitudeRollHorizon)
@@ -244,14 +273,24 @@ open class VehicleInfoActivity : HomeActivity() {
             applyAttitudeSplitMode(checked)
             bindAttitude(lastPitchDeg, lastRollDeg)
         }
-        colTyres.addView(attitudeBlock)
+        blockHost.addView(attitudeBlock)
 
         chassisHost = addSimpleBlock(
-            colTyres,
+            blockHost,
             getString(R.string.vehicle_info_block_chassis),
             R.drawable.ic_card_chassis,
         )
-        stretchColumnBlocks(colTyres)
+        dashboardGrid.initialize(DashboardLayout(settings.dashboardCards), mapOf(
+            DashboardCard.BATTERY to batteryBlock,
+            DashboardCard.DRIVE to driveBlock,
+            DashboardCard.TYRES to tyresBlock,
+            DashboardCard.CONSUMPTION to consumptionHost.parent as View,
+            DashboardCard.MILEAGE to mileageHost.parent as View,
+            DashboardCard.ATTITUDE to attitudeBlock,
+            DashboardCard.TABLET to tabletMetaHost.parent as View,
+            DashboardCard.ENGINE to engineHost.parent as View,
+            DashboardCard.CHASSIS to chassisHost.parent as View,
+        ))
 
         dashboardReady = true
     }
@@ -271,20 +310,6 @@ open class VehicleInfoActivity : HomeActivity() {
         }
         attitudePitch.text = getString(R.string.vehicle_info_pitch_fmt, fmt(pitch, ""))
         attitudeRoll.text = getString(R.string.vehicle_info_roll_fmt, fmt(roll, ""))
-    }
-
-    /** Share leftover column height across blocks; drop last bottom margin so they sit flush. */
-    private fun stretchColumnBlocks(col: LinearLayout) {
-        val last = col.childCount - 1
-        for (i in 0..last) {
-            val child = col.getChildAt(i)
-            val lp = child.layoutParams as LinearLayout.LayoutParams
-            lp.width = LinearLayout.LayoutParams.MATCH_PARENT
-            lp.height = LinearLayout.LayoutParams.WRAP_CONTENT
-            lp.weight = 1f
-            if (i == last) lp.bottomMargin = 0
-            child.layoutParams = lp
-        }
     }
 
     /** Puts an icon before a card heading. The icons are bundled vectors, so no network is needed. */
@@ -565,6 +590,8 @@ open class VehicleInfoActivity : HomeActivity() {
     )
 
     companion object {
+        const val EXTRA_EDIT_DASHBOARD = "com.sphy.airconcontroller.EDIT_DASHBOARD"
+        private const val STATE_EDITING = "dashboard_editing"
         private const val POLL_INTERVAL_MS = 2_000L
         private const val DRIVE_POLL_INTERVAL_MS = 200L
     }

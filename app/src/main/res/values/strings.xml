@@ -1,4 +1,13 @@
 <resources>
+    <string name="dashboard_edit_hint">Edit dashboard: hold a card, then drag it to the insertion marker to reorder.</string>
+    <string name="dashboard_done">Done</string>
+    <string name="dashboard_add_card">Add card</string>
+    <string name="dashboard_add_named_card">Add %1$s</string>
+    <string name="dashboard_card_library">Card library</string>
+    <string name="dashboard_all_cards_added">All available cards are already on your dashboard. Remove a card to make it available here.</string>
+    <string name="dashboard_remove_card">Remove %1$s</string>
+    <string name="dashboard_move_card">Hold and drag %1$s to reorder</string>
+    <string name="dashboard_drag_failed">Could not move the card. Try holding it again.</string>
     <string name="telemetry_title">Home Assistant telemetry</string>
     <string name="telemetry_hint">Sends vehicle, ADAS and climate readings, including VIN and optional location, through the ESP32. The webhook URL may contain a secret; anyone with it may submit data.</string>
     <string name="telemetry_url">HTTPS webhook URL</string>

@@ -3,65 +3,46 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
-    android:background="@android:color/transparent"
     android:orientation="vertical"
+    android:padding="16dp"
     tools:context=".VehicleInfoActivity">
 
-    <LinearLayout
+    <FrameLayout
+        android:id="@+id/dashboardEditToolbar"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:visibility="gone">
+
+        <TextView
+            android:id="@+id/dashboardEditHint"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_gravity="center"
+            android:layout_marginHorizontal="96dp"
+            android:gravity="center"
+            android:text="@string/dashboard_edit_hint"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle2"
+            android:textColor="@color/heading"
+            android:textStyle="bold" />
+
+        <Button
+            android:id="@+id/dashboardDone"
+            android:layout_width="wrap_content"
+            android:layout_height="wrap_content"
+            android:layout_gravity="end|center_vertical"
+            android:text="@string/dashboard_done" />
+    </FrameLayout>
+
+    <ScrollView
+        android:id="@+id/dashboardScroll"
         android:layout_width="match_parent"
         android:layout_height="0dp"
         android:layout_weight="1"
-        android:orientation="horizontal"
-        android:paddingStart="16dp"
-        android:paddingTop="16dp"
-        android:paddingEnd="16dp"
-        android:paddingBottom="16dp">
+        android:overScrollMode="ifContentScrolls">
 
-        <!-- Column 1: Battery / energy -->
-        <ScrollView
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="10dp"
-            android:layout_weight="1"
-            android:fillViewport="true"
-            android:overScrollMode="ifContentScrolls">
-
-            <LinearLayout
-                android:id="@+id/vehicleColBattery"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical" />
-        </ScrollView>
-
-        <!-- Column 2: Dynamics -->
-        <ScrollView
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_marginEnd="10dp"
-            android:layout_weight="1"
-            android:fillViewport="true"
-            android:overScrollMode="ifContentScrolls">
-
-            <LinearLayout
-                android:id="@+id/vehicleColDynamics"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical" />
-        </ScrollView>
-
-        <!-- Column 3: Tyres / IMU -->
-        <ScrollView
-            android:layout_width="0dp"
-            android:layout_height="match_parent"
-            android:layout_weight="1"
-            android:fillViewport="true"
-            android:overScrollMode="ifContentScrolls">
-
-            <LinearLayout
-                android:id="@+id/vehicleColTyres"
-                android:layout_width="match_parent"
-                android:layout_height="match_parent"
-                android:orientation="vertical" />
-        </ScrollView>
-    </LinearLayout>
+        <com.sphy.airconcontroller.ui.DashboardGrid
+            android:id="@+id/dashboardGrid"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content" />
+    </ScrollView>
 </LinearLayout>

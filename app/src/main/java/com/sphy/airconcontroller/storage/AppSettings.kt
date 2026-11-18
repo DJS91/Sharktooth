@@ -1,12 +1,14 @@
 package com.sphy.airconcontroller.storage
 
 import android.content.Context
+import android.util.Log
 import com.sphy.airconcontroller.dikey.ButtonMapSlot
 import com.sphy.airconcontroller.dikey.DialDisplayType
 import com.sphy.airconcontroller.dikey.DialMapSlot
 import com.sphy.airconcontroller.dikey.LedMode
 import com.sphy.airconcontroller.dikey.LedPosition
 import com.sphy.airconcontroller.lighting.LightingPeriod
+import com.sphy.airconcontroller.ui.DashboardCard
 
 /** Which ADAS editor mode is selected in the ADAS screen. */
 enum class AdasEditMode {
@@ -72,6 +74,23 @@ data class LedRestoreSnapshot(
 
 class AppSettings(context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    var dashboardCards: List<DashboardCard>
+        get() {
+            val saved = prefs.getString("dashboard_cards", null) ?: return DashboardCard.entries
+            if (saved.isEmpty()) return emptyList()
+            val cards = saved.split(",").mapNotNull { name ->
+                DashboardCard.entries.find { it.name == name }.also {
+                    if (it == null) Log.w("AppSettings", "Ignoring unknown dashboard card: $name")
+                }
+            }
+            if (cards.distinct().size != cards.size) Log.w("AppSettings", "Removing duplicate dashboard cards")
+            return cards.distinct()
+        }
+        set(value) {
+            require(value.distinct().size == value.size) { "Dashboard cards must be unique" }
+            prefs.edit().putString("dashboard_cards", value.joinToString(",") { it.name }).apply()
+        }
 
     var telemetryEnabled: Boolean
         get() = prefs.getBoolean("telemetry_enabled", false)

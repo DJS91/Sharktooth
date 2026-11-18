@@ -20,6 +20,7 @@ import android.text.style.ForegroundColorSpan
 import android.view.MotionEvent
 import android.view.View
 import android.view.ViewGroup
+import android.view.ViewConfiguration
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.FrameLayout
 import android.widget.Toast
@@ -40,6 +41,7 @@ import com.sphy.airconcontroller.usb.DiKeyUsbBridge
 import com.sphy.airconcontroller.fridge.FridgeTile
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
+import com.sphy.airconcontroller.ui.DashboardGrid
 import com.sphy.airconcontroller.update.AppUpdater
 import com.sphy.airconcontroller.usb.UsbPermissionReceiver
 import kotlinx.coroutines.Dispatchers
@@ -71,6 +73,23 @@ open class HomeActivity : OpenDiKeyActivity() {
     private val adasHoldRunnable = Runnable {
         adasHoldFired = true
         showAdasAutoApplyDialog()
+    }
+    private val dashboardHoldHandler = Handler(Looper.getMainLooper())
+    private var dashboardHoldFired = false
+    private var dashboardHoldCancelled = false
+    private var dashboardDownX = 0f
+    private var dashboardDownY = 0f
+    private val dashboardHoldRunnable = Runnable {
+        dashboardHoldFired = true
+        if (this is VehicleInfoActivity) {
+            enterDashboardEditMode()
+        } else {
+            leavePage {
+                slideNavigationHighlight(MainActivity::class.java) {
+                    openPage(MainActivity::class.java, editDashboard = true)
+                }
+            }
+        }
     }
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -130,8 +149,40 @@ open class HomeActivity : OpenDiKeyActivity() {
                 }
             }
         }
-        findViewById<android.view.View>(R.id.homeVehicleInfoButton).setOnClickListener {
-            navigateTo(MainActivity::class.java)
+        findViewById<View>(R.id.homeVehicleInfoButton).apply {
+            setOnClickListener { navigateTo(MainActivity::class.java) }
+            setOnTouchListener { view, event ->
+                when (event.actionMasked) {
+                    MotionEvent.ACTION_DOWN -> {
+                        dashboardHoldFired = false
+                        dashboardHoldCancelled = false
+                        dashboardDownX = event.x
+                        dashboardDownY = event.y
+                        dashboardHoldHandler.postDelayed(dashboardHoldRunnable, DashboardGrid.EDIT_HOLD_MS)
+                        true
+                    }
+                    MotionEvent.ACTION_MOVE -> {
+                        val slop = ViewConfiguration.get(this@HomeActivity).scaledTouchSlop
+                        if (kotlin.math.abs(event.x - dashboardDownX) > slop ||
+                            kotlin.math.abs(event.y - dashboardDownY) > slop) {
+                            dashboardHoldCancelled = true
+                            dashboardHoldHandler.removeCallbacks(dashboardHoldRunnable)
+                        }
+                        true
+                    }
+                    MotionEvent.ACTION_UP -> {
+                        dashboardHoldHandler.removeCallbacks(dashboardHoldRunnable)
+                        if (!dashboardHoldFired && !dashboardHoldCancelled) view.performClick()
+                        true
+                    }
+                    MotionEvent.ACTION_CANCEL -> {
+                        dashboardHoldCancelled = true
+                        dashboardHoldHandler.removeCallbacks(dashboardHoldRunnable)
+                        true
+                    }
+                    else -> false
+                }
+            }
         }
         findViewById<android.view.View>(R.id.homeAdasButton).let { adasButton ->
             adasButton.setOnClickListener {
@@ -267,8 +318,9 @@ open class HomeActivity : OpenDiKeyActivity() {
         }
     }
 
-    private fun openPage(destination: Class<out HomeActivity>) {
+    private fun openPage(destination: Class<out HomeActivity>, editDashboard: Boolean = false) {
         val intent = Intent(this, destination).putExtra(EXTRA_PAGE_TRANSITION, true)
+        if (editDashboard) intent.putExtra(VehicleInfoActivity.EXTRA_EDIT_DASHBOARD, true)
         if (destination == MainActivity::class.java) {
             intent.addFlags(Intent.FLAG_ACTIVITY_CLEAR_TOP or Intent.FLAG_ACTIVITY_SINGLE_TOP)
         }
@@ -529,11 +581,14 @@ open class HomeActivity : OpenDiKeyActivity() {
     }
 
     override fun onStop() {
+        dashboardHoldCancelled = true
+        dashboardHoldHandler.removeCallbacks(dashboardHoldRunnable)
         fridgeTile.stop()
         super.onStop()
     }
 
     override fun onDestroy() {
+        dashboardHoldHandler.removeCallbacks(dashboardHoldRunnable)
         adasHoldHandler.removeCallbacks(adasHoldRunnable)
         super.onDestroy()
     }
