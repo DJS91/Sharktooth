@@ -55,6 +55,48 @@ internal class CampCarPlay(private val connect: () -> Client?) {
         private const val PACKAGE = "com.ts.carplay"
         private const val API = "com.ts.carplay.common.aidl.ICarPlayService"
 
+        internal fun resolveDeviceIds(devices: List<Any>, connections: () -> Collection<*>): List<String> {
+            fun text(device: Any, getter: String) =
+                (device.javaClass.getMethod(getter).invoke(device) as? String)?.takeIf { it.isNotBlank() }
+            val connectedDevices by lazy(connections)
+            return devices.map { device ->
+                text(device, "getDeviceId") ?: run {
+                    val bluetooth = text(device, "getBtAddr")
+                    val usb = text(device, "getUsbSerialNumber")
+                    check(bluetooth != null || usb != null) {
+                        "Connected CarPlay device has no ID or transport identity; no disconnect sent."
+                    }
+                    val matches = connectedDevices.filterNotNull().filter { candidate ->
+                        if (bluetooth != null) bluetooth.equals(text(candidate, "getBtAddr"), ignoreCase = true)
+                        else usb == text(candidate, "getUsbSerialNumber")
+                    }
+                    check(matches.size == 1) {
+                        "Cannot uniquely match active CarPlay to the OEM connection manager; no disconnect sent."
+                    }
+                    checkNotNull(text(matches.single(), "getDeviceId")) {
+                        "Connected CarPlay device ID unavailable in the OEM connection manager; no disconnect sent."
+                    }
+                }
+            }.distinct()
+        }
+
+        private fun connectionDevices(app: Context, loader: ClassLoader): Collection<*> {
+            val api = Class.forName("ts.car.service.dcm.IDeviceConnectionManager", true, loader)
+            val manager = checkNotNull(Class.forName("com.ts.car.core.ServiceProvider", true, loader)
+                .getMethod("get", Class::class.java, Context::class.java).invoke(null, api, app)) {
+                "OEM connection manager unavailable."
+            }
+            repeat(20) {
+                if (api.getMethod("isServiceConnected").invoke(manager) == true) {
+                    return checkNotNull(api.getMethod("getDeviceList").invoke(manager) as? Map<*, *>) {
+                        "OEM connection-manager device list unavailable."
+                    }.values.toList()
+                }
+                Thread.sleep(250)
+            }
+            error("OEM connection manager connection timed out.")
+        }
+
         private fun bind(app: Context): Client? {
             val info = try {
                 app.packageManager.getApplicationInfo(PACKAGE, 0)
@@ -107,13 +149,12 @@ internal class CampCarPlay(private val connect: () -> Client?) {
                                         device.javaClass.getMethod("getDeviceStatus").invoke(device) == connected
                                     }
                             }
-                            return devices.map { device ->
-                                checkNotNull(device.javaClass.getMethod("getDeviceId").invoke(device) as? String) {
-                                    "Invalid connected CarPlay device ID."
-                                }
-                            }
+                            return resolveDeviceIds(devices) { connectionDevices(app, loader) }
                         } catch (e: ReflectiveOperationException) {
                             throw IllegalStateException("Cannot identify connected CarPlay device: ${e.message}", e)
+                        } catch (e: InterruptedException) {
+                            Thread.currentThread().interrupt()
+                            throw IllegalStateException("CarPlay device lookup interrupted.", e)
                         }
                     }
 

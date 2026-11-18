@@ -7,6 +7,7 @@ import android.os.Build
 import android.widget.CheckBox
 import android.widget.Button
 import android.view.ViewGroup
+import android.view.View
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.sphy.airconcontroller.byd.BydAcController
@@ -82,7 +83,7 @@ class CampModeTest {
                     val group = list.getChildAt(column) as ViewGroup
                     (0 until group.childCount).map { group.getChildAt(it) as CheckBox }
                 }
-                val ids = listOf(R.id.campStepDikey, R.id.campStepCarPlay, R.id.campStepBluetooth, R.id.campStepClimate, R.id.campStepWindows, R.id.campStepHeadlights,
+                val ids = listOf(R.id.campStepDikey, R.id.campStepCarPlay, R.id.campStepBluetooth, R.id.campStepClimate, R.id.campStepWindows,
                     R.id.campStepDrls, R.id.campStepCluster, R.id.campStepHud, R.id.campStepMedia, R.id.campStepScreen)
                 assertEquals(ids, rows.map { it.id })
                 for ((index, step) in CampStep.entries.withIndex()) {
@@ -97,6 +98,24 @@ class CampModeTest {
                 assertTrue(rows.none { it.text.contains("applying") })
                 activity.renderChecklist(CampModeSession.State(false, false, ""))
                 assertTrue(rows.none { it.isChecked })
+                val idle = CampModeSession.State(false, false, "")
+                activity.renderControls(idle, parkConfirmed = false)
+                assertEquals(View.GONE, enable.visibility)
+                assertFalse(enable.isEnabled)
+                activity.renderControls(idle, parkConfirmed = true)
+                assertEquals(View.VISIBLE, enable.visibility)
+                assertTrue(enable.isEnabled)
+                activity.renderControls(idle, parkConfirmed = false)
+                assertEquals(View.GONE, enable.visibility)
+                activity.renderControls(CampModeSession.State(true, false, "", remindHeadlights = true),
+                    parkConfirmed = false)
+                assertEquals(View.VISIBLE, enable.visibility)
+                assertTrue(enable.isEnabled)
+                assertEquals(activity.getString(R.string.camp_mode_retry_restore), enable.text.toString())
+                val reminder = activity.findViewById<View>(R.id.campModeHeadlightReminder)
+                assertEquals(View.VISIBLE, reminder.visibility)
+                activity.renderControls(idle, parkConfirmed = true)
+                assertEquals(View.GONE, reminder.visibility)
             }
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
@@ -130,12 +149,15 @@ class CampModeTest {
         val saved = CampSavedState(
             BydAcController.AcSnapshot(true, true, null, false, 21, null, null, 4,
                 2, 1, 2, 1, false, null, true, false, true),
-            0, true, false, 2,
+            0, true, false,
             LedRestoreSnapshot((1..3).associateWith {
                 LedBarState(LedMode.ON.code, LedRgb(4 * it, 8 * it, 16 * it))
             }, LedRgb(4, 8, 16)), true, 7, 2, mediaUsesCarMute = true,
         )
-        assertEquals(saved, CampModeController.decodeSaved(CampModeController.encodeSaved(saved)))
+        val encoded = CampModeController.encodeSaved(saved)
+        assertFalse(encoded.has("headlightMode"))
+        assertEquals(saved, CampModeController.decodeSaved(encoded))
+        assertEquals(saved, CampModeController.decodeSaved(encoded.put("headlightMode", 2)))
         val legacy = CampModeController.encodeSaved(saved).apply {
             remove("headlightMode")
             remove("dikeyLighting")
@@ -144,7 +166,7 @@ class CampModeTest {
             remove("hudState")
             remove("mediaUsesCarMute")
         }
-        assertEquals(saved.copy(headlightMode = null, dikeyLighting = null, manageHeadunitBluetooth = false,
+        assertEquals(saved.copy(dikeyLighting = null, manageHeadunitBluetooth = false,
             clusterBrightness = null, hudState = null, mediaUsesCarMute = false),
             CampModeController.decodeSaved(legacy))
     }

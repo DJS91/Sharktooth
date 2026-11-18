@@ -16,7 +16,7 @@ class CampModeSessionTest {
     private val saved = CampSavedState(
         BydAcController.AcSnapshot(true, true, null, true, 22, 23, null, 3,
             1, 1, 2, 1, false, false, false, false, true),
-        7, false, true, 2,
+        7, false, true,
         LedRestoreSnapshot((1..3).associateWith { LedBarState(LedMode.ON.code, LedRgb(4, 8, 16)) }, LedRgb(2, 4, 8)),
         true, 7, 1, mediaUsesCarMute = true,
     )
@@ -26,7 +26,7 @@ class CampModeSessionTest {
         var stored: CampSavedState? = null
         var fail: String? = null
         var failPersist = false
-        var savedHeadlightMode: Int? = 2
+        var remindHeadlights = false
         var connectedAtEntry = true
         var onClose: (suspend () -> Unit)? = null
         var onScreen: (suspend () -> Unit)? = null
@@ -41,8 +41,7 @@ class CampModeSessionTest {
         override suspend fun save(): CampSavedState {
             calls += "save"
             check(fail != "save") { "Park could not be confirmed." }
-            return saved.copy(headlightMode = savedHeadlightMode,
-                dikeyLighting = if (connectedAtEntry) saved.dikeyLighting else null)
+            return saved.copy(dikeyLighting = if (connectedAtEntry) saved.dikeyLighting else null)
         }
         override suspend fun dikeyLightsOff(saved: CampSavedState) =
             result(if (saved.dikeyLighting == null) "dikey-skipped" else "dikey")
@@ -53,7 +52,6 @@ class CampModeSessionTest {
             result(if (saved.dikeyLighting == null) "enable-dikey-skipped" else "enable-dikey")
         override suspend fun climateOff() = result("climate")
         override suspend fun closeWindows(): CampResult { onClose?.invoke(); return result("windows") }
-        override suspend fun headlightsOff() = result("headlights")
         override suspend fun drlOff() = result("drl")
         override suspend fun dimCluster() = result("cluster")
         override suspend fun hudOff() = result("hud")
@@ -69,10 +67,6 @@ class CampModeSessionTest {
             return result("restore-media")
         }
         override suspend fun restoreDrl(saved: CampSavedState) = result("restore-drl")
-        override suspend fun restoreHeadlights(saved: CampSavedState): CampResult {
-            assertEquals(savedHeadlightMode, saved.headlightMode)
-            return result("restore-headlights")
-        }
         override suspend fun restoreCluster(saved: CampSavedState): CampResult {
             assertEquals(7, saved.clusterBrightness)
             return result("restore-cluster")
@@ -81,10 +75,13 @@ class CampModeSessionTest {
             assertEquals(1, saved.hudState)
             return result("restore-hud")
         }
-        override suspend fun persist(saved: CampSavedState?, report: String, completedSteps: Set<CampStep>) {
+        override suspend fun persist(
+            saved: CampSavedState?, report: String, completedSteps: Set<CampStep>, remindHeadlights: Boolean,
+        ) {
             if (failPersist) throw IOException("Storage unavailable")
             stored = saved
             this.completedSteps = completedSteps
+            this.remindHeadlights = remindHeadlights
             calls += "persist"
             onPersist?.invoke(report)
         }
@@ -102,7 +99,7 @@ class CampModeSessionTest {
         }
         session.enter()
         assertEquals(listOf("save", "persist"), actions.calls.take(2))
-        assertEquals(listOf("save", "dikey", "carplay", "bluetooth", "climate", "windows", "headlights", "drl", "cluster", "hud", "mute", "screen"),
+        assertEquals(listOf("save", "dikey", "carplay", "bluetooth", "climate", "windows", "drl", "cluster", "hud", "mute", "screen"),
             actions.calls.filter { it != "persist" })
         session.enter()
         assertEquals(1, actions.calls.count { it == "save" })
@@ -126,7 +123,7 @@ class CampModeSessionTest {
         assertFalse(actions.calls.contains("screen"))
         assertTrue(session.state.value.report.contains("NOT CONFIRMED"))
         assertTrue(session.state.value.active)
-        assertEquals(setOf(CampStep.DIKEY, CampStep.CARPLAY, CampStep.BLUETOOTH, CampStep.CLIMATE, CampStep.WINDOWS, CampStep.HEADLIGHTS),
+        assertEquals(setOf(CampStep.DIKEY, CampStep.CARPLAY, CampStep.BLUETOOTH, CampStep.CLIMATE, CampStep.WINDOWS),
             session.state.value.completedSteps)
         session.exit()
         assertFalse(session.state.value.active)
@@ -143,7 +140,7 @@ class CampModeSessionTest {
             val session = CampModeSession(actions)
             session.enter()
             assertFalse(session.state.value.busy)
-            assertFalse(actions.calls.any { it in listOf("dikey", "carplay", "bluetooth", "climate", "windows", "headlights", "drl", "cluster", "hud", "mute", "screen") })
+            assertFalse(actions.calls.any { it in listOf("dikey", "carplay", "bluetooth", "climate", "windows", "drl", "cluster", "hud", "mute", "screen") })
             assertTrue(session.state.value.report.contains("Entry failed"))
             assertEquals(failStorage, session.state.value.active)
         }
@@ -156,7 +153,7 @@ class CampModeSessionTest {
         assertTrue(recovered.state.value.active)
         assertEquals(saved, actions.stored)
         assertTrue(actions.calls.containsAll(listOf("restore-cluster", "restore-hud", "enable-bluetooth", "enable-dikey",
-            "restore-media", "restore-headlights", "restore-drl", "restore-climate")))
+            "restore-media", "restore-drl", "restore-climate")))
         actions.fail = null
         recovered.exit()
         assertFalse(recovered.state.value.active)
@@ -186,38 +183,50 @@ class CampModeSessionTest {
         assertFalse(actions.calls.contains("screen"))
     }
 
-    @Test fun unreadableOriginalAndFailedHeadlightStepDoNotBlockOtherStepsOrInventSuccess() = runBlocking {
-        val actions = Actions().apply { fail = "headlights"; savedHeadlightMode = null }
-        val session = CampModeSession(actions)
-        session.enter()
-        assertTrue(actions.calls.containsAll(listOf("headlights", "drl", "cluster", "hud", "mute", "screen")))
-        assertEquals(saved.copy(headlightMode = null), actions.stored)
-        assertEquals(CampStep.entries.toSet() - CampStep.HEADLIGHTS, session.state.value.completedSteps)
-        assertTrue(session.state.value.awaitingWake)
-        assertTrue(session.state.value.report.contains("NOT CONFIRMED"))
-        assertTrue(session.state.value.report.contains("automatic headlight restoration is unavailable"))
-        val recovered = CampModeSession(actions, actions.stored, session.state.value.report,
-            actions.completedSteps)
+    @Test fun legacyHeadlightProgressIsIgnoredWithoutLosingScreenWakeRestoration() = runBlocking {
+        val actions = Actions()
+        val steps = CampStep.decodeSaved(setOf("HEADLIGHTS", "MEDIA", "SCREEN"))
+        assertEquals(setOf(CampStep.MEDIA, CampStep.SCREEN), steps)
+        val recovered = CampModeSession(actions, saved, completedSteps = steps)
+        assertTrue(recovered.state.value.awaitingWake)
         recovered.onScreenWake()
         assertFalse(recovered.state.value.active)
-        assertTrue(actions.calls.containsAll(listOf("restore-cluster", "restore-hud", "restore-climate")))
+        assertEquals(listOf("restore-cluster", "restore-hud", "enable-bluetooth", "enable-dikey",
+            "restore-media", "restore-drl", "restore-climate"), actions.calls.filter { it != "persist" })
         assertNull(actions.stored)
+        assertTrue(actions.remindHeadlights)
     }
 
-    @Test fun failedHeadlightStepWithSavedOriginalStillRestoresAndRetainsFailedRestoration() = runBlocking {
-        val actions = Actions().apply { fail = "headlights" }
-        val session = CampModeSession(actions)
-        session.enter()
-        assertTrue(actions.calls.contains("screen"))
-        assertEquals(saved, actions.stored)
-        actions.fail = "restore-headlights"
+    @Test fun exitReminderSurvivesFailedRestorationRetryAndRestart() = runBlocking {
+        val actions = Actions().apply { fail = "restore-media" }
+        val session = CampModeSession(actions, saved)
+        assertFalse(session.state.value.remindHeadlights)
         session.exit()
         assertTrue(session.state.value.active)
-        assertEquals(saved, actions.stored)
-        assertTrue(actions.calls.contains("restore-climate"))
+        assertTrue(session.state.value.remindHeadlights)
+        assertTrue(actions.remindHeadlights)
+        val recovered = CampModeSession(actions, actions.stored, remindHeadlights = actions.remindHeadlights)
+        assertTrue(recovered.state.value.remindHeadlights)
         actions.fail = null
-        session.exit()
-        assertFalse(session.state.value.active)
+        recovered.exit()
+        assertFalse(recovered.state.value.active)
+        assertTrue(actions.remindHeadlights)
+        val idle = CampModeSession(actions, actions.stored, remindHeadlights = actions.remindHeadlights)
+        assertFalse(idle.state.value.active)
+        assertTrue(idle.state.value.remindHeadlights)
+    }
+
+    @Test fun entryRetainsReminderAfterPreflightFailureAndClearsItAfterSavingNewSession() = runBlocking {
+        val actions = Actions().apply { fail = "save" }
+        val session = CampModeSession(actions, remindHeadlights = true)
+        session.enter()
+        assertTrue(session.state.value.remindHeadlights)
+        assertTrue(actions.remindHeadlights)
+        actions.fail = "dikey"
+        session.enter()
+        assertTrue(session.state.value.active)
+        assertFalse(session.state.value.remindHeadlights)
+        assertFalse(actions.remindHeadlights)
     }
 
     @Test fun stoppingDuringTheOneSecondGapKeepsCompletedChecksAndPreventsNextAction() = runBlocking {
@@ -256,13 +265,13 @@ class CampModeSessionTest {
         val session = CampModeSession(actions, saved, completedSteps = CampStep.entries.toSet())
         assertTrue(session.state.value.awaitingWake)
         session.onScreenWake()
-        assertEquals(listOf("restore-cluster", "restore-hud", "enable-bluetooth", "enable-dikey", "restore-media", "restore-headlights", "restore-drl", "restore-climate"),
+        assertEquals(listOf("restore-cluster", "restore-hud", "enable-bluetooth", "enable-dikey", "restore-media", "restore-drl", "restore-climate"),
             actions.calls.filter { it != "persist" })
         assertFalse(session.state.value.active)
         assertFalse(session.state.value.awaitingWake)
         assertNull(actions.stored)
         session.onScreenWake()
-        assertEquals(6, actions.calls.count { it.startsWith("restore-") })
+        assertEquals(5, actions.calls.count { it.startsWith("restore-") })
     }
 
     @Test fun touchBeforeScreenOffDoesNotInterruptEntryButImmediateWakeIsNotLost() = runBlocking {
@@ -285,8 +294,8 @@ class CampModeSessionTest {
                 actions.calls.none { it.startsWith("restore-") })
         }
         session.enter()
-        assertEquals(listOf("save", "dikey", "carplay", "bluetooth", "climate", "windows", "headlights", "drl", "cluster", "hud", "mute", "screen",
-            "restore-cluster", "restore-hud", "enable-bluetooth", "enable-dikey", "restore-media", "restore-headlights", "restore-drl", "restore-climate"),
+        assertEquals(listOf("save", "dikey", "carplay", "bluetooth", "climate", "windows", "drl", "cluster", "hud", "mute", "screen",
+            "restore-cluster", "restore-hud", "enable-bluetooth", "enable-dikey", "restore-media", "restore-drl", "restore-climate"),
             actions.calls.filter { it != "persist" })
         assertFalse(session.state.value.active)
         assertFalse(session.state.value.awaitingWake)
@@ -294,7 +303,7 @@ class CampModeSessionTest {
     }
 
     @Test fun failedAutomaticRestorationRetainsSettingsForExplicitRetry() = runBlocking {
-        val actions = Actions().apply { fail = "restore-headlights" }
+        val actions = Actions().apply { fail = "restore-drl" }
         val session = CampModeSession(actions, saved, completedSteps = CampStep.entries.toSet())
         session.onScreenWake()
         assertTrue(session.state.value.active)
@@ -302,7 +311,7 @@ class CampModeSessionTest {
         assertEquals(saved, actions.stored)
         assertTrue(session.state.value.report.contains("Restoration incomplete"))
         session.onScreenWake()
-        assertEquals("Duplicate wake signals must not repeatedly restore settings", 6,
+        assertEquals("Duplicate wake signals must not repeatedly restore settings", 5,
             actions.calls.count { it.startsWith("restore-") })
         actions.fail = null
         session.exit()

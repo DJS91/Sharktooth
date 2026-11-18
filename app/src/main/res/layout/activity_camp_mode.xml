@@ -49,7 +49,8 @@
             android:layout_width="wrap_content"
             android:layout_height="wrap_content"
             android:layout_marginTop="24dp"
-            android:text="@string/camp_mode_enable" />
+            android:text="@string/camp_mode_enable"
+            android:visibility="gone" />
 
         <TextView
             android:id="@+id/campModeStatus"
@@ -60,6 +61,18 @@
             android:text="@string/camp_mode_idle"
             android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
             android:textColor="@color/text_muted" />
+
+        <TextView
+            android:id="@+id/campModeHeadlightReminder"
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:text="@string/camp_mode_headlight_reminder"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
+            android:textColor="@color/text_primary"
+            android:textStyle="bold"
+            android:visibility="gone" />
 
         <LinearLayout
             android:id="@+id/campModeChecklist"
@@ -112,12 +125,6 @@
                     android:layout_height="wrap_content"
                     android:text="@string/camp_mode_step_windows" />
                 <CheckBox
-                    android:id="@+id/campStepHeadlights"
-                    style="@style/Widget.OpenDiKey.CampStep"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/camp_mode_step_headlights" />
-                <CheckBox
                     android:id="@+id/campStepDrls"
                     style="@style/Widget.OpenDiKey.CampStep"
                     android:layout_width="match_parent"
@@ -156,6 +163,15 @@
                     android:text="@string/camp_mode_step_screen" />
             </LinearLayout>
         </LinearLayout>
+
+        <TextView
+            android:layout_width="match_parent"
+            android:layout_height="wrap_content"
+            android:layout_marginTop="16dp"
+            android:gravity="center"
+            android:text="@string/camp_mode_headlight_triggers_unavailable"
+            android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
+            android:textColor="@color/text_muted" />
 
         <TextView
             android:id="@+id/campModeReport"

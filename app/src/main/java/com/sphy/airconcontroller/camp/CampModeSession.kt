@@ -13,7 +13,6 @@ internal data class CampSavedState(
     val mediaVolume: Int,
     val mediaMuted: Boolean,
     val drlOn: Boolean,
-    val headlightMode: Int? = null,
     val dikeyLighting: LedRestoreSnapshot? = null,
     val manageHeadunitBluetooth: Boolean = false,
     val clusterBrightness: Int? = null,
@@ -29,12 +28,16 @@ internal enum class CampStep(val reportLabel: String) {
     BLUETOOTH("Head-unit Bluetooth OFF"),
     CLIMATE("Climate OFF"),
     WINDOWS("Close windows"),
-    HEADLIGHTS("Headlights OFF"),
     DRLS("DRLs OFF"),
     CLUSTER("Dim instrument cluster"),
     HUD("HUD OFF"),
     MEDIA("Mute media"),
-    SCREEN("Screen OFF"),
+    SCREEN("Screen OFF");
+
+    companion object {
+        fun decodeSaved(names: Set<String>): Set<CampStep> =
+            names.filterNot { it == "HEADLIGHTS" }.map { valueOf(it) }.toSet()
+    }
 }
 
 internal interface CampActions {
@@ -44,7 +47,6 @@ internal interface CampActions {
     suspend fun headunitBluetoothOff(): CampResult
     suspend fun climateOff(): CampResult
     suspend fun closeWindows(): CampResult
-    suspend fun headlightsOff(): CampResult
     suspend fun drlOff(): CampResult
     suspend fun dimCluster(): CampResult
     suspend fun hudOff(): CampResult
@@ -54,12 +56,11 @@ internal interface CampActions {
     suspend fun restoreClimate(saved: CampSavedState): CampResult
     suspend fun restoreMedia(saved: CampSavedState): CampResult
     suspend fun restoreDrl(saved: CampSavedState): CampResult
-    suspend fun restoreHeadlights(saved: CampSavedState): CampResult
     suspend fun restoreCluster(saved: CampSavedState): CampResult
     suspend fun restoreHud(saved: CampSavedState): CampResult
     suspend fun enableHeadunitBluetooth(saved: CampSavedState): CampResult
     suspend fun enableDikeyLights(saved: CampSavedState): CampResult
-    suspend fun persist(saved: CampSavedState?, report: String, completedSteps: Set<CampStep>)
+    suspend fun persist(saved: CampSavedState?, report: String, completedSteps: Set<CampStep>, remindHeadlights: Boolean)
 }
 
 /** One-shot sequence: no periodic enforcement or automatic re-entry after a process restart. */
@@ -68,6 +69,7 @@ internal class CampModeSession(
     saved: CampSavedState? = null,
     report: String = "",
     completedSteps: Set<CampStep> = emptySet(),
+    remindHeadlights: Boolean = false,
 ) {
     data class State(
         val active: Boolean,
@@ -77,6 +79,7 @@ internal class CampModeSession(
         val currentStep: CampStep? = null,
         val awaitingWake: Boolean = false,
         val screenOffStartedAtMillis: Long = 0,
+        val remindHeadlights: Boolean = false,
     )
     private var saved = saved
     private var stopping = false
@@ -84,31 +87,26 @@ internal class CampModeSession(
     private val mutableState = MutableStateFlow(State(saved != null, false, report,
         if (saved != null) completedSteps else emptySet(),
         awaitingWake = saved != null && CampStep.SCREEN in completedSteps,
-        screenOffStartedAtMillis = System.currentTimeMillis()))
+        screenOffStartedAtMillis = System.currentTimeMillis(), remindHeadlights = remindHeadlights))
     val state = mutableState.asStateFlow()
 
     suspend fun enter() {
         if (state.value.busy || saved != null) return
         stopping = false
         restoreAfterEntry = false
-        mutableState.value = State(false, true, "")
+        mutableState.value = State(false, true, "", remindHeadlights = state.value.remindHeadlights)
         try {
             val original = actions.save()
             saved = original
             // Durably save restoration data before the very first write to the car.
-            actions.persist(saved, "", emptySet())
+            actions.persist(saved, "", emptySet(), false)
             mutableState.value = State(true, true, "")
-            if (original.headlightMode == null) {
-                record("WARNING: Original headlight selector unavailable. Headlights OFF will still be attempted; " +
-                    "automatic headlight restoration is unavailable. Verify normal lighting manually before driving.")
-            }
             val steps: List<Pair<CampStep, suspend () -> CampResult>> = listOf(
                 CampStep.DIKEY to { actions.dikeyLightsOff(original) },
                 CampStep.CARPLAY to { actions.disconnectCarPlay() },
                 CampStep.BLUETOOTH to { actions.headunitBluetoothOff() },
                 CampStep.CLIMATE to { actions.climateOff() },
                 CampStep.WINDOWS to { actions.closeWindows() },
-                CampStep.HEADLIGHTS to { actions.headlightsOff() },
                 CampStep.DRLS to { actions.drlOff() },
                 CampStep.CLUSTER to { actions.dimCluster() },
                 CampStep.HUD to { actions.hudOff() },
@@ -142,10 +140,6 @@ internal class CampModeSession(
                 }
                 record("$label: ${if (result.success) "OK" else "NOT CONFIRMED"} - ${result.detail}")
                 if (!result.success) {
-                    if (step == CampStep.HEADLIGHTS) {
-                        record("WARNING: Continuing without confirmed headlights OFF. Verify normal lighting manually before driving.")
-                        continue
-                    }
                     record("Entry incomplete. Use Retry restoring settings to restore the saved settings.")
                     return
                 }
@@ -179,8 +173,9 @@ internal class CampModeSession(
     suspend fun exit() {
         val original = saved ?: return
         if (state.value.busy) return
-        mutableState.value = state.value.copy(busy = true, awaitingWake = false)
+        mutableState.value = state.value.copy(busy = true, awaitingWake = false, remindHeadlights = true)
         try {
+            record("Exiting Camp Mode. Turn the headlights back on and verify normal lighting before driving.")
             var restored = true
             val steps: List<Pair<String, suspend () -> CampResult>> = listOf(
                 "Restore instrument cluster" to { actions.restoreCluster(original) },
@@ -188,7 +183,6 @@ internal class CampModeSession(
                 "Enable head-unit Bluetooth" to { actions.enableHeadunitBluetooth(original) },
                 "Enable DiKey lights" to { actions.enableDikeyLights(original) },
                 "Restore media" to { actions.restoreMedia(original) },
-                "Restore headlights" to { actions.restoreHeadlights(original) },
                 "Restore DRLs" to { actions.restoreDrl(original) },
                 "Leave climate OFF" to { actions.restoreClimate(original) },
             )
@@ -209,7 +203,7 @@ internal class CampModeSession(
             if (restored) {
                 val report = state.value.report + "\nCamp Mode disabled. Windows remain closed; climate remains OFF."
                 saved = null
-                actions.persist(null, report, emptySet())
+                actions.persist(null, report, emptySet(), state.value.remindHeadlights)
                 mutableState.value = state.value.copy(active = false, report = report, completedSteps = emptySet())
             } else {
                 record("Restoration incomplete. Saved settings retained; use Retry restoring settings.")
@@ -247,14 +241,14 @@ internal class CampModeSession(
     private suspend fun record(line: String) {
         val report = (state.value.report + "\n" + line).trimStart()
         mutableState.value = state.value.copy(report = report)
-        actions.persist(saved, report, state.value.completedSteps)
+        actions.persist(saved, report, state.value.completedSteps, state.value.remindHeadlights)
     }
 
     private suspend fun failure(label: String, e: Exception) {
         // Even a persistence error must remain visible; never disguise it as a completed step.
         mutableState.value = state.value.copy(report = state.value.report + "\n$label: ${e.javaClass.simpleName}: ${e.message}")
         try {
-            actions.persist(saved, state.value.report, state.value.completedSteps)
+            actions.persist(saved, state.value.report, state.value.completedSteps, state.value.remindHeadlights)
         } catch (saveError: IOException) {
             mutableState.value = state.value.copy(report = state.value.report + "\nCould not save report: ${saveError.message}")
         }

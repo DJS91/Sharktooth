@@ -13,7 +13,6 @@ import com.sphy.airconcontroller.byd.BydAcController
 import com.sphy.airconcontroller.byd.BydCabinDisplayController
 import com.sphy.airconcontroller.byd.BydDisplayController
 import com.sphy.airconcontroller.byd.BydDrlController
-import com.sphy.airconcontroller.byd.BydHeadlightController
 import com.sphy.airconcontroller.byd.BydVehicleInfoController
 import com.sphy.airconcontroller.byd.BydWindowController
 import com.sphy.airconcontroller.dikey.LedMode
@@ -25,6 +24,7 @@ import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.sync.Mutex
@@ -40,8 +40,16 @@ internal class CampModeController private constructor(context: Context) {
     private val actions = VehicleActions()
     private val saved = prefs.getString("saved", null)?.let { decodeSaved(JSONObject(it)) }
     private val session = CampModeSession(actions, saved, prefs.getString("report", "").orEmpty(),
-        prefs.getStringSet("completedSteps", emptySet()).orEmpty().map { CampStep.valueOf(it) }.toSet())
+        CampStep.decodeSaved(prefs.getStringSet("completedSteps", emptySet()).orEmpty()),
+        prefs.getBoolean("remindHeadlights", false))
     val state = session.state
+    val parkConfirmed = flow {
+        emit(false)
+        while (true) {
+            emit(io { actions.isParkConfirmed() })
+            delay(1000)
+        }
+    }.distinctUntilChanged()
 
     init {
         OpenDiKeyApp.from(app).dikey.controller.seedLightingSuppression(
@@ -96,7 +104,6 @@ internal class CampModeController private constructor(context: Context) {
         )
         private val windows = BydWindowController(app)
         private val drl = BydDrlController(app)
-        private val headlights = BydHeadlightController(app)
         private val display = BydDisplayController(app)
         private val cabinDisplays = BydCabinDisplayController(app)
         private val vehicle = BydVehicleInfoController(app)
@@ -128,15 +135,13 @@ internal class CampModeController private constructor(context: Context) {
                 val hudState = checkNotNull(hud.value) {
                     "Cannot read the previous HUD power state; nothing changed. ${hud.detail}"
                 }
-                val headlight = headlights.awaitMode()
-                val headlightMode = headlight.mode
                 val media = audio.snapshot()
                 bluetooth.prepare()
                 val wakeLog = AdbPermissionManager.runShellCommandQuick(app, wakeLogCommand(System.currentTimeMillis()))
                 check(wakeLog.exitCode == 0) {
                     "Cannot monitor the car's backlight wake event: ${wakeLog.output}. Check local ADB; nothing changed."
                 }
-                CampSavedState(climate, media.volume, media.muted, drlOn, headlightMode, lighting, true,
+                CampSavedState(climate, media.volume, media.muted, drlOn, lighting, true,
                     clusterBrightness, hudState, media.usesCarMute)
             }
         }
@@ -184,7 +189,10 @@ internal class CampModeController private constructor(context: Context) {
             check(gears?.confirmedPark == true) {
                 "Park could not be confirmed ($gears). Select Park before enabling Camp Mode."
             }
+
         }
+
+        fun isParkConfirmed(): Boolean = vehicle.readGear()?.confirmedPark == true
 
         override suspend fun climateOff(): CampResult = climatePower.off()
 
@@ -201,9 +209,6 @@ internal class CampModeController private constructor(context: Context) {
         }
 
         override suspend fun drlOff(): CampResult = setDrl(false)
-
-        override suspend fun headlightsOff(): CampResult =
-            setHeadlights(BydHeadlightController.OFF, allowUnreadable = true)
 
         override suspend fun dimCluster(): CampResult = io {
             val result = cabinDisplays.setClusterBrightness(BydCabinDisplayController.MIN_BRIGHTNESS, ::requirePark)
@@ -240,13 +245,6 @@ internal class CampModeController private constructor(context: Context) {
 
         override suspend fun restoreDrl(saved: CampSavedState): CampResult = setDrl(saved.drlOn)
 
-        override suspend fun restoreHeadlights(saved: CampSavedState): CampResult {
-            val mode = saved.headlightMode
-                ?: return CampResult(true,
-                    "No saved headlight selector; no automatic headlight restoration. Verify normal lighting manually before driving.")
-            return setHeadlights(mode)
-        }
-
         override suspend fun restoreCluster(saved: CampSavedState): CampResult {
             val brightness = saved.clusterBrightness
                 ?: return CampResult(true, "Older session did not change instrument-cluster brightness.")
@@ -271,28 +269,6 @@ internal class CampModeController private constructor(context: Context) {
             }
         }
 
-        private suspend fun setHeadlights(mode: Int, allowUnreadable: Boolean = false): CampResult {
-            val reading = io { headlights.readMode() }
-            val before = reading.mode
-            if (before == null && !allowUnreadable) {
-                return CampResult(false, "Headlight selector read-back unavailable: ${reading.detail}")
-            }
-            if (before == mode) return CampResult(true, "Headlight selector already at mode $mode; no command sent.")
-            val result = io {
-                if (mode == BydHeadlightController.OFF) requirePark()
-                headlights.setMode(mode) {
-                    if (mode == BydHeadlightController.OFF) requirePark()
-                }
-            }
-            if (!result.success) return CampResult(false, result.detail)
-            repeat(10) {
-                delay(150)
-                if (io { headlights.mode() } == mode) return CampResult(true, "Headlight selector mode $mode confirmed.")
-            }
-            val after = io { headlights.readMode() }
-            return CampResult(false, "${result.detail}; headlight selector read-back=${after.mode}; ${after.detail}")
-        }
-
         private suspend fun setDrl(on: Boolean): CampResult {
             val result = io { drl.set(on) }
             repeat(10) {
@@ -303,11 +279,14 @@ internal class CampModeController private constructor(context: Context) {
             return CampResult(false, "${result.detail}; DRL read-back=${io { drl.isOn() }}")
         }
 
-        override suspend fun persist(saved: CampSavedState?, report: String, completedSteps: Set<CampStep>) {
+        override suspend fun persist(
+            saved: CampSavedState?, report: String, completedSteps: Set<CampStep>, remindHeadlights: Boolean,
+        ) {
             persistence.withLock {
                 io {
                     val editor = prefs.edit().putString("report", report)
                         .putStringSet("completedSteps", completedSteps.map { it.name }.toSet())
+                        .putBoolean("remindHeadlights", remindHeadlights)
                         .putBoolean("lightingSuppressed", dikey.controller.lightingSuppressed)
                     if (saved == null) editor.remove("saved") else editor.putString("saved", encodeSaved(saved).toString())
                     if (!editor.commit()) throw IOException("Cannot save Camp Mode restoration data.")
@@ -337,7 +316,7 @@ internal class CampModeController private constructor(context: Context) {
                 .put("dikeyLighting", saved.dikeyLighting?.let {
                     JSONObject(LightingProfile(it.bars, it.backlight).toJson())
                 })
-                .put("drl", saved.drlOn).put("headlightMode", saved.headlightMode).put("climate", JSONObject().apply {
+                .put("drl", saved.drlOn).put("climate", JSONObject().apply {
                     put("power", ac.powerOn)
                     put("driver", ac.driverTempC)
                     put("passenger", ac.passengerTempC)
@@ -368,7 +347,6 @@ internal class CampModeController private constructor(context: Context) {
                     frontDefrost = bool("frontDefrost"), rearDefrost = bool("rearDefrost"), tempSynced = bool("tempSynced"),
                 ),
                 json.getInt("volume"), json.getBoolean("muted"), json.getBoolean("drl"),
-                if (json.isNull("headlightMode")) null else json.getInt("headlightMode"),
                 if (json.isNull("dikeyLighting")) null else {
                     val lighting = checkNotNull(LightingProfile.fromJson(json.getJSONObject("dikeyLighting").toString())) {
                         "Invalid saved DiKey lighting settings."
