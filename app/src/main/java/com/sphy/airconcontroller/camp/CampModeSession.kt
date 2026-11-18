@@ -18,6 +18,7 @@ internal data class CampSavedState(
     val manageHeadunitBluetooth: Boolean = false,
     val clusterBrightness: Int? = null,
     val hudState: Int? = null,
+    val mediaUsesCarMute: Boolean = false,
 )
 
 internal data class CampResult(val success: Boolean, val detail: String)

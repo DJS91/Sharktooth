@@ -103,8 +103,9 @@ class CampModeTest {
         }
     }
 
-    @Test fun mediaMuteAndRestoreLeaveCallAndAlarmVolumesUntouched() {
+    @Test fun mediaMuteAndRestoreLeaveCallAndAlarmVolumesUntouched() = kotlinx.coroutines.runBlocking {
         val audio = context.getSystemService(AudioManager::class.java)
+        org.junit.Assume.assumeFalse("This test exercises Android stream volume, not OEM car audio.", audio.isVolumeFixed)
         val media = CampMediaAudio(context)
         val original = media.snapshot()
         val call = audio.getStreamVolume(AudioManager.STREAM_VOICE_CALL)
@@ -116,12 +117,12 @@ class CampModeTest {
             assertTrue(media.mute().success)
             assertTrue(media.mute().success)
             assertEquals(0, media.snapshot().volume)
-            assertTrue(media.restore(before.volume, before.muted).success)
+            assertTrue(media.restore(before.volume, before.muted, before.usesCarMute).success)
             assertEquals(before, media.snapshot())
             assertEquals(call, audio.getStreamVolume(AudioManager.STREAM_VOICE_CALL))
             assertEquals(alarm, audio.getStreamVolume(AudioManager.STREAM_ALARM))
         } finally {
-            media.restore(original.volume, original.muted)
+            media.restore(original.volume, original.muted, original.usesCarMute)
         }
     }
 
@@ -132,7 +133,7 @@ class CampModeTest {
             0, true, false, 2,
             LedRestoreSnapshot((1..3).associateWith {
                 LedBarState(LedMode.ON.code, LedRgb(4 * it, 8 * it, 16 * it))
-            }, LedRgb(4, 8, 16)), true, 7, 2,
+            }, LedRgb(4, 8, 16)), true, 7, 2, mediaUsesCarMute = true,
         )
         assertEquals(saved, CampModeController.decodeSaved(CampModeController.encodeSaved(saved)))
         val legacy = CampModeController.encodeSaved(saved).apply {
@@ -141,9 +142,10 @@ class CampModeTest {
             remove("manageHeadunitBluetooth")
             remove("clusterBrightness")
             remove("hudState")
+            remove("mediaUsesCarMute")
         }
         assertEquals(saved.copy(headlightMode = null, dikeyLighting = null, manageHeadunitBluetooth = false,
-            clusterBrightness = null, hudState = null),
+            clusterBrightness = null, hudState = null, mediaUsesCarMute = false),
             CampModeController.decodeSaved(legacy))
     }
 }

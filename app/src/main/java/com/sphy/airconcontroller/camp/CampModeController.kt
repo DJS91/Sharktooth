@@ -129,7 +129,7 @@ internal class CampModeController private constructor(context: Context) {
                     "Cannot monitor the car's backlight wake event: ${wakeLog.output}. Check local ADB; nothing changed."
                 }
                 CampSavedState(climate, media.volume, media.muted, drlOn, headlightMode, lighting, true,
-                    clusterBrightness, hudState)
+                    clusterBrightness, hudState, media.usesCarMute)
             }
         }
 
@@ -237,7 +237,7 @@ internal class CampModeController private constructor(context: Context) {
         }
 
         override suspend fun restoreMedia(saved: CampSavedState): CampResult =
-            io { audio.restore(saved.mediaVolume, saved.mediaMuted) }
+            io { audio.restore(saved.mediaVolume, saved.mediaMuted, saved.mediaUsesCarMute) }
 
         override suspend fun restoreDrl(saved: CampSavedState): CampResult = setDrl(saved.drlOn)
 
@@ -332,6 +332,7 @@ internal class CampModeController private constructor(context: Context) {
         internal fun encodeSaved(saved: CampSavedState): JSONObject {
             val ac = saved.climate
             return JSONObject().put("volume", saved.mediaVolume).put("muted", saved.mediaMuted)
+                .put("mediaUsesCarMute", saved.mediaUsesCarMute)
                 .put("clusterBrightness", saved.clusterBrightness).put("hudState", saved.hudState)
                 .put("manageHeadunitBluetooth", saved.manageHeadunitBluetooth)
                 .put("dikeyLighting", saved.dikeyLighting?.let {
@@ -378,6 +379,7 @@ internal class CampModeController private constructor(context: Context) {
                 json.optBoolean("manageHeadunitBluetooth", false),
                 if (json.isNull("clusterBrightness")) null else json.getInt("clusterBrightness"),
                 if (json.isNull("hudState")) null else json.getInt("hudState"),
+                json.optBoolean("mediaUsesCarMute", false),
             )
         }
     }
@@ -390,22 +392,30 @@ internal class CampScreenWakeReceiver(private val onWake: () -> Unit) : Broadcas
 }
 
 internal class CampMediaAudio(context: Context) {
-    data class Saved(val volume: Int, val muted: Boolean)
-    private val audio = context.applicationContext.getSystemService(AudioManager::class.java)
+    data class Saved(val volume: Int, val muted: Boolean, val usesCarMute: Boolean = false)
+    private val app = context.applicationContext
+    private val audio = app.getSystemService(AudioManager::class.java)
+    private val carAudio = CampCarMediaAudio { command -> AdbPermissionManager.runShellCommand(app, command) }
 
-    fun snapshot(): Saved {
-        check(!audio.isVolumeFixed) { "Android reports fixed media volume; muting is not supported." }
+    suspend fun snapshot(): Saved {
+        if (audio.isVolumeFixed) {
+            val state = carAudio.snapshot()
+            return Saved(state.media.volume, checkNotNull(state.media.muted), usesCarMute = true)
+        }
         return Saved(audio.getStreamVolume(AudioManager.STREAM_MUSIC), audio.isStreamMute(AudioManager.STREAM_MUSIC))
     }
 
-    fun mute(): CampResult {
+    suspend fun mute(): CampResult {
+        if (audio.isVolumeFixed) return carAudio.setMuted(true)
         // Only STREAM_MUSIC: do not mute master audio, calls, alarms or safety streams.
         audio.setStreamVolume(AudioManager.STREAM_MUSIC, 0, 0)
         val level = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
         return CampResult(level == 0, "Media volume=$level")
     }
 
-    fun restore(volume: Int, muted: Boolean): CampResult {
+    suspend fun restore(volume: Int, muted: Boolean, usesCarMute: Boolean = false): CampResult {
+        if (usesCarMute) return carAudio.setMuted(muted, savedVolume = volume)
+        check(!audio.isVolumeFixed) { "Cannot restore saved Android media volume on a fixed-volume device." }
         audio.setStreamVolume(AudioManager.STREAM_MUSIC, volume, 0)
         audio.adjustStreamVolume(AudioManager.STREAM_MUSIC,
             if (muted) AudioManager.ADJUST_MUTE else AudioManager.ADJUST_UNMUTE, 0)

@@ -18,7 +18,7 @@ class CampModeSessionTest {
             1, 1, 2, 1, false, false, false, false, true),
         7, false, true, 2,
         LedRestoreSnapshot((1..3).associateWith { LedBarState(LedMode.ON.code, LedRgb(4, 8, 16)) }, LedRgb(2, 4, 8)),
-        true, 7, 1,
+        true, 7, 1, mediaUsesCarMute = true,
     )
 
     private inner class Actions : CampActions {
@@ -63,7 +63,10 @@ class CampModeSessionTest {
             assertEquals(this@CampModeSessionTest.saved.climate, saved.climate)
             return result("restore-climate")
         }
-        override suspend fun restoreMedia(saved: CampSavedState) = result("restore-media")
+        override suspend fun restoreMedia(saved: CampSavedState): CampResult {
+            assertTrue(saved.mediaUsesCarMute)
+            return result("restore-media")
+        }
         override suspend fun restoreDrl(saved: CampSavedState) = result("restore-drl")
         override suspend fun restoreHeadlights(saved: CampSavedState): CampResult {
             assertEquals(savedHeadlightMode, saved.headlightMode)
