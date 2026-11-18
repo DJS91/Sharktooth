@@ -143,7 +143,17 @@ class DashboardActivityTest {
             val pitch = page.findViewById<AttitudeHorizonView>(R.id.attitudePitchHorizon)
             assertEquals(AttitudeHorizonView.AxisMode.ROLL, roll.axisMode)
             assertEquals(AttitudeHorizonView.AxisMode.PITCH, pitch.axisMode)
-            assertTrue(roll.right < pitch.left)
+            assertTrue(pitch.right < roll.left)
+            fun assertAngle(gauge: AttitudeHorizonView, label: Int, angle: Double) {
+                val value = String.format(page.resources.configuration.locales[0], "%.1f", angle)
+                assertEquals(page.getString(label, value), gauge.contentDescription)
+            }
+            page.bindDashboardAttitude(ax = 0.0, ay = 1.0, az = 1.0)
+            assertAngle(pitch, R.string.vehicle_info_pitch_fmt, 45.0)
+            assertAngle(roll, R.string.vehicle_info_roll_fmt, -0.0)
+            page.bindDashboardAttitude(ax = 1.0, ay = 0.0, az = 1.0)
+            assertAngle(pitch, R.string.vehicle_info_pitch_fmt, 0.0)
+            assertAngle(roll, R.string.vehicle_info_roll_fmt, -45.0)
         }
         val point = centerOnScreen(page.findViewById(R.id.attitudePitchHorizon))
         val down = SystemClock.uptimeMillis()

@@ -27,14 +27,14 @@
         android:orientation="horizontal">
 
         <com.sphy.airconcontroller.ui.AttitudeHorizonView
-            android:id="@+id/attitudeRollHorizon"
+            android:id="@+id/attitudePitchHorizon"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginEnd="4dp"
             android:layout_weight="1" />
 
         <com.sphy.airconcontroller.ui.AttitudeHorizonView
-            android:id="@+id/attitudePitchHorizon"
+            android:id="@+id/attitudeRollHorizon"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
             android:layout_marginStart="4dp"

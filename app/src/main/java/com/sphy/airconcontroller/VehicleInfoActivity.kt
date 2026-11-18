@@ -77,9 +77,7 @@ open class VehicleInfoActivity : HomeActivity() {
             val ax = event.values[0].toDouble()
             val ay = event.values[1].toDouble()
             val az = event.values[2].toDouble()
-            val pitch = Math.toDegrees(atan2(-ax, sqrt(ay * ay + az * az)))
-            val roll = Math.toDegrees(atan2(ay, az))
-            bindAttitude(pitch, roll)
+            bindDashboardAttitude(ax, ay, az)
         }
 
         override fun onAccuracyChanged(sensor: Sensor?, accuracy: Int) = Unit
@@ -280,8 +278,10 @@ open class VehicleInfoActivity : HomeActivity() {
         dashboardReady = true
     }
 
-    private fun bindAttitude(pitch: Double?, roll: Double?) {
-        if (!dashboardReady) return
+    internal fun bindDashboardAttitude(ax: Double, ay: Double, az: Double) {
+        // The installed head unit's accelerometer axes are swapped relative to the vehicle.
+        val pitch = Math.toDegrees(atan2(ay, az))
+        val roll = Math.toDegrees(atan2(-ax, sqrt(ay * ay + az * az)))
         attitudePitchView.setAttitude(pitch, roll)
         attitudeRollView.setAttitude(pitch, roll)
     }

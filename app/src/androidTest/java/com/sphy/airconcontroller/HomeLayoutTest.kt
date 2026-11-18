@@ -199,7 +199,7 @@ class HomeLayoutTest {
                         card.layout(0, 0, card.measuredWidth, card.measuredHeight)
                         assertEquals(View.VISIBLE, roll.visibility)
                         assertEquals(View.VISIBLE, pitch.visibility)
-                        assertTrue("The front-view Roll dial belongs on the left", roll.right < pitch.left)
+                        assertTrue("The side-view Pitch dial belongs on the left", pitch.right < roll.left)
                         for (gauge in listOf(roll, pitch)) {
                             assertTrue("The full circle and title must fit without clipping",
                                 gauge.width > 0 && gauge.height >= gauge.width)
