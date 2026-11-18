@@ -21,6 +21,8 @@
     android:usesPermissionFlags="neverForLocation"
   />
   <uses-permission android:name="android.permission.BLUETOOTH_CONNECT" />
+  <uses-permission android:name="car.permission.CARPLAY_APP" />
+  <uses-permission android:name="car.permission.CARPLAY_DEVICE_LIST" />
   <uses-permission
     android:name="android.permission.ACCESS_FINE_LOCATION"
   />
@@ -87,6 +89,7 @@
     tools:ignore="QueryAllPackagesPermission" />
 
   <queries>
+    <package android:name="com.ts.carplay" />
     <package android:name="com.strike" />
     <package android:name="com.overdrive.app" />
     <intent>

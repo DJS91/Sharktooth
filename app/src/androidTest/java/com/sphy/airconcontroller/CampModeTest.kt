@@ -82,7 +82,7 @@ class CampModeTest {
                     val group = list.getChildAt(column) as ViewGroup
                     (0 until group.childCount).map { group.getChildAt(it) as CheckBox }
                 }
-                val ids = listOf(R.id.campStepDikey, R.id.campStepBluetooth, R.id.campStepClimate, R.id.campStepWindows, R.id.campStepHeadlights,
+                val ids = listOf(R.id.campStepDikey, R.id.campStepCarPlay, R.id.campStepBluetooth, R.id.campStepClimate, R.id.campStepWindows, R.id.campStepHeadlights,
                     R.id.campStepDrls, R.id.campStepCluster, R.id.campStepHud, R.id.campStepMedia, R.id.campStepScreen)
                 assertEquals(ids, rows.map { it.id })
                 for ((index, step) in CampStep.entries.withIndex()) {

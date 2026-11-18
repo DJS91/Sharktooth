@@ -95,6 +95,7 @@ internal class CampModeController private constructor(context: Context) {
         private val vehicle = BydVehicleInfoController(app)
         private val audio = CampMediaAudio(app)
         private val bluetooth = CampHeadunitBluetooth(app)
+        private val carPlay = CampCarPlay(app)
         private val dikey get() = OpenDiKeyApp.from(app).dikey
         private val windowCommands = Mutex()
         private val persistence = Mutex()
@@ -139,6 +140,8 @@ internal class CampModeController private constructor(context: Context) {
             return CampResult(confirmed, if (confirmed) "DiKey strip and key-backlight OFF writes acknowledged."
                 else "DiKey lighting OFF writes not confirmed.")
         }
+
+        override suspend fun disconnectCarPlay(): CampResult = carPlay.disconnectIfConnected()
 
         override suspend fun headunitBluetoothOff(): CampResult = bluetooth.setEnabled(false)
 

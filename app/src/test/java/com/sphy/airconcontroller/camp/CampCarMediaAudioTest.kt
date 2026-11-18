@@ -39,6 +39,8 @@ class CampCarMediaAudioTest {
         var navigationMuted = false
         var commandExit = 0
         var readExit = 0
+        var firstVolumeKeyOnlyUnmutes = false
+        val volumeCommands = mutableListOf<String>()
         var transform: (String) -> String = { it }
         val controller = CampCarMediaAudio { command ->
             when (command) {
@@ -46,6 +48,16 @@ class CampCarMediaAudioTest {
                 CampCarMediaAudio.MUTE_COMMAND -> {
                     writes++
                     if (applies && commandExit == 0) muted = !muted
+                    ShellResult(commandExit, if (commandExit == 0) "" else "input denied")
+                }
+                CampCarMediaAudio.VOLUME_UP_COMMAND, CampCarMediaAudio.VOLUME_DOWN_COMMAND -> {
+                    volumeCommands += command
+                    if (applies && commandExit == 0) {
+                        if (!muted || !firstVolumeKeyOnlyUnmutes) {
+                            volume += if (command == CampCarMediaAudio.VOLUME_UP_COMMAND) 1 else -1
+                        }
+                        muted = false
+                    }
                     ShellResult(commandExit, if (commandExit == 0) "" else "input denied")
                 }
                 else -> error("Unexpected command: $command")
@@ -133,15 +145,61 @@ class CampCarMediaAudioTest {
         assertFalse(navigation.controller.setMuted(true).success)
     }
 
-    @Test fun volumeDriftKeepsRestorationRetryableWithoutChangingAnyVolume() = runBlocking {
-        val shell = Shell(muted = true).apply { volume = 4 }
-        val result = shell.controller.setMuted(false, savedVolume = 3)
-        assertFalse(result.success)
-        assertFalse(shell.muted)
-        assertEquals(4, shell.volume)
-        assertTrue(result.detail.contains("Restore media volume to 3"))
-        shell.volume = 3
-        assertTrue(shell.controller.setMuted(false, savedVolume = 3).success)
-        assertEquals(1, shell.writes)
+    @Test fun restoresSavedVolumeFromEitherDirectionThenRestoresActualOriginalMuteState() = runBlocking {
+        for (current in listOf(1, 5)) {
+            for (originalMute in listOf(false, true)) {
+                for (onlyUnmutes in listOf(false, true)) {
+                    val shell = Shell(muted = true).apply {
+                        volume = current
+                        firstVolumeKeyOnlyUnmutes = onlyUnmutes
+                    }
+                    assertTrue(shell.controller.setMuted(originalMute, savedVolume = 3).success)
+                    assertEquals(3, shell.volume)
+                    assertEquals(originalMute, shell.muted)
+                    assertEquals(if (onlyUnmutes) 3 else 2, shell.volumeCommands.size)
+                    assertTrue(shell.volumeCommands.all {
+                        it == if (current < 3) CampCarMediaAudio.VOLUME_UP_COMMAND else CampCarMediaAudio.VOLUME_DOWN_COMMAND
+                    })
+                }
+            }
+        }
+    }
+
+    @Test fun failedOrIgnoredVolumeWritesStopInsteadOfLoopingOrClaimingRestoration() = runBlocking {
+        for (exit in listOf(0, 1)) {
+            val shell = Shell(muted = true).apply { volume = 4; applies = false; commandExit = exit }
+            assertFalse(shell.controller.setMuted(false, savedVolume = 3).success)
+            assertEquals(4, shell.volume)
+            assertTrue(shell.muted)
+            assertEquals(1, shell.volumeCommands.size)
+            assertEquals(0, shell.writes)
+        }
+    }
+
+    @Test fun restoresAcrossFullVolumeRangeIncludingAnInitialUnmuteOnlyKey() = runBlocking {
+        val shell = Shell(muted = true).apply {
+            volume = 0
+            firstVolumeKeyOnlyUnmutes = true
+        }
+        assertTrue(shell.controller.setMuted(true, savedVolume = 39).success)
+        assertEquals(39, shell.volume)
+        assertTrue(shell.muted)
+        assertEquals(40, shell.volumeCommands.size)
+    }
+
+    @Test fun wrongDirectionOrNonMediaChangeStopsVolumeRestorationImmediately() = runBlocking {
+        for (changesMaster in listOf(false, true)) {
+            val shell = Shell().apply {
+                volume = 4
+                transform = { text ->
+                    if (volumeCommands.isEmpty()) text
+                    else if (changesMaster) text.replace("Master muted? false", "Master muted? true")
+                    else text.replace("0 39 10 3", "0 39 10 5")
+                }
+            }
+            assertFalse(shell.controller.setMuted(false, savedVolume = 3).success)
+            assertEquals(1, shell.volumeCommands.size)
+            assertEquals(0, shell.writes)
+        }
     }
 }

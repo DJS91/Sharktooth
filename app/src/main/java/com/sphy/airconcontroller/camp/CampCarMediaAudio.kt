@@ -16,6 +16,10 @@ internal class CampCarMediaAudio(private val shell: suspend (String) -> ShellRes
     }
 
     suspend fun setMuted(muted: Boolean, savedVolume: Int? = null): CampResult {
+        if (savedVolume != null) {
+            val restored = restoreVolume(savedVolume)
+            if (!restored.success) return restored
+        }
         val before = snapshot()
         if (before.media.muted == muted) return confirmed(before, muted, savedVolume)
         // This is a toggle: never resend it on timeout, or it could undo a delayed mute.
@@ -25,8 +29,7 @@ internal class CampCarMediaAudio(private val shell: suspend (String) -> ShellRes
         repeat(10) {
             delay(150)
             after = snapshot()
-            if (after.masterMuted != before.masterMuted ||
-                after.groups.filterKeys { it != 0 } != before.groups.filterKeys { it != 0 }) {
+            if (!otherAudioUnchanged(before, after)) {
                 return CampResult(false, "Unexpected non-media audio change after mute key; check car audio settings.")
             }
             if (after.media.volume != before.media.volume) {
@@ -37,18 +40,53 @@ internal class CampCarMediaAudio(private val shell: suspend (String) -> ShellRes
         return CampResult(false, "Car media mute not confirmed: expected=$muted actual=${after.media.muted}; no second toggle sent.")
     }
 
+    private suspend fun restoreVolume(target: Int): CampResult {
+        check(target in 0..39) { "Invalid saved car media volume: $target" }
+        var before = snapshot()
+        repeat(41) {
+            val current = before.media.volume
+            if (current == target) return CampResult(true, "Car media volume=$target confirmed.")
+            val command = shell(if (current < target) VOLUME_UP_COMMAND else VOLUME_DOWN_COMMAND)
+            if (command.exitCode != 0) {
+                return CampResult(false, "Car media volume restoration failed: exit=${command.exitCode}; ${command.output}")
+            }
+            var after = before
+            for (poll in 0 until 10) {
+                delay(150)
+                after = snapshot()
+                if (!otherAudioUnchanged(before, after)) {
+                    return CampResult(false, "Unexpected non-media audio change during volume restoration.")
+                }
+                if (after.media.volume != current || after.media.muted != before.media.muted) break
+            }
+            val actual = after.media.volume
+            // On this head unit the first volume key may only unmute, without changing gain.
+            val unmutedOnly = before.media.muted == true && after.media.muted == false && actual == current
+            if ((!unmutedOnly && actual == current) || actual !in minOf(current, target)..maxOf(current, target)) {
+                return CampResult(false, "Media volume restoration made no valid progress: $current -> $actual; saved=$target.")
+            }
+            before = after
+        }
+        return CampResult(false, "Media volume restoration not confirmed; saved=$target actual=${before.media.volume}.")
+    }
+
+    private fun otherAudioUnchanged(before: State, after: State): Boolean =
+        after.masterMuted == before.masterMuted &&
+            after.groups.filterKeys { it != 0 } == before.groups.filterKeys { it != 0 }
+
     private fun confirmed(state: State, muted: Boolean, savedVolume: Int?): CampResult {
         val volume = state.media.volume
         if (savedVolume != null && volume != savedVolume) {
-            return CampResult(false, "Media mute=$muted restored, but volume=$volume differs from saved $savedVolume. " +
-                "Restore media volume to $savedVolume with the car controls, then retry restoration.")
+            return CampResult(false, "Media volume changed again during restoration: saved=$savedVolume actual=$volume; retry restoration.")
         }
-        return CampResult(true, "Car media group 0 mute=$muted confirmed; volume=$volume preserved.")
+        return CampResult(true, "Car media group 0 mute=$muted confirmed; volume=$volume confirmed.")
     }
 
     companion object {
         const val READ_COMMAND = "dumpsys car_service --services CarEnhancedAudioService"
         const val MUTE_COMMAND = "input keyevent 164"
+        const val VOLUME_UP_COMMAND = "input keyevent 24"
+        const val VOLUME_DOWN_COMMAND = "input keyevent 25"
 
         internal fun parse(text: String): State {
             fun configured(label: String, value: String) =

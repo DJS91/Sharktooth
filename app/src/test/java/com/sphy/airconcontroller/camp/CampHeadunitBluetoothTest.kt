@@ -7,6 +7,35 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class CampHeadunitBluetoothTest {
+    @Test fun applicationContextAdapterControlAvoidsBrokenShellAndConfirmsBothDirections() = runBlocking {
+        var state = BluetoothAdapter.STATE_ON
+        val requested = mutableListOf<Boolean>()
+        val bluetooth = CampHeadunitBluetooth(
+            readState = { state },
+            requestState = { enabled ->
+                requested += enabled
+                state = if (enabled) BluetoothAdapter.STATE_ON else BluetoothAdapter.STATE_OFF
+                true
+            },
+            shell = { error("Android 11 must not use the broken svc process") },
+        )
+        assertTrue(bluetooth.setEnabled(false).success)
+        assertTrue(bluetooth.setEnabled(false).success)
+        assertTrue(bluetooth.setEnabled(true).success)
+        assertEquals(listOf(false, true), requested)
+    }
+
+    @Test fun rejectedAdapterRequestDoesNotFallBackToShellOrReportSuccess() = runBlocking {
+        val bluetooth = CampHeadunitBluetooth(
+            readState = { BluetoothAdapter.STATE_ON },
+            requestState = { false },
+            shell = { error("Must not issue a second request through another path") },
+        )
+        val result = bluetooth.setEnabled(false)
+        assertFalse(result.success)
+        assertTrue(result.detail.contains("rejected"))
+    }
+
     @Test fun togglesOnlyAndroidsAdapterAndAlwaysEnablesItOnExit() = runBlocking {
         var state = BluetoothAdapter.STATE_ON
         val commands = mutableListOf<String>()

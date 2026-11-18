@@ -25,6 +25,7 @@ internal data class CampResult(val success: Boolean, val detail: String)
 
 internal enum class CampStep(val reportLabel: String) {
     DIKEY("DiKey lights OFF"),
+    CARPLAY("Disconnect CarPlay"),
     BLUETOOTH("Head-unit Bluetooth OFF"),
     CLIMATE("Climate OFF"),
     WINDOWS("Close windows"),
@@ -39,6 +40,7 @@ internal enum class CampStep(val reportLabel: String) {
 internal interface CampActions {
     suspend fun save(): CampSavedState
     suspend fun dikeyLightsOff(saved: CampSavedState): CampResult
+    suspend fun disconnectCarPlay(): CampResult
     suspend fun headunitBluetoothOff(): CampResult
     suspend fun climateOff(): CampResult
     suspend fun closeWindows(): CampResult
@@ -102,6 +104,7 @@ internal class CampModeSession(
             }
             val steps: List<Pair<CampStep, suspend () -> CampResult>> = listOf(
                 CampStep.DIKEY to { actions.dikeyLightsOff(original) },
+                CampStep.CARPLAY to { actions.disconnectCarPlay() },
                 CampStep.BLUETOOTH to { actions.headunitBluetoothOff() },
                 CampStep.CLIMATE to { actions.climateOff() },
                 CampStep.WINDOWS to { actions.closeWindows() },
