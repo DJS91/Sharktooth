@@ -92,6 +92,12 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/camp_mode_step_climate" />
+                <CheckBox
+                    android:id="@+id/campStepWindows"
+                    style="@style/Widget.OpenDiKey.CampStep"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_mode_step_windows" />
             </LinearLayout>
 
             <LinearLayout
@@ -99,12 +105,6 @@
                 android:layout_height="wrap_content"
                 android:layout_weight="1"
                 android:orientation="vertical">
-                <CheckBox
-                    android:id="@+id/campStepWindows"
-                    style="@style/Widget.OpenDiKey.CampStep"
-                    android:layout_width="match_parent"
-                    android:layout_height="wrap_content"
-                    android:text="@string/camp_mode_step_windows" />
                 <CheckBox
                     android:id="@+id/campStepHeadlights"
                     style="@style/Widget.OpenDiKey.CampStep"
@@ -117,6 +117,18 @@
                     android:layout_width="match_parent"
                     android:layout_height="wrap_content"
                     android:text="@string/camp_mode_step_drls" />
+                <CheckBox
+                    android:id="@+id/campStepCluster"
+                    style="@style/Widget.OpenDiKey.CampStep"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_mode_step_cluster" />
+                <CheckBox
+                    android:id="@+id/campStepHud"
+                    style="@style/Widget.OpenDiKey.CampStep"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:text="@string/camp_mode_step_hud" />
             </LinearLayout>
 
             <LinearLayout

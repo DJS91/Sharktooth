@@ -81,7 +81,7 @@ class BydHeadlightController internal constructor(
     }
 
     /** The caller must enforce Park for OFF and confirm the selector using [mode] afterwards. */
-    fun setMode(mode: Int): CommandResult {
+    fun setMode(mode: Int, beforeWrite: () -> Unit = {}): CommandResult {
         require(mode in OFF..LOW_BEAM) { "Invalid headlight selector mode: $mode" }
         val problems = mutableListOf<String>()
         val dev = attempt("Instrument binding", problems) { device() }
@@ -93,13 +93,13 @@ class BydHeadlightController internal constructor(
                 null
             }
             if (named != null) {
-                writeMode(dev, mode, TestPath.NAMED)
+                writeMode(dev, mode, TestPath.NAMED, beforeWrite)
             } else {
                 // Only use the legacy selector command with readable, validated selector feedback.
                 if (readFeedback(dev, problems).mode == null) {
                     CommandResult(false, "Legacy headlight selector feedback unavailable; no command sent. ${problems.joinToString("; ")}")
                 } else {
-                    writeMode(dev, mode, TestPath.FEATURE)
+                    writeMode(dev, mode, TestPath.FEATURE, beforeWrite)
                 }
             }
         } ?: CommandResult(false, problems.joinToString("; "))

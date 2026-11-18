@@ -10,6 +10,7 @@ import androidx.core.content.ContextCompat
 import com.sphy.airconcontroller.OpenDiKeyApp
 import com.sphy.airconcontroller.adb.AdbPermissionManager
 import com.sphy.airconcontroller.byd.BydAcController
+import com.sphy.airconcontroller.byd.BydCabinDisplayController
 import com.sphy.airconcontroller.byd.BydDisplayController
 import com.sphy.airconcontroller.byd.BydDrlController
 import com.sphy.airconcontroller.byd.BydHeadlightController
@@ -90,6 +91,7 @@ internal class CampModeController private constructor(context: Context) {
         private val drl = BydDrlController(app)
         private val headlights = BydHeadlightController(app)
         private val display = BydDisplayController(app)
+        private val cabinDisplays = BydCabinDisplayController(app)
         private val vehicle = BydVehicleInfoController(app)
         private val audio = CampMediaAudio(app)
         private val bluetooth = CampHeadunitBluetooth(app)
@@ -110,17 +112,24 @@ internal class CampModeController private constructor(context: Context) {
                 val climate = ac.snapshot()
                 check(climate.bound && climate.powerOn != null) { "Cannot read the previous climate state; nothing changed." }
                 val drlOn = checkNotNull(drl.isOn()) { "Cannot read the previous DRL state; nothing changed." }
-                val headlight = headlights.awaitMode()
-                val headlightMode = checkNotNull(headlight.mode) {
-                    "Cannot read the previous headlight selector; nothing changed. ${headlight.detail}"
+                val cluster = cabinDisplays.awaitClusterBrightness()
+                val clusterBrightness = checkNotNull(cluster.value) {
+                    "Cannot read the previous instrument-cluster brightness; nothing changed. ${cluster.detail}"
                 }
+                val hud = cabinDisplays.awaitHudState()
+                val hudState = checkNotNull(hud.value) {
+                    "Cannot read the previous HUD power state; nothing changed. ${hud.detail}"
+                }
+                val headlight = headlights.awaitMode()
+                val headlightMode = headlight.mode
                 val media = audio.snapshot()
                 bluetooth.prepare()
                 val wakeLog = AdbPermissionManager.runShellCommandQuick(app, wakeLogCommand(System.currentTimeMillis()))
                 check(wakeLog.exitCode == 0) {
                     "Cannot monitor the car's backlight wake event: ${wakeLog.output}. Check local ADB; nothing changed."
                 }
-                CampSavedState(climate, media.volume, media.muted, drlOn, headlightMode, lighting, true)
+                CampSavedState(climate, media.volume, media.muted, drlOn, headlightMode, lighting, true,
+                    clusterBrightness, hudState)
             }
         }
 
@@ -188,7 +197,18 @@ internal class CampModeController private constructor(context: Context) {
 
         override suspend fun drlOff(): CampResult = setDrl(false)
 
-        override suspend fun headlightsOff(): CampResult = setHeadlights(BydHeadlightController.OFF)
+        override suspend fun headlightsOff(): CampResult =
+            setHeadlights(BydHeadlightController.OFF, allowUnreadable = true)
+
+        override suspend fun dimCluster(): CampResult = io {
+            val result = cabinDisplays.setClusterBrightness(BydCabinDisplayController.MIN_BRIGHTNESS, ::requirePark)
+            CampResult(result.success, result.detail)
+        }
+
+        override suspend fun hudOff(): CampResult = io {
+            val result = cabinDisplays.setHudState(BydCabinDisplayController.HUD_OFF, ::requirePark)
+            CampResult(result.success, result.detail)
+        }
 
         override suspend fun muteMedia(): CampResult = io { audio.mute() }
 
@@ -223,18 +243,47 @@ internal class CampModeController private constructor(context: Context) {
 
         override suspend fun restoreHeadlights(saved: CampSavedState): CampResult {
             val mode = saved.headlightMode
-                ?: return CampResult(true, "Older session did not change headlights; no restoration needed.")
+                ?: return CampResult(true,
+                    "No saved headlight selector; no automatic headlight restoration. Verify normal lighting manually before driving.")
             return setHeadlights(mode)
         }
 
-        private suspend fun setHeadlights(mode: Int): CampResult {
+        override suspend fun restoreCluster(saved: CampSavedState): CampResult {
+            val brightness = saved.clusterBrightness
+                ?: return CampResult(true, "Older session did not change instrument-cluster brightness.")
+            check(brightness in BydCabinDisplayController.MIN_BRIGHTNESS..BydCabinDisplayController.MAX_BRIGHTNESS) {
+                "Invalid saved instrument-cluster brightness: $brightness; no command sent."
+            }
+            return io {
+                val result = cabinDisplays.setClusterBrightness(brightness, ::requirePark)
+                CampResult(result.success, result.detail)
+            }
+        }
+
+        override suspend fun restoreHud(saved: CampSavedState): CampResult {
+            val hudState = saved.hudState
+                ?: return CampResult(true, "Older session did not change HUD power.")
+            check(hudState in BydCabinDisplayController.HUD_ON..BydCabinDisplayController.HUD_OFF) {
+                "Invalid saved HUD power state: $hudState; no command sent."
+            }
+            return io {
+                val result = cabinDisplays.setHudState(hudState, ::requirePark)
+                CampResult(result.success, result.detail)
+            }
+        }
+
+        private suspend fun setHeadlights(mode: Int, allowUnreadable: Boolean = false): CampResult {
             val reading = io { headlights.readMode() }
             val before = reading.mode
-                ?: return CampResult(false, "Headlight selector read-back unavailable: ${reading.detail}")
+            if (before == null && !allowUnreadable) {
+                return CampResult(false, "Headlight selector read-back unavailable: ${reading.detail}")
+            }
             if (before == mode) return CampResult(true, "Headlight selector already at mode $mode; no command sent.")
             val result = io {
                 if (mode == BydHeadlightController.OFF) requirePark()
-                headlights.setMode(mode)
+                headlights.setMode(mode) {
+                    if (mode == BydHeadlightController.OFF) requirePark()
+                }
             }
             if (!result.success) return CampResult(false, result.detail)
             repeat(10) {
@@ -283,6 +332,7 @@ internal class CampModeController private constructor(context: Context) {
         internal fun encodeSaved(saved: CampSavedState): JSONObject {
             val ac = saved.climate
             return JSONObject().put("volume", saved.mediaVolume).put("muted", saved.mediaMuted)
+                .put("clusterBrightness", saved.clusterBrightness).put("hudState", saved.hudState)
                 .put("manageHeadunitBluetooth", saved.manageHeadunitBluetooth)
                 .put("dikeyLighting", saved.dikeyLighting?.let {
                     JSONObject(LightingProfile(it.bars, it.backlight).toJson())
@@ -326,6 +376,8 @@ internal class CampModeController private constructor(context: Context) {
                     LedRestoreSnapshot(lighting.bars, lighting.backlight)
                 },
                 json.optBoolean("manageHeadunitBluetooth", false),
+                if (json.isNull("clusterBrightness")) null else json.getInt("clusterBrightness"),
+                if (json.isNull("hudState")) null else json.getInt("hudState"),
             )
         }
     }

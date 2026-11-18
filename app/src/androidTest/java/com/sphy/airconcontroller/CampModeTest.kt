@@ -83,7 +83,7 @@ class CampModeTest {
                     (0 until group.childCount).map { group.getChildAt(it) as CheckBox }
                 }
                 val ids = listOf(R.id.campStepDikey, R.id.campStepBluetooth, R.id.campStepClimate, R.id.campStepWindows, R.id.campStepHeadlights,
-                    R.id.campStepDrls, R.id.campStepMedia, R.id.campStepScreen)
+                    R.id.campStepDrls, R.id.campStepCluster, R.id.campStepHud, R.id.campStepMedia, R.id.campStepScreen)
                 assertEquals(ids, rows.map { it.id })
                 for ((index, step) in CampStep.entries.withIndex()) {
                     val completed = CampStep.entries.take(index).toSet()
@@ -132,15 +132,18 @@ class CampModeTest {
             0, true, false, 2,
             LedRestoreSnapshot((1..3).associateWith {
                 LedBarState(LedMode.ON.code, LedRgb(4 * it, 8 * it, 16 * it))
-            }, LedRgb(4, 8, 16)), true,
+            }, LedRgb(4, 8, 16)), true, 7, 2,
         )
         assertEquals(saved, CampModeController.decodeSaved(CampModeController.encodeSaved(saved)))
         val legacy = CampModeController.encodeSaved(saved).apply {
             remove("headlightMode")
             remove("dikeyLighting")
             remove("manageHeadunitBluetooth")
+            remove("clusterBrightness")
+            remove("hudState")
         }
-        assertEquals(saved.copy(headlightMode = null, dikeyLighting = null, manageHeadunitBluetooth = false),
+        assertEquals(saved.copy(headlightMode = null, dikeyLighting = null, manageHeadunitBluetooth = false,
+            clusterBrightness = null, hudState = null),
             CampModeController.decodeSaved(legacy))
     }
 }

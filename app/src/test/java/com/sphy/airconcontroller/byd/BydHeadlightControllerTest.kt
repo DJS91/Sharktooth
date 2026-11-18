@@ -84,6 +84,22 @@ class BydHeadlightControllerTest {
         assertEquals(4, controller.mode())
     }
 
+    @Test fun namedOffCanBeAttemptedWithUnreadableOriginalButMustPassImmediateWriteGuard() {
+        val selector = Selector(0)
+        val controller = controller(selector)
+        assertNull(controller.mode())
+        val blocked = controller.setMode(1) { throw IllegalStateException("Park no longer confirmed") }
+        assertFalse(blocked.success)
+        assertTrue(selector.writes.isEmpty())
+        var guarded = false
+        assertTrue(controller.setMode(1) {
+            assertTrue(selector.writes.isEmpty())
+            guarded = true
+        }.success)
+        assertTrue(guarded)
+        assertEquals(listOf(1), selector.writes)
+    }
+
     @Test fun missingSdkAndInvalidReadingsAreNotInterpretedAsOff() {
         for (device in listOf(null, Any(), Selector(0), Selector(-1), Selector(255))) {
             assertNull(controller(device).mode())

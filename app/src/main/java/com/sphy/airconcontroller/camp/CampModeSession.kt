@@ -16,6 +16,8 @@ internal data class CampSavedState(
     val headlightMode: Int? = null,
     val dikeyLighting: LedRestoreSnapshot? = null,
     val manageHeadunitBluetooth: Boolean = false,
+    val clusterBrightness: Int? = null,
+    val hudState: Int? = null,
 )
 
 internal data class CampResult(val success: Boolean, val detail: String)
@@ -27,6 +29,8 @@ internal enum class CampStep(val reportLabel: String) {
     WINDOWS("Close windows"),
     HEADLIGHTS("Headlights OFF"),
     DRLS("DRLs OFF"),
+    CLUSTER("Dim instrument cluster"),
+    HUD("HUD OFF"),
     MEDIA("Mute media"),
     SCREEN("Screen OFF"),
 }
@@ -39,6 +43,8 @@ internal interface CampActions {
     suspend fun closeWindows(): CampResult
     suspend fun headlightsOff(): CampResult
     suspend fun drlOff(): CampResult
+    suspend fun dimCluster(): CampResult
+    suspend fun hudOff(): CampResult
     suspend fun muteMedia(): CampResult
     suspend fun screenOff(): CampResult
     suspend fun stopWindows(): CampResult
@@ -46,6 +52,8 @@ internal interface CampActions {
     suspend fun restoreMedia(saved: CampSavedState): CampResult
     suspend fun restoreDrl(saved: CampSavedState): CampResult
     suspend fun restoreHeadlights(saved: CampSavedState): CampResult
+    suspend fun restoreCluster(saved: CampSavedState): CampResult
+    suspend fun restoreHud(saved: CampSavedState): CampResult
     suspend fun enableHeadunitBluetooth(saved: CampSavedState): CampResult
     suspend fun enableDikeyLights(saved: CampSavedState): CampResult
     suspend fun persist(saved: CampSavedState?, report: String, completedSteps: Set<CampStep>)
@@ -87,6 +95,10 @@ internal class CampModeSession(
             // Durably save restoration data before the very first write to the car.
             actions.persist(saved, "", emptySet())
             mutableState.value = State(true, true, "")
+            if (original.headlightMode == null) {
+                record("WARNING: Original headlight selector unavailable. Headlights OFF will still be attempted; " +
+                    "automatic headlight restoration is unavailable. Verify normal lighting manually before driving.")
+            }
             val steps: List<Pair<CampStep, suspend () -> CampResult>> = listOf(
                 CampStep.DIKEY to { actions.dikeyLightsOff(original) },
                 CampStep.BLUETOOTH to { actions.headunitBluetoothOff() },
@@ -94,6 +106,8 @@ internal class CampModeSession(
                 CampStep.WINDOWS to { actions.closeWindows() },
                 CampStep.HEADLIGHTS to { actions.headlightsOff() },
                 CampStep.DRLS to { actions.drlOff() },
+                CampStep.CLUSTER to { actions.dimCluster() },
+                CampStep.HUD to { actions.hudOff() },
                 CampStep.MEDIA to { actions.muteMedia() },
                 CampStep.SCREEN to { actions.screenOff() },
             )
@@ -124,6 +138,10 @@ internal class CampModeSession(
                 }
                 record("$label: ${if (result.success) "OK" else "NOT CONFIRMED"} - ${result.detail}")
                 if (!result.success) {
+                    if (step == CampStep.HEADLIGHTS) {
+                        record("WARNING: Continuing without confirmed headlights OFF. Verify normal lighting manually before driving.")
+                        continue
+                    }
                     record("Entry incomplete. Use Retry restoring settings to restore the saved settings.")
                     return
                 }
@@ -161,6 +179,8 @@ internal class CampModeSession(
         try {
             var restored = true
             val steps: List<Pair<String, suspend () -> CampResult>> = listOf(
+                "Restore instrument cluster" to { actions.restoreCluster(original) },
+                "Restore HUD" to { actions.restoreHud(original) },
                 "Enable head-unit Bluetooth" to { actions.enableHeadunitBluetooth(original) },
                 "Enable DiKey lights" to { actions.enableDikeyLights(original) },
                 "Restore media" to { actions.restoreMedia(original) },

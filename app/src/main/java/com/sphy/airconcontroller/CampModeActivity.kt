@@ -69,6 +69,8 @@ class CampModeActivity : HomeActivity() {
             Triple(CampStep.WINDOWS, R.id.campStepWindows, R.string.camp_mode_step_windows),
             Triple(CampStep.HEADLIGHTS, R.id.campStepHeadlights, R.string.camp_mode_step_headlights),
             Triple(CampStep.DRLS, R.id.campStepDrls, R.string.camp_mode_step_drls),
+            Triple(CampStep.CLUSTER, R.id.campStepCluster, R.string.camp_mode_step_cluster),
+            Triple(CampStep.HUD, R.id.campStepHud, R.string.camp_mode_step_hud),
             Triple(CampStep.MEDIA, R.id.campStepMedia, R.string.camp_mode_step_media),
             Triple(CampStep.SCREEN, R.id.campStepScreen, R.string.camp_mode_step_screen),
         )
