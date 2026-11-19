@@ -22,7 +22,7 @@ Open **Dashboard** (gauge icon) for live vehicle and head-unit readings. The fir
 
 | Card | Readings and controls |
 | --- | --- |
-| **Battery & Fuel** | Battery health, capacity, charge, fuel level, and electric, fuel and combined range estimates. The bright green (`#33FF00`) bar shows charge; the blue bar shows fuel. |
+| **Battery & Fuel** | Battery health, charge, fuel level, and electric, fuel and combined range estimates. Beneath the title, **Trip Started** shows how many minutes ago you shifted into Drive and **Traveled** shows the distance since that shift. The bright green (`#33FF00`) bar shows charge; the blue bar shows fuel. |
 | **Drive** | Speed, gear, parking brake status and pedal use. The blue outer arc shows accelerator input and the yellow inner arc shows brake input. The centre shows the percentage above the active pedal name and a smaller grey **Pedal** caption, with brake taking priority. Dots and figures mark the highest readings recorded while Dashboard was open that day. Peaks are saved across restarts and reset each day. |
 | **Tyres** | Pressure and status for each tyre. The card shows **OK** only when all four report normal status. |
 | **Consumption** | Lifetime fuel economy, fuel used, electric consumption and energy charged. |
@@ -31,6 +31,12 @@ Open **Dashboard** (gauge icon) for live vehicle and head-unit readings. The fir
 | **Head unit** | CPU, memory and storage usage. |
 | **Engine** | Live RPM, power, oil level and a rolling one-hour RPM graph. The trace uses the same amber as the engine path on Power Flow. It records while Dashboard is open; gaps mean no readings were collected. The graph starts fresh when the app restarts. |
 | **Chassis** | Outside temperature and steering angle. |
+
+### Charge and fuel used on a trip
+
+Each confirmed shift from **Park to Drive**, while the vehicle is ready, records the start time, odometer, charge and fuel levels immediately. The elapsed minutes and distance update while Dashboard is open. Missing trip or distance readings show a dash. Each bar keeps a faint, colour-matched fill at its starting level behind the live fill. The grey, normal-weight figure beside the current percentage shows the net percentage points used, for example **74%** followed by **-2%** after leaving with 76%.
+
+The starting levels stay fixed through stops, Dashboard navigation and app restarts, until the next Park-to-Drive shift. Sharktooth's background listener must be running to observe that shift; opening the app after departure cannot reconstruct missed starting levels. Unavailable departure readings are left unknown. Charging or refuelling reduces the net used figure, which is hidden when the current level is at or above the starting level. Sample data shows charge at **76% -6%** after leaving with 82%, and fuel at **61% -4%** after leaving with 65%.
 
 ### Optional cards
 

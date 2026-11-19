@@ -29,16 +29,26 @@ class PercentBar @JvmOverloads constructor(
         style = Paint.Style.FILL
     }
     private val rect = RectF()
+    private val startPaint = Paint(Paint.ANTI_ALIAS_FLAG)
+    private var startPct: Float? = null
     private var displayPct = 0f
     private var targetPct = 0f
 
     fun setFillColor(@ColorInt color: Int, glowRadius: Float = 0f) {
         fillPaint.color = color
+        startPaint.color = ColorUtils.setAlphaComponent(color, 45)
         if (glowRadius > 0f) {
             fillPaint.setShadowLayer(glowRadius, 0f, 0f, ColorUtils.setAlphaComponent(color, 170))
         } else {
             fillPaint.clearShadowLayer()
         }
+        invalidate()
+    }
+
+    fun setStartPercent(value: Double?) {
+        val next = value?.takeIf { it.isFinite() && it in 0.0..100.0 }?.toFloat()
+        if (startPct == next) return
+        startPct = next
         invalidate()
     }
 
@@ -77,6 +87,11 @@ class PercentBar @JvmOverloads constructor(
         val radius = h / 2f
         rect.set(left, top, right, bottom)
         canvas.drawRoundRect(rect, radius, radius, trackPaint)
+
+        startPct?.let { pct ->
+            rect.set(left, top, left + w * pct / 100f, bottom)
+            canvas.drawRoundRect(rect, radius, radius, startPaint)
+        }
 
         val fillW = max(0f, min(w, w * displayPct / 100f))
         if (fillW <= 0f) return

@@ -44,6 +44,7 @@ import com.sphy.airconcontroller.ui.AttitudeHorizonView
 import com.sphy.airconcontroller.ui.PercentBar
 import com.sphy.airconcontroller.ui.PedalGauge
 import com.sphy.airconcontroller.ui.PowerFlowView
+import com.sphy.airconcontroller.ui.TripUsageTracker
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -132,6 +133,92 @@ class DashboardActivityTest {
         }
     }
 
+    @Test fun batteryTripMarkersShowDepartureLevelsAndMutedNetUsage() {
+        AppSettings(context).dashboardCards = listOf(DashboardCard.BATTERY)
+        val page = open(samples = true)
+        instrumentation.runOnMainSync {
+            val rows = page.findViewById<LinearLayout>(R.id.infoBlockRows)
+            page.bindDashboardBattery(
+                BydVehicleInfoController.BatteryInfo(bound = true, socPct = 74.0, fuelPct = 58.0),
+                startCharge = 76.0, startFuel = 60.0,
+            )
+            for (row in listOf(rows.getChildAt(0), rows.getChildAt(1))) {
+                val usage = row.findViewById<TextView>(R.id.percentRowTripUsage)
+                assertEquals("-2%", usage.text.toString())
+                assertEquals(View.VISIBLE, usage.visibility)
+                assertEquals(page.getColor(R.color.text_muted), usage.currentTextColor)
+                assertFalse(usage.typeface.isBold)
+            }
+            val bar = rows.getChildAt(0).findViewById<PercentBar>(R.id.percentRowBar)
+            bar.setPercent(40.0, animate = false)
+            bar.setStartPercent(null)
+            val without = Bitmap.createBitmap(bar.width, bar.height, Bitmap.Config.ARGB_8888)
+            val with = Bitmap.createBitmap(bar.width, bar.height, Bitmap.Config.ARGB_8888)
+            try {
+                bar.draw(Canvas(without))
+                bar.setStartPercent(76.0)
+                bar.draw(Canvas(with))
+                val x = bar.paddingLeft + ((bar.width - bar.paddingLeft - bar.paddingRight) * 0.65f).toInt()
+                val y = bar.height / 2
+                assertNotEquals("The used portion should retain a faint departure-level fill",
+                    without.getPixel(x, y), with.getPixel(x, y))
+                assertNotEquals("The marker must be fainter than the current solid fill",
+                    page.getColor(R.color.dashboard_battery_charge), with.getPixel(x, y))
+                assertEquals("The marker must not extend past the departure level",
+                    without.getPixel(bar.width * 9 / 10, y), with.getPixel(bar.width * 9 / 10, y))
+            } finally {
+                without.recycle()
+                with.recycle()
+            }
+            page.bindDashboardBattery(
+                BydVehicleInfoController.BatteryInfo(bound = true, socPct = 78.0, fuelPct = null),
+                startCharge = 76.0, startFuel = 60.0,
+            )
+            assertEquals(View.GONE, rows.getChildAt(0).findViewById<View>(R.id.percentRowTripUsage).visibility)
+            assertEquals(View.GONE, rows.getChildAt(1).findViewById<View>(R.id.percentRowTripUsage).visibility)
+        }
+    }
+
+    @Test fun tripUsageStateSurvivesReopeningSettings() {
+        val settings = AppSettings(context)
+        val original = settings.tripUsageState
+        try {
+            val expected = TripUsageTracker.State(
+                lastGear = 4, startCharge = 76.0, startFuel = null,
+                startedAtMs = 123_000L, startOdometerKm = 12_468.0,
+            )
+            settings.tripUsageState = expected
+            assertEquals(expected, AppSettings(context).tripUsageState)
+        } finally {
+            settings.tripUsageState = original
+        }
+    }
+
+    @Test fun batteryTripDetailsSitDirectlyBelowTheTitleAndUpdateWithDistance() {
+        AppSettings(context).dashboardCards = listOf(DashboardCard.BATTERY)
+        val page = open(samples = true)
+        instrumentation.runOnMainSync {
+            val title = page.findViewById<TextView>(R.id.infoBlockTitle)
+            val details = page.findViewById<TextView>(R.id.infoBlockSubtitle)
+            val trip = TripUsageTracker.State(startedAtMs = 1_000L, startOdometerKm = 12_468.0)
+            page.bindDashboardBattery(
+                BydVehicleInfoController.BatteryInfo(bound = true, odoKm = 12_480.0),
+                trip = trip, nowMs = 1_021_000L,
+            )
+            assertEquals("Trip Started: 17 minutes ago\nTraveled: 12 km", details.text.toString())
+            assertSame(title.parent, details.parent)
+            assertEquals(title.left, details.left)
+            assertTrue(details.top >= title.bottom)
+            page.bindDashboardBattery(
+                BydVehicleInfoController.BatteryInfo(bound = true, odoKm = 12_481.5),
+                trip = trip, nowMs = 1_081_000L,
+            )
+            assertEquals("Trip Started: 18 minutes ago\nTraveled: 13.5 km", details.text.toString())
+            page.bindDashboardBattery(BydVehicleInfoController.BatteryInfo(bound = false))
+            assertEquals("Trip Started: —\nTraveled: — km", details.text.toString())
+        }
+    }
+
     @Test fun debugDashboardStartsWithLabeledSamplesAndFilledBars() {
         AppSettings(context).dashboardCards = DashboardCard.entries
         val page = open(samples = true)
@@ -194,6 +281,8 @@ class DashboardActivityTest {
                 }
             }
             val rows = page.findViewById<LinearLayout>(R.id.infoBlockRows)
+            assertEquals("-6%", rows.getChildAt(0).findViewById<TextView>(R.id.percentRowTripUsage).text.toString())
+            assertEquals("-4%", rows.getChildAt(1).findViewById<TextView>(R.id.percentRowTripUsage).text.toString())
             listOf("76%" to "#33FF00", "61%" to "#0090FF").forEachIndexed { index, (text, color) ->
                 val row = rows.getChildAt(index)
                 assertEquals(text, row.findViewById<TextView>(R.id.percentRowValue).text.toString())

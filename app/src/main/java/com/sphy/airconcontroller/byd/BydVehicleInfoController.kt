@@ -383,6 +383,14 @@ class BydVehicleInfoController(context: Context) {
         deviceOrRebind("Statistic")?.let { num(it, "getElecPercentageValue") }
             ?.takeIf { it in 0.0..100.0 }
 
+    fun readFuelPercent(): Double? =
+        deviceOrRebind("Statistic")?.let { num(it, "getFuelPercentageValue") }
+            ?.takeIf { it in 0.0..100.0 }
+
+    fun readOdometerKm(): Double? =
+        deviceOrRebind("Statistic")?.let { num(it, "getTotalMileageValue") }
+            ?.takeIf { it >= 0.0 }
+
     /** Vehicle power signals; a null field means that getter was unavailable or returned a sentinel. */
     data class PowerReads(val powerLevel: Int?, val energyMode: Int?) {
         override fun toString() = "powerLevel=${powerLevel ?: "—"} energyMode=${energyMode ?: "—"}"

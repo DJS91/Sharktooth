@@ -9,6 +9,7 @@ import com.sphy.airconcontroller.dikey.LedMode
 import com.sphy.airconcontroller.dikey.LedPosition
 import com.sphy.airconcontroller.lighting.LightingPeriod
 import com.sphy.airconcontroller.ui.DashboardCard
+import com.sphy.airconcontroller.ui.TripUsageTracker
 
 /** Which ADAS editor mode is selected in the ADAS screen. */
 enum class AdasEditMode {
@@ -79,6 +80,29 @@ data class LedRestoreSnapshot(
 
 class AppSettings(context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
+
+    internal var tripUsageState: TripUsageTracker.State
+        get() {
+            fun percent(key: String) = Double.fromBits(prefs.getLong(key, Double.NaN.toBits()))
+                .takeIf { it.isFinite() && it in 0.0..100.0 }
+            return TripUsageTracker.State(
+                lastGear = prefs.getInt("trip_usage_last_gear", -1).takeIf { it in 1..6 },
+                startCharge = percent("trip_usage_start_charge"),
+                startFuel = percent("trip_usage_start_fuel"),
+                startedAtMs = prefs.getLong("trip_usage_started_at", -1L).takeIf { it >= 0 },
+                startOdometerKm = Double.fromBits(prefs.getLong("trip_usage_start_odo", Double.NaN.toBits()))
+                    .takeIf { it.isFinite() && it >= 0.0 },
+            )
+        }
+        set(value) {
+            prefs.edit()
+                .putInt("trip_usage_last_gear", value.lastGear ?: -1)
+                .putLong("trip_usage_start_charge", (value.startCharge ?: Double.NaN).toBits())
+                .putLong("trip_usage_start_fuel", (value.startFuel ?: Double.NaN).toBits())
+                .putLong("trip_usage_started_at", value.startedAtMs ?: -1L)
+                .putLong("trip_usage_start_odo", (value.startOdometerKm ?: Double.NaN).toBits())
+                .apply()
+        }
 
     internal data class PedalPeaks(val accelerator: Float?, val brake: Float?)
 

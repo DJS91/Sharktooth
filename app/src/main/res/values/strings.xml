@@ -11,6 +11,13 @@
     <string name="dashboard_rpm_no_history">No RPM history available</string>
     <string name="dashboard_pedal_accelerate">Accelerate</string>
     <string name="dashboard_pedal_label">Pedal</string>
+    <string name="dashboard_trip_percent_spent">-%1$s</string>
+    <string name="dashboard_trip_started_unknown">Trip Started: —</string>
+    <string name="dashboard_trip_traveled">Traveled: %1$s km</string>
+    <plurals name="dashboard_trip_started_minutes">
+      <item quantity="one">Trip Started: %d minute ago</item>
+      <item quantity="other">Trip Started: %d minutes ago</item>
+    </plurals>
     <string name="dashboard_pedals">Pedals</string>
     <item type="id" name="dashboardPedalPeaks" />
     <item type="id" name="dashboardPowerFlowDiagram" />

@@ -6,6 +6,11 @@ import com.sphy.airconcontroller.byd.TabletSocReader
 import com.sphy.airconcontroller.fridge.EvakoolProtocol
 
 internal object DashboardSamples {
+    val tripUsage = TripUsageTracker.State(
+        lastGear = 4, startCharge = 82.0, startFuel = 65.0,
+        startedAtMs = System.currentTimeMillis() - 17 * 60_000L, startOdometerKm = 12_468.0,
+    )
+
     val vehicle = BydVehicleInfoController.Snapshot(
         sdkInjected = false,
         bindNote = null,

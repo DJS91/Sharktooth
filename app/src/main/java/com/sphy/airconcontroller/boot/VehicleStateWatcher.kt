@@ -4,6 +4,8 @@ import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import com.sphy.airconcontroller.byd.BydVehicleInfoController
+import com.sphy.airconcontroller.storage.AppSettings
+import com.sphy.airconcontroller.ui.TripUsageTracker
 import kotlinx.coroutines.CoroutineScope
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
@@ -63,6 +65,8 @@ object VehicleStateWatcher {
 
     private class Sampler(private val app: Context) {
         private val controller = BydVehicleInfoController(app)
+        private val settings = AppSettings(app)
+        private val tripUsage = TripUsageTracker(settings.tripUsageState)
         private var lastTickAt = SystemClock.elapsedRealtime()
 
         private var gearObserved = false
@@ -77,8 +81,20 @@ object VehicleStateWatcher {
 
         fun tick() {
             checkSleepGap()
-            checkGear()
-            checkPower()
+            val gear = checkGear()
+            val power = checkPower()
+            val previousTrip = tripUsage.state
+            val knownGears = listOfNotNull(gear?.gear, gear?.autoMode).filter { it in 1..6 }.distinct()
+            val enteredDriveFromPark = tripUsage.state.lastGear == 1 && knownGears.singleOrNull() == 4
+            tripUsage.sample(
+                ready = power.energyMode?.let { it > 0 },
+                gear = knownGears.singleOrNull(),
+                charge = if (enteredDriveFromPark) controller.readTractionSoc() else null,
+                fuel = if (enteredDriveFromPark) controller.readFuelPercent() else null,
+                nowMs = System.currentTimeMillis(),
+                odometerKm = if (enteredDriveFromPark) controller.readOdometerKm() else null,
+            )
+            if (tripUsage.state != previousTrip) settings.tripUsageState = tripUsage.state
             // Last, so an event trigger from this tick takes priority over the periodic check.
             AdasAutoApplyCoordinator.periodicCheck(app)
         }
@@ -93,14 +109,14 @@ object VehicleStateWatcher {
             }
         }
 
-        private fun checkGear() {
+        private fun checkGear(): BydVehicleInfoController.GearReads? {
             val reads = controller.readGear()
             if (reads == null) {
                 if (!gearUnavailable) {
                     record("gearbox read unavailable (${controller.lastBindError ?: "no error"}); will keep retrying", warning = true)
                     gearUnavailable = true
                 }
-                return
+                return null
             }
             if (gearUnavailable) record("gearbox read recovered: $reads")
             gearUnavailable = false
@@ -119,19 +135,20 @@ object VehicleStateWatcher {
             }
             lastGear = reads.gear
             lastAutoMode = reads.autoMode
+            return reads
         }
 
-        private fun checkPower() {
+        private fun checkPower(): BydVehicleInfoController.PowerReads {
             val reads = controller.readPowerState()
             val level = reads.powerLevel
             val energy = reads.energyMode
             if (!powerObserved) {
-                if (level == null && energy == null) return
+                if (level == null && energy == null) return reads
                 powerObserved = true
                 record("initial power state: $reads")
                 lastPowerLevel = level
                 lastEnergyMode = energy
-                return
+                return reads
             }
 
             if (level != lastPowerLevel || energy != lastEnergyMode) {
@@ -149,6 +166,7 @@ object VehicleStateWatcher {
                     recheck(if (ready) "vehicle-ready" else "power-level-up")
                 }
             }
+            return reads
         }
 
         private fun enteredDrive(previous: Int?, current: Int?): Boolean =

@@ -42,6 +42,7 @@ import com.sphy.airconcontroller.ui.DashboardCard
 import com.sphy.airconcontroller.ui.DashboardGrid
 import com.sphy.airconcontroller.ui.DashboardLayout
 import com.sphy.airconcontroller.ui.DashboardSamples
+import com.sphy.airconcontroller.ui.TripUsageTracker
 import com.sphy.airconcontroller.ui.DashboardSwipeHost
 import com.sphy.airconcontroller.ui.PercentBar
 import com.sphy.airconcontroller.ui.PowerFlowView
@@ -58,6 +59,7 @@ import java.time.LocalDate
 import java.text.NumberFormat
 import kotlin.math.atan2
 import kotlin.math.sqrt
+import kotlin.math.roundToInt
 
 /** Live vehicle cards in a saved, editable three-column dashboard. */
 open class VehicleInfoActivity : HomeActivity() {
@@ -330,6 +332,17 @@ open class VehicleInfoActivity : HomeActivity() {
         batteryHealthValue = batteryBlock.findViewById(R.id.infoBlockHero)
         batteryBlock.setHeroLabel(R.string.vehicle_info_row_soh)
         batterySubtitle = batteryBlock.findViewById(R.id.infoBlockSubtitle)
+        val batteryTitle = batteryBlock.findViewById<TextView>(R.id.infoBlockTitle)
+        val batteryHeader = batteryTitle.parent as LinearLayout
+        val titleColumnParams = batteryTitle.layoutParams
+        batteryHeader.removeView(batteryTitle)
+        batteryBlock.removeView(batterySubtitle)
+        val batteryTitleColumn = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        batteryHeader.addView(batteryTitleColumn, 0, titleColumnParams)
+        batteryTitleColumn.addView(batteryTitle, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+        ))
+        batteryTitleColumn.addView(batterySubtitle)
         batteryMetaHost = batteryBlock.findViewById(R.id.infoBlockRows)
         socBar = addPercentRow(
             batteryMetaHost, getString(R.string.vehicle_info_row_soc), R.color.dashboard_battery_charge, glow = true,
@@ -605,6 +618,7 @@ open class VehicleInfoActivity : HomeActivity() {
         host.addView(row)
         return PercentRow(
             value = row.findViewById(R.id.percentRowValue),
+            tripUsage = row.findViewById(R.id.percentRowTripUsage),
             animate = !showDashboardSamples,
             bar = row.findViewById<PercentBar>(R.id.percentRowBar).apply {
                 val inset = if (glow) dp(4) else 0
@@ -617,19 +631,28 @@ open class VehicleInfoActivity : HomeActivity() {
         )
     }
 
-    internal fun bindDashboardBattery(b: BydVehicleInfoController.BatteryInfo) {
+    internal fun bindDashboardBattery(
+        b: BydVehicleInfoController.BatteryInfo,
+        startCharge: Double? = null,
+        startFuel: Double? = null,
+        trip: TripUsageTracker.State? = null,
+        nowMs: Long = System.currentTimeMillis(),
+    ) {
         batteryHealthValue.text = fmt(b.sohPct, "%")
-        socBar.set(b.socPct)
-        fuelBar.set(b.fuelPct)
-        batterySubtitle.text = listOfNotNull(
-            b.remainingUsableKwh?.let {
-                getString(R.string.vehicle_info_usable_fmt, trimNum(it))
-            },
-            b.packEnergyKwh?.let { getString(R.string.vehicle_info_pack_fmt, trimNum(it)) },
-            b.capacityAh?.let { getString(R.string.vehicle_info_capacity_ah_fmt, trimNum(it)) },
-        ).joinToString(" · ")
-        batterySubtitle.visibility =
-            if (batterySubtitle.text.isNullOrBlank()) View.GONE else View.VISIBLE
+        socBar.set(b.socPct, startCharge)
+        fuelBar.set(b.fuelPct, startFuel)
+        val elapsedMinutes = trip?.startedAtMs?.let {
+            ((nowMs - it).coerceAtLeast(0L) / 60_000L).coerceAtMost(Int.MAX_VALUE.toLong()).toInt()
+        }
+        val started = if (elapsedMinutes == null) {
+            getString(R.string.dashboard_trip_started_unknown)
+        } else {
+            resources.getQuantityString(R.plurals.dashboard_trip_started_minutes, elapsedMinutes, elapsedMinutes)
+        }
+        val distance = trip?.distanceKm(b.odoKm)?.let { trimNum(it) }
+            ?: getString(R.string.dashboard_value_unavailable)
+        batterySubtitle.text = "$started\n${getString(R.string.dashboard_trip_traveled, distance)}"
+        batterySubtitle.visibility = View.VISIBLE
 
         // Keep percent rows; refresh trailing text rows after them.
         while (batteryMetaHost.childCount > 2) {
@@ -647,7 +670,8 @@ open class VehicleInfoActivity : HomeActivity() {
 
     private fun bindSnapshot(snap: BydVehicleInfoController.Snapshot) {
         val b = snap.battery
-        bindDashboardBattery(b)
+        val trip = if (showDashboardSamples) DashboardSamples.tripUsage else settings.tripUsageState
+        bindDashboardBattery(b, trip.startCharge, trip.startFuel, trip)
         bindPowerFlow(b.socPct, snap.dynamics.enginePowerKw, snap.dynamics.engineRpm, snap.dynamics.speedKmh)
         val mileage = SpannableString(TextUtils.expandTemplate(
             getText(R.string.dashboard_mileage_hero), fmt(b.evMilesKm, " km"), fmt(b.hevMilesKm, " km"),
@@ -901,12 +925,23 @@ open class VehicleInfoActivity : HomeActivity() {
 
     private data class PercentRow(
         val value: TextView,
+        val tripUsage: TextView,
         val bar: PercentBar,
         val animate: Boolean,
     ) {
-        fun set(pct: Double?) {
-            value.text = if (pct == null) "—" else String.format("%.0f%%", pct)
-            bar.setPercent(pct, animate)
+        fun set(pct: Double?, start: Double?) {
+            val current = pct?.takeIf { it.isFinite() && it in 0.0..100.0 }
+            val baseline = start?.takeIf { it.isFinite() && it in 0.0..100.0 }
+            value.text = if (current == null) "—" else String.format("%.0f%%", current)
+            val spent = if (current != null && baseline != null) {
+                (baseline.roundToInt() - current.roundToInt()).coerceAtLeast(0)
+            } else 0
+            tripUsage.visibility = if (spent > 0) View.VISIBLE else View.GONE
+            tripUsage.text = if (spent > 0) value.context.getString(
+                R.string.dashboard_trip_percent_spent, String.format("%d%%", spent),
+            ) else ""
+            bar.setStartPercent(baseline)
+            bar.setPercent(current, animate)
         }
     }
 
