@@ -4,8 +4,10 @@ import android.content.Intent
 import android.bluetooth.BluetoothManager
 import android.media.AudioManager
 import android.os.Build
+import android.view.Gravity
 import android.widget.CheckBox
 import android.widget.Button
+import android.widget.TextView
 import android.view.ViewGroup
 import android.view.View
 import androidx.test.ext.junit.runners.AndroidJUnit4
@@ -89,49 +91,69 @@ class CampModeTest {
             instrumentation.runOnMainSync {
                 val enable = activity.findViewById<Button>(R.id.campModeEnable)
                 val stop = activity.findViewById<Button>(R.id.campModeStopWindows)
-                assertEquals("Enable Camping Mode", enable.text.toString())
+                assertEquals(View.GONE, stop.visibility)
                 assertEquals(stop.javaClass, enable.javaClass)
-                assertEquals(stop.currentTextColor, enable.currentTextColor)
-                assertEquals(stop.backgroundTintList, enable.backgroundTintList)
+                assertEquals(stop.backgroundTintList?.defaultColor, enable.backgroundTintList?.defaultColor)
                 assertEquals(stop.textSize, enable.textSize, 0f)
                 val list = activity.findViewById<ViewGroup>(R.id.campModeChecklist)
-                val rows = (0 until list.childCount).flatMap { column ->
-                    val group = list.getChildAt(column) as ViewGroup
-                    (0 until group.childCount).map { group.getChildAt(it) as CheckBox }
-                }
+                val rows = (0 until list.childCount).map { list.getChildAt(it) as CheckBox }
+                assertTrue(rows.all {
+                    (it.gravity and Gravity.HORIZONTAL_GRAVITY_MASK) == Gravity.LEFT
+                })
                 val ids = listOf(R.id.campStepDikey, R.id.campStepCarPlay, R.id.campStepBluetooth, R.id.campStepClimate, R.id.campStepWindows,
                     R.id.campStepDrls, R.id.campStepCluster, R.id.campStepHud, R.id.campStepMedia, R.id.campStepScreen)
                 assertEquals(ids, rows.map { it.id })
                 for ((index, step) in CampStep.entries.withIndex()) {
                     val completed = CampStep.entries.take(index).toSet()
                     activity.renderChecklist(CampModeSession.State(true, true, "", completed, step))
+                    activity.renderControls(CampModeSession.State(true, true, "", completed, step), true, 80.0, 10)
+                    assertEquals(View.VISIBLE, stop.visibility)
                     assertEquals(List(rows.size) { it < index }, rows.map { it.isChecked })
                     assertTrue(rows[index].text.contains("applying"))
                     assertTrue("Progress indicators must not be user-editable", rows.none { it.isClickable })
                 }
                 activity.renderChecklist(CampModeSession.State(true, false, "", CampStep.entries.toSet()))
+                activity.renderControls(CampModeSession.State(true, false, "", CampStep.entries.toSet()), true, 80.0, 10)
+                assertEquals(View.GONE, stop.visibility)
                 assertTrue(rows.all { it.isChecked })
                 assertTrue(rows.none { it.text.contains("applying") })
                 activity.renderChecklist(CampModeSession.State(false, false, ""))
                 assertTrue(rows.none { it.isChecked })
                 val idle = CampModeSession.State(false, false, "")
-                activity.renderControls(idle, parkConfirmed = false)
-                assertEquals(View.GONE, enable.visibility)
-                assertFalse(enable.isEnabled)
-                activity.renderControls(idle, parkConfirmed = true)
+                activity.renderControls(idle, false, 80.0, 10)
                 assertEquals(View.VISIBLE, enable.visibility)
+                assertFalse(enable.isEnabled)
+                assertEquals("Waiting for vehicle Park Gear", enable.text.toString())
+                val disabledTextColor = enable.currentTextColor
+                val status = activity.findViewById<TextView>(R.id.campModeStatus)
+                assertEquals(View.GONE, status.visibility)
+                assertEquals("", status.text.toString())
+                activity.renderControls(idle, true, null, 10)
+                assertFalse(enable.isEnabled)
+                assertEquals("Enable Camping Mode", enable.text.toString())
+                assertEquals(View.VISIBLE, status.visibility)
+                activity.renderControls(idle, true, 10.0, 10)
+                assertFalse(enable.isEnabled)
+                activity.renderControls(idle, true, 10.1, 10)
                 assertTrue(enable.isEnabled)
-                activity.renderControls(idle, parkConfirmed = false)
-                assertEquals(View.GONE, enable.visibility)
+                assertNotEquals(disabledTextColor, enable.currentTextColor)
+                activity.renderControls(idle, true, 10.1, 11)
+                assertFalse(enable.isEnabled)
                 activity.renderControls(CampModeSession.State(true, false, "", remindHeadlights = true),
-                    parkConfirmed = false)
+                    false, null, 10)
                 assertEquals(View.VISIBLE, enable.visibility)
                 assertTrue(enable.isEnabled)
                 assertEquals(activity.getString(R.string.camp_mode_retry_restore), enable.text.toString())
-                val reminder = activity.findViewById<View>(R.id.campModeHeadlightReminder)
-                assertEquals(View.VISIBLE, reminder.visibility)
-                activity.renderControls(idle, parkConfirmed = true)
-                assertEquals(View.GONE, reminder.visibility)
+                assertNull(activity.headlightReminderDialog)
+                activity.renderControls(CampModeSession.State(false, false, "", remindHeadlights = true),
+                    false, null, 10)
+                assertTrue(activity.headlightReminderDialog?.isShowing == true)
+                assertEquals(
+                    activity.getString(R.string.camp_mode_headlight_reminder),
+                    activity.headlightReminderDialog?.findViewById<TextView>(android.R.id.message)?.text.toString(),
+                )
+                activity.renderControls(idle, true, 80.0, 10)
+                assertTrue(activity.headlightReminderDialog?.isShowing == true)
             }
         } finally {
             instrumentation.runOnMainSync { activity.finish() }

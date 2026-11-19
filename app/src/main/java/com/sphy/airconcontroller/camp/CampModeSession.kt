@@ -22,6 +22,9 @@ internal data class CampSavedState(
 
 internal data class CampResult(val success: Boolean, val detail: String)
 
+internal fun batteryAtCutoff(soc: Double?, cutoff: Int): Boolean =
+    soc != null && soc in 0.0..cutoff.toDouble()
+
 internal enum class CampStep(val reportLabel: String) {
     DIKEY("DiKey lights OFF"),
     CARPLAY("Disconnect CarPlay"),
@@ -114,7 +117,7 @@ internal class CampModeSession(
                 CampStep.SCREEN to { actions.screenOff() },
             )
             for ((step, run) in steps) {
-                if (state.value.completedSteps.isNotEmpty()) delay(1000)
+                if (state.value.completedSteps.isNotEmpty()) delay(500)
                 if (stopping) {
                     record("Entry stopped. Use Retry restoring settings to restore the saved settings.")
                     return
@@ -168,6 +171,17 @@ internal class CampModeSession(
         if (!state.value.awaitingWake) return
         mutableState.value = state.value.copy(awaitingWake = false)
         if (state.value.busy) restoreAfterEntry = true else exit()
+    }
+
+    suspend fun checkBatteryCutoff(soc: Double?, cutoff: Int) {
+        if (state.value.awaitingWake && !state.value.busy && batteryAtCutoff(soc, cutoff)) exit()
+    }
+
+    suspend fun acknowledgeHeadlightReminder() {
+        val current = state.value
+        if (!current.remindHeadlights) return
+        actions.persist(saved, current.report, current.completedSteps, false)
+        mutableState.value = current.copy(remindHeadlights = false)
     }
 
     suspend fun exit() {

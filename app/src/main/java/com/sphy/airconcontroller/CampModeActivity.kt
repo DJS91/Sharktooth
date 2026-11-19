@@ -6,6 +6,7 @@ import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.TextView
+import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
@@ -13,18 +14,23 @@ import com.google.android.material.dialog.MaterialAlertDialogBuilder
 import com.sphy.airconcontroller.camp.CampModeController
 import com.sphy.airconcontroller.camp.CampModeSession
 import com.sphy.airconcontroller.camp.CampStep
+import com.sphy.airconcontroller.camp.batteryAtCutoff
 import kotlinx.coroutines.flow.combine
 import kotlinx.coroutines.launch
+import java.text.NumberFormat
 
 class CampModeActivity : HomeActivity() {
     private var previousStep: CampStep? = null
+    private var reminderDialogPresented = false
+    internal var headlightReminderDialog: AlertDialog? = null
+        private set
+    private lateinit var controller: CampModeController
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
         setContentView(R.layout.activity_camp_mode)
-        val controller = CampModeController.get(this)
+        controller = CampModeController.get(this)
         val enable = findViewById<Button>(R.id.campModeEnable)
-        val report = findViewById<TextView>(R.id.campModeReport)
         enable.setOnClickListener {
             if (controller.state.value.active) {
                 controller.exit()
@@ -38,43 +44,92 @@ class CampModeActivity : HomeActivity() {
             }
         }
         findViewById<Button>(R.id.campModeStopWindows).setOnClickListener { controller.stopWindows() }
+        findViewById<Button>(R.id.campModeCutoffDecrease).setOnClickListener { controller.adjustBatteryCutoff(-1) }
+        findViewById<Button>(R.id.campModeCutoffIncrease).setOnClickListener { controller.adjustBatteryCutoff(1) }
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
-                combine(controller.state, controller.parkConfirmed) { state, park -> state to park }
-                    .collect { (state, park) ->
-                        renderControls(state, park)
-                        renderChecklist(state)
-                        report.text = state.report
-                        report.visibility = if ((state.busy && state.currentStep != null) || state.report.isBlank()) {
-                            View.GONE
-                        } else View.VISIBLE
-                    }
+                launch { controller.state.collect(::renderChecklist) }
+                combine(controller.state, controller.vehicleStatus, controller.batteryCutoff) { state, vehicle, cutoff ->
+                    Triple(state, vehicle, cutoff)
+                }.collect { (state, vehicle, cutoff) ->
+                    renderVehicleStatus(vehicle)
+                    renderControls(state, vehicle.gear?.confirmedPark == true, vehicle.soc, cutoff)
+                }
             }
         }
     }
 
-    internal fun renderControls(state: CampModeSession.State, parkConfirmed: Boolean) {
-        findViewById<Button>(R.id.campModeEnable).apply {
-            visibility = if (state.active || parkConfirmed) View.VISIBLE else View.GONE
-            isEnabled = !state.busy && !state.awaitingWake && (state.active || parkConfirmed)
-            setText(if (state.active && !state.awaitingWake && !state.busy) {
-                R.string.camp_mode_retry_restore
-            } else R.string.camp_mode_enable)
+    private fun percent(value: Double): String =
+        NumberFormat.getPercentInstance(resources.configuration.locales[0]).apply {
+            maximumFractionDigits = 1
+        }.format(value / 100)
+
+    internal fun renderVehicleStatus(vehicle: CampModeController.VehicleStatus) {
+        val gear = vehicle.gear
+        findViewById<TextView>(R.id.campModeGear).text = when {
+            gear?.confirmedPark == true -> getString(R.string.camp_mode_gear_park)
+            else -> listOfNotNull(gear?.gear, gear?.autoMode).filter { it in 2..6 }.distinct()
+                .singleOrNull()?.let { listOf("R", "N", "D", "S", "M")[it - 2] }
+                ?: getString(R.string.camp_mode_reading_unknown)
         }
-        findViewById<TextView>(R.id.campModeStatus).setText(when {
-            state.busy -> R.string.camp_mode_working
-            state.awaitingWake -> R.string.camp_mode_waiting
-            state.active -> R.string.camp_mode_session
-            !parkConfirmed -> R.string.camp_mode_park_required
-            else -> R.string.camp_mode_idle
-        })
-        findViewById<TextView>(R.id.campModeHeadlightReminder).apply {
-            if (state.remindHeadlights) {
-                if (visibility != View.VISIBLE) {
-                    visibility = View.VISIBLE
-                    post { requestRectangleOnScreen(Rect(0, 0, width, height)) }
+        findViewById<TextView>(R.id.campModeSoc).text =
+            vehicle.soc?.let(::percent) ?: getString(R.string.camp_mode_reading_unknown)
+    }
+
+    internal fun renderControls(
+        state: CampModeSession.State,
+        parkConfirmed: Boolean,
+        soc: Double?,
+        cutoff: Int,
+    ) {
+        val lowBattery = batteryAtCutoff(soc, cutoff)
+        val adjustable = !state.active && !state.busy
+        val waitingForPark = adjustable && !parkConfirmed
+        findViewById<Button>(R.id.campModeCutoffDecrease).isEnabled = adjustable && cutoff > 1
+        findViewById<Button>(R.id.campModeCutoffIncrease).isEnabled = adjustable && cutoff < 99
+        findViewById<TextView>(R.id.campModeCutoffValue).text = percent(cutoff.toDouble())
+        findViewById<TextView>(R.id.campModeHeading).setText(
+            when {
+                state.busy -> R.string.camp_mode_busy
+                state.awaitingWake -> R.string.camp_mode_on
+                state.active -> R.string.camp_mode_restore_pending
+                else -> R.string.camp_mode_off
+            }
+        )
+        findViewById<Button>(R.id.campModeEnable).apply {
+            isEnabled = !state.busy && !state.awaitingWake &&
+                (state.active || (parkConfirmed && soc != null && !lowBattery))
+            setText(when {
+                state.active && !state.awaitingWake && !state.busy -> R.string.camp_mode_retry_restore
+                waitingForPark -> R.string.camp_mode_waiting_for_park
+                else -> R.string.camp_mode_enable
+            })
+        }
+        findViewById<Button>(R.id.campModeStopWindows).visibility =
+            if (state.busy && state.currentStep != null) View.VISIBLE else View.GONE
+        findViewById<TextView>(R.id.campModeStatus).apply {
+            visibility = if (waitingForPark) View.GONE else View.VISIBLE
+            val message = when {
+                state.busy -> R.string.camp_mode_working
+                state.awaitingWake -> R.string.camp_mode_waiting
+                state.active -> R.string.camp_mode_session
+                waitingForPark -> null
+                soc == null -> R.string.camp_mode_soc_unavailable
+                lowBattery -> R.string.camp_mode_soc_at_cutoff
+                else -> R.string.camp_mode_idle
+            }
+            text = message?.let { getString(it) }.orEmpty()
+        }
+        if (!state.remindHeadlights) reminderDialogPresented = false
+        if (state.remindHeadlights && !state.active && !state.busy && !reminderDialogPresented) {
+            reminderDialogPresented = true
+            headlightReminderDialog = MaterialAlertDialogBuilder(this)
+                .setTitle(R.string.camp_mode_headlight_reminder_title)
+                .setMessage(R.string.camp_mode_headlight_reminder)
+                .setPositiveButton(android.R.string.ok) { _, _ ->
+                    controller.acknowledgeHeadlightReminder()
                 }
-            } else visibility = View.GONE
+                .show()
         }
     }
 

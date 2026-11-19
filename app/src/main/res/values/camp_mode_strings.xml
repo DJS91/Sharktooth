@@ -1,13 +1,31 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
-    <string name="camp_mode_confirm">Use only while safely parked with the vehicle ON. Keep hands and objects clear of all windows.\n\nThis turns DiKey strip and key lighting OFF if connected, disconnects active CarPlay, turns head-unit Bluetooth OFF, turns climate OFF, closes all four windows, turns DRLs OFF, dims the instrument cluster to its minimum nonzero brightness, turns the HUD OFF, mutes media, then sends the car\'s Screen off shortcut command.\n\nHeadlights are controlled manually and are never changed by Camp Mode. Automatic headlight-triggered start and exit are disabled because this head unit does not provide reliable OFF/AUTO selector feedback. Turn the headlights back on and visually verify normal lighting before driving.\n\nTouch the screen to wake it and automatically end Camping Mode. Original cluster brightness and HUD power are restored first; remain in Park for these changes. Head-unit Bluetooth and the connected DiKey lighting are turned ON, even if previously off; the DiKey colours are preserved. Saved media volume and mute state and DRLs are restored; windows stay closed. Climate stays OFF, even if it was ON before camping; the saved climate profile is not reapplied. Turn climate on manually when needed. Media volume returns to its saved level even if adjusted during camping. CarPlay disconnects without forgetting the phone or changing Wi-Fi; reconnect it normally afterwards. Head-unit Bluetooth connections disconnect during camping; ESP32 Bluetooth stays on. Only media audio is muted. This does not keep the vehicle powered or monitor occupants.</string>
+    <string name="camp_mode_off">Camp is off</string>
+    <string name="camp_mode_on">Camp is active</string>
+    <string name="camp_mode_busy">Camp is updating</string>
+    <string name="camp_mode_restore_pending">Restoration pending</string>
+    <string name="camp_mode_gear_label">Gear</string>
+    <string name="camp_mode_gear_park">Park</string>
+    <string name="camp_mode_traction_battery">Traction battery</string>
+    <string name="camp_mode_reading_unknown">—</string>
+    <string name="camp_mode_battery_cutoff">Battery cutoff</string>
+    <string name="camp_mode_cutoff_help">Camp ends at or below this charge level.</string>
+    <string name="camp_mode_cutoff_decrease">Decrease battery cutoff</string>
+    <string name="camp_mode_cutoff_increase">Increase battery cutoff</string>
+    <string name="camp_mode_cutoff_minus" translatable="false">−</string>
+    <string name="camp_mode_cutoff_plus" translatable="false">+</string>
+    <string name="camp_mode_steps_heading">Actions</string>
+    <string name="camp_mode_soc_unavailable">Traction battery charge is unavailable. Camp Mode cannot start.</string>
+    <string name="camp_mode_soc_at_cutoff">Traction battery charge is at or below the cutoff. Camp Mode cannot start.</string>
+    <string name="camp_mode_confirm">Use only while safely parked with the vehicle ON. Keep hands and objects clear of all windows.\n\nThis turns DiKey strip and key lighting OFF if connected, disconnects active CarPlay, turns head-unit Bluetooth OFF, turns climate OFF, closes all four windows, turns DRLs OFF, dims the instrument cluster to its minimum nonzero brightness, turns the HUD OFF, mutes media, then sends the car\'s Screen off shortcut command.\n\nHeadlights are controlled manually and are never changed by Camp Mode. Turn the headlights back on and visually verify normal lighting before driving.\n\nTouch the screen to wake it and automatically end Camping Mode. Original cluster brightness and HUD power are restored first; remain in Park for these changes. Head-unit Bluetooth and the connected DiKey lighting are turned ON, even if previously off; the DiKey colours are preserved. Saved media volume and mute state and DRLs are restored; windows stay closed. Climate stays OFF, even if it was ON before camping; the saved climate profile is not reapplied. Turn climate on manually when needed. Media volume returns to its saved level even if adjusted during camping. CarPlay disconnects without forgetting the phone or changing Wi-Fi; reconnect it normally afterwards. Head-unit Bluetooth connections disconnect during camping; ESP32 Bluetooth stays on. Only media audio is muted. This does not keep the vehicle powered or monitor occupants.</string>
     <string name="camp_mode_idle">Vehicle in Park. Control headlights manually. Wake the screen to end Camping Mode; windows stay closed and climate stays OFF.</string>
-    <string name="camp_mode_park_required">Start is available only when Park is confirmed. Keep the vehicle ON.</string>
-    <string name="camp_mode_headlight_triggers_unavailable">Headlight-triggered start and exit are disabled: OFF/AUTO selector feedback is unreliable on this head unit. Start manually in Park. Camp Mode never changes the headlights.</string>
+    <string name="camp_mode_waiting_for_park">Waiting for vehicle Park Gear</string>
     <string name="camp_mode_headlight_reminder">Turn the headlights back on and visually verify normal lighting before driving.</string>
-    <string name="camp_mode_working">Updating settings. Please wait. STOP WINDOWS remains available.</string>
+    <string name="camp_mode_headlight_reminder_title">Headlight reminder</string>
+    <string name="camp_mode_reminder_dismiss_failed">Could not save the reminder dismissal. It may appear again.</string>
+    <string name="camp_mode_working">Updating settings. Please wait.</string>
     <string name="camp_mode_waiting">Camping Mode active. Touch the screen to wake it and automatically restore saved settings.</string>
-    <string name="camp_mode_session">Saved settings need restoration. Check results below and tap Retry restoring settings. Saved settings are kept until restoration succeeds.</string>
+    <string name="camp_mode_session">Saved settings need restoration. Tap Retry restoring settings. Saved settings are kept until restoration succeeds.</string>
     <string name="camp_mode_retry_restore">Retry restoring settings</string>
     <string name="camp_mode_step_dikey">Turn DiKey lights off (if connected)</string>
     <string name="camp_mode_step_carplay">Disconnect CarPlay (if connected)</string>

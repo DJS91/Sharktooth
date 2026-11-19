@@ -6,8 +6,10 @@ import android.content.Intent
 import android.content.IntentFilter
 import android.media.AudioManager
 import android.util.Log
+import android.widget.Toast
 import androidx.core.content.ContextCompat
 import com.sphy.airconcontroller.OpenDiKeyApp
+import com.sphy.airconcontroller.R
 import com.sphy.airconcontroller.adb.AdbPermissionManager
 import com.sphy.airconcontroller.byd.BydAcController
 import com.sphy.airconcontroller.byd.BydCabinDisplayController
@@ -23,7 +25,10 @@ import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.SupervisorJob
 import kotlinx.coroutines.delay
 import kotlinx.coroutines.flow.collectLatest
+import kotlinx.coroutines.flow.MutableStateFlow
+import kotlinx.coroutines.flow.asStateFlow
 import kotlinx.coroutines.flow.distinctUntilChanged
+import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.flow.flow
 import kotlinx.coroutines.flow.map
 import kotlinx.coroutines.launch
@@ -43,13 +48,32 @@ internal class CampModeController private constructor(context: Context) {
         CampStep.decodeSaved(prefs.getStringSet("completedSteps", emptySet()).orEmpty()),
         prefs.getBoolean("remindHeadlights", false))
     val state = session.state
-    val parkConfirmed = flow {
-        emit(false)
+    private val telemetry = BydVehicleInfoController(app)
+    private val telemetryLock = Mutex()
+    private val selectedCutoff = MutableStateFlow(prefs.getInt("batteryCutoff", 10).coerceIn(1, 99))
+    val batteryCutoff = selectedCutoff.asStateFlow()
+
+    data class VehicleStatus(
+        val gear: BydVehicleInfoController.GearReads? = null,
+        val soc: Double? = null,
+    )
+
+    val vehicleStatus = flow {
+        emit(VehicleStatus())
         while (true) {
-            emit(io { actions.isParkConfirmed() })
+            emit(telemetryLock.withLock { io { VehicleStatus(telemetry.readGear(), telemetry.readTractionSoc()) } })
             delay(1000)
         }
     }.distinctUntilChanged()
+
+    private suspend fun readSoc() = telemetryLock.withLock { io { telemetry.readTractionSoc() } }
+
+    fun adjustBatteryCutoff(delta: Int) {
+        if (state.value.active || state.value.busy) return
+        val updated = (selectedCutoff.value + delta).coerceIn(1, 99)
+        prefs.edit().putInt("batteryCutoff", updated).apply()
+        selectedCutoff.value = updated
+    }
 
     init {
         OpenDiKeyApp.from(app).dikey.controller.seedLightingSuppression(
@@ -59,6 +83,13 @@ internal class CampModeController private constructor(context: Context) {
                 addAction(Intent.ACTION_SCREEN_ON)
                 addAction(Intent.ACTION_USER_PRESENT)
             }, ContextCompat.RECEIVER_NOT_EXPORTED)
+        scope.launch {
+            while (true) {
+                state.first { it.awaitingWake && !it.busy }
+                session.checkBatteryCutoff(readSoc(), batteryCutoff.value)
+                delay(5000)
+            }
+        }
         scope.launch {
             state.map { it.awaitingWake }.distinctUntilChanged().collectLatest { awaitingWake ->
                 if (!awaitingWake) return@collectLatest
@@ -86,6 +117,21 @@ internal class CampModeController private constructor(context: Context) {
     fun enter() { scope.launch { session.enter() } }
     fun exit() { scope.launch { session.exit() } }
     fun stopWindows() { scope.launch { session.stopWindows() } }
+    fun acknowledgeHeadlightReminder() {
+        scope.launch {
+            try {
+                session.acknowledgeHeadlightReminder()
+            } catch (e: IOException) {
+                Log.e("CampModeController", "Could not save headlight reminder dismissal.", e)
+                Toast.makeText(app, com.sphy.airconcontroller.R.string.camp_mode_reminder_dismiss_failed,
+                    Toast.LENGTH_LONG).show()
+            } catch (e: SecurityException) {
+                Log.e("CampModeController", "Could not save headlight reminder dismissal.", e)
+                Toast.makeText(app, com.sphy.airconcontroller.R.string.camp_mode_reminder_dismiss_failed,
+                    Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     fun onScreenWake(): Boolean {
         if (!state.value.awaitingWake) return false
@@ -115,6 +161,16 @@ internal class CampModeController private constructor(context: Context) {
         private val persistence = Mutex()
 
         override suspend fun save(): CampSavedState {
+            val soc = readSoc()
+            val batteryError = when {
+                soc == null -> R.string.camp_mode_soc_unavailable
+                batteryAtCutoff(soc, batteryCutoff.value) -> R.string.camp_mode_soc_at_cutoff
+                else -> null
+            }
+            if (batteryError != null) {
+                Toast.makeText(app, batteryError, Toast.LENGTH_LONG).show()
+                error(app.getString(batteryError))
+            }
             val lighting = if (dikey.isConnected) dikey.settings.ledRestoreSnapshot() else null
             if (lighting != null) {
                 check(lighting.bars.keys.containsAll(listOf(1, 2, 3)) && lighting.backlight != null &&
@@ -191,8 +247,6 @@ internal class CampModeController private constructor(context: Context) {
             }
 
         }
-
-        fun isParkConfirmed(): Boolean = vehicle.readGear()?.confirmedPark == true
 
         override suspend fun climateOff(): CampResult = climatePower.off()
 

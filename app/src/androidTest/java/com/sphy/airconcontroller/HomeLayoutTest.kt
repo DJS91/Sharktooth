@@ -265,7 +265,7 @@ class HomeLayoutTest {
         }
     }
 
-    @Test fun campContentIsCenteredAndRemainsScrollableOnSmallScreens() {
+    @Test fun campPanelsStaySideBySideAndRemainScrollableOnSmallScreens() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.runOnMainSync {
             val context = ContextThemeWrapper(instrumentation.targetContext, R.style.Theme_OpenDiKey)
@@ -281,32 +281,25 @@ class HomeLayoutTest {
                 val content = enable.parent as ViewGroup
                 assertEquals("Enable button should be horizontally centered", content.width / 2f,
                     (enable.left + enable.right) / 2f, 1f)
-                val first = content.getChildAt(0)
-                val last = content.getChildAt(content.childCount - 1)
-                assertEquals("Content should be vertically centered below the tabs",
-                    first.top.toFloat(), (content.height - last.bottom).toFloat(), 1f)
-                assertTrue(first.top >= content.paddingTop)
-                assertTrue(last.bottom <= content.height - content.paddingBottom)
-                assertTrue("Long content must remain scrollable", content.parent is android.widget.ScrollView)
+                val overview = root.findViewById<View>(R.id.campModeOverview)
+                val options = root.findViewById<View>(R.id.campModeOptions)
+                assertTrue(overview.right < options.left)
+                assertEquals(overview.top, options.top)
+                val scroll = (overview.parent.parent as View).parent as android.widget.ScrollView
+                assertTrue("Long content must remain scrollable", height != 360 || scroll.canScrollVertically(1))
                 val stop = root.findViewById<View>(R.id.campModeStopWindows)
                 assertSame("STOP WINDOWS must stay outside the scrolling checklist", root, stop.parent)
                 assertTrue("STOP WINDOWS must stay on screen", stop.top >= 0 && stop.bottom <= root.height)
                 val checklist = root.findViewById<ViewGroup>(R.id.campModeChecklist)
-                val columns = (0 until checklist.childCount).map { checklist.getChildAt(it) as ViewGroup }
-                val rows = columns.map { column ->
-                    (0 until column.childCount).map { column.getChildAt(it) as android.widget.CheckBox }
+                val cutoff = root.findViewById<View>(R.id.campModeCutoffValue)
+                assertSame(options, checklist.parent.parent)
+                assertTrue((cutoff.parent as View).bottom < checklist.top)
+                val rows = (0 until checklist.childCount).map { checklist.getChildAt(it) as android.widget.CheckBox }
+                assertEquals(10, rows.size)
+                for ((above, below) in rows.zipWithNext()) {
+                    assertTrue("Checklist rows must not overlap", above.bottom <= below.top)
                 }
-                assertEquals("Fill each column top-to-bottom, leaving the last slot empty",
-                    listOf(3, 3, 2), rows.map { it.size })
-                for (column in rows) {
-                    for ((above, below) in column.zipWithNext()) {
-                        assertTrue("Checklist rows must not overlap", above.bottom <= below.top)
-                    }
-                }
-                for ((left, right) in columns.zipWithNext()) {
-                    assertTrue("Checklist columns must not overlap", left.right <= right.left)
-                }
-                for (step in rows.flatten()) {
+                for (step in rows) {
                     assertTrue("Each checklist label needs visible width", step.width > step.compoundPaddingLeft + step.compoundPaddingRight)
                     assertTrue("Wrapped labels must not be clipped",
                         step.layout.height <= step.height - step.compoundPaddingTop - step.compoundPaddingBottom)
@@ -339,16 +332,13 @@ class HomeLayoutTest {
                     val page = LayoutInflater.from(context).inflate(R.layout.activity_camp_mode, null)
                     val checklist = page.findViewById<ViewGroup>(R.id.campModeChecklist)
                     val labels = listOf(
-                        page.findViewById<TextView>(R.id.campModeEnable) to
-                            page.findViewById<TextView>(R.id.campModeStopWindows).currentTextColor,
                         com.google.android.material.switchmaterial.SwitchMaterial(context) to expected,
                         TextView(context) to colors[1], android.widget.CheckBox(context) to expected,
                         android.widget.RadioButton(context) to expected, android.widget.EditText(context) to expected,
                         LayoutInflater.from(context).inflate(R.layout.activity_camp_tests, null)
                             .findViewById<TextView>(R.id.campTestDimOverlay) to expected,
-                    ) + (0 until checklist.childCount).flatMap { column ->
-                        val group = checklist.getChildAt(column) as ViewGroup
-                        (0 until group.childCount).map { (group.getChildAt(it) as TextView) to expected }
+                    ) + (0 until checklist.childCount).map {
+                        (checklist.getChildAt(it) as TextView) to colors[1]
                     }
                     for ((label, color) in labels) {
                         assertEquals("${label.javaClass.simpleName} must follow the selected text palette",

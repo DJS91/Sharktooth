@@ -309,9 +309,11 @@ class HomeNavigationTest {
                 assertEquals(R.id.modesCamp, activity.findViewById<MaterialButtonToggleGroup>(R.id.modesTabs).checkedButtonId)
                 assertTrue(activity.findViewById<View>(R.id.modesPet).isEnabled)
                 val enable = activity.findViewById<android.widget.Button>(R.id.campModeEnable)
-                assertTrue(enable.isEnabled)
-                assertEquals("Enable Camping Mode", enable.text.toString())
-                assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.campModeStatus).visibility)
+                assertEquals(View.VISIBLE, enable.visibility)
+                if (enable.text.toString() == activity.getString(R.string.camp_mode_waiting_for_park)) {
+                    assertFalse(enable.isEnabled)
+                    assertEquals(View.GONE, activity.findViewById<View>(R.id.campModeStatus).visibility)
+                }
                 assertEquals("", activity.findViewById<android.widget.TextView>(R.id.campModeReport).text.toString())
             }
         } finally {

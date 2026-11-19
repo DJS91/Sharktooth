@@ -97,6 +97,16 @@ class CampModeSessionTest {
             assertEquals(CampStep.entries[index], session.state.value.currentStep)
             actionTimes += System.nanoTime()
         }
+
+        @Test fun acknowledgingHeadlightReminderPersistsDismissal() = runBlocking {
+            val actions = Actions()
+            val session = CampModeSession(actions, remindHeadlights = true)
+
+            session.acknowledgeHeadlightReminder()
+
+            assertFalse(session.state.value.remindHeadlights)
+            assertFalse(actions.remindHeadlights)
+        }
         session.enter()
         assertEquals(listOf("save", "persist"), actions.calls.take(2))
         assertEquals(listOf("save", "dikey", "carplay", "bluetooth", "climate", "windows", "drl", "cluster", "hud", "mute", "screen"),
@@ -109,10 +119,11 @@ class CampModeSessionTest {
         assertEquals(CampStep.entries.toSet(), session.state.value.completedSteps)
         assertEquals(session.state.value.completedSteps, actions.completedSteps)
         assertNull(session.state.value.currentStep)
-        for ((previous, next) in actionTimes.zipWithNext()) {
-            assertTrue("Each confirmed action must remain visible for at least one second",
-                next - previous >= 1_000_000_000L)
-        }
+        val pauses = actionTimes.zipWithNext { previous, next -> next - previous }
+        assertTrue("Each confirmed action must remain visible for at least half a second",
+            pauses.all { it >= 500_000_000L })
+        assertTrue("The fastest pause should be shorter than the old one-second delay",
+            pauses.any { it < 1_000_000_000L })
     }
 
     @Test fun failedStepStopsEntryWithoutBlankingScreenAndRemainsRestorable() = runBlocking {
@@ -272,6 +283,24 @@ class CampModeSessionTest {
         assertNull(actions.stored)
         session.onScreenWake()
         assertEquals(5, actions.calls.count { it.startsWith("restore-") })
+    }
+
+    @Test fun batteryCutoffRestoresAnActiveCampOnceAtOrBelowTheSelectedCharge() = runBlocking {
+        for (lowSoc in listOf(10.0, 9.5)) {
+            val actions = Actions()
+            val session = CampModeSession(actions, saved, completedSteps = CampStep.entries.toSet())
+            session.checkBatteryCutoff(null, 10)
+            session.checkBatteryCutoff(10.1, 10)
+            assertTrue(session.state.value.awaitingWake)
+            assertTrue(actions.calls.isEmpty())
+
+            session.checkBatteryCutoff(lowSoc, 10)
+            session.checkBatteryCutoff(lowSoc, 10)
+            assertFalse(session.state.value.active)
+            assertTrue(session.state.value.remindHeadlights)
+            assertEquals(1, actions.calls.count { it == "restore-cluster" })
+            assertEquals(1, actions.calls.count { it == "restore-climate" })
+        }
     }
 
     @Test fun touchBeforeScreenOffDoesNotInterruptEntryButImmediateWakeIsNotLost() = runBlocking {
