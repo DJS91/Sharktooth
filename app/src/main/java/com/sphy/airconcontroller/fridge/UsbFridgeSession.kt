@@ -71,6 +71,8 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
     private var openedAt = 0L
     private var commandAt = 0L
     private var lastStatusAt = 0L
+    var statusUpdatedAtMillis: Long? = null
+        private set
     private var lastBytesAt = 0L
     private var lastQueryAt = 0L
     private var lastEventAt = 0L
@@ -458,6 +460,7 @@ class UsbFridgeSession(private val send: (String) -> Boolean) {
             message = "Fridge fault: $frame"
         } else {
             status = EvakoolProtocol.parseStatus(frame)
+            statusUpdatedAtMillis = System.currentTimeMillis()
             lastStatusAt = now
             pending?.let { p ->
                 val actual = if (p.compartment == 1) status?.leftTarget else status?.rightTarget

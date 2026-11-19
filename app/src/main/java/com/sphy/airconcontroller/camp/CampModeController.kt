@@ -15,6 +15,7 @@ import com.sphy.airconcontroller.byd.BydAcController
 import com.sphy.airconcontroller.byd.BydCabinDisplayController
 import com.sphy.airconcontroller.byd.BydDisplayController
 import com.sphy.airconcontroller.byd.BydDrlController
+import com.sphy.airconcontroller.byd.BydSaveSocController
 import com.sphy.airconcontroller.byd.BydVehicleInfoController
 import com.sphy.airconcontroller.byd.BydWindowController
 import com.sphy.airconcontroller.dikey.LedMode
@@ -52,6 +53,37 @@ internal class CampModeController private constructor(context: Context) {
     private val telemetryLock = Mutex()
     private val selectedCutoff = MutableStateFlow(prefs.getInt("batteryCutoff", 10).coerceIn(1, 99))
     val batteryCutoff = selectedCutoff.asStateFlow()
+    private val saveSocDevice = BydSaveSocController(app)
+    private val saveSocLock = Mutex()
+    private val saveSocState = MutableStateFlow(SaveSocStatus())
+    val saveSoc = saveSocState.asStateFlow()
+
+    data class SaveSocStatus(
+        val reading: BydSaveSocController.Reading? = null,
+        val saving: Boolean = false,
+    )
+
+    suspend fun refreshSaveSoc() = saveSocLock.withLock {
+        if (!saveSocState.value.saving) {
+            val reading = io { saveSocDevice.read() }
+            if (!saveSocState.value.saving) saveSocState.value = SaveSocStatus(reading)
+        }
+    }
+
+    fun setSaveSocEnabled(enabled: Boolean) = updateSaveSoc { setEnabled(enabled) }
+    fun setSaveSocTarget(target: Int) = updateSaveSoc { setTarget(target) }
+
+    private fun updateSaveSoc(update: suspend BydSaveSocController.() -> Boolean) {
+        if (saveSocState.value.saving) return
+        saveSocState.value = saveSocState.value.copy(saving = true)
+        scope.launch {
+            saveSocLock.withLock {
+                val (confirmed, reading) = io { saveSocDevice.update() to saveSocDevice.read() }
+                saveSocState.value = SaveSocStatus(reading)
+                if (!confirmed) Toast.makeText(app, R.string.camp_save_soc_not_confirmed, Toast.LENGTH_LONG).show()
+            }
+        }
+    }
 
     data class VehicleStatus(
         val gear: BydVehicleInfoController.GearReads? = null,

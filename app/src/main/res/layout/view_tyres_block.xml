@@ -8,15 +8,7 @@
     android:orientation="vertical"
     android:padding="14dp">
 
-    <TextView
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:drawableStart="@drawable/ic_card_tyres"
-        android:drawablePadding="8dp"
-        android:text="@string/vehicle_info_block_tyres"
-        android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle2"
-        android:textColor="@color/heading"
-        android:textStyle="bold" />
+    <include layout="@layout/view_dashboard_card_header" />
 
     <LinearLayout
         android:id="@+id/tyreSlotsRow"

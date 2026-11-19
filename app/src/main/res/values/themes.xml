@@ -130,14 +130,24 @@
         <item name="android:paddingEnd">0dp</item>
     </style>
 
-    <style name="Widget.OpenDiKey.CampStep" parent="Widget.MaterialComponents.CompoundButton.CheckBox">
+    <style name="CampActionRow">
         <item name="android:layout_width">match_parent</item>
         <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_marginTop">@dimen/camp_action_row_gap</item>
+        <item name="android:orientation">horizontal</item>
+        <item name="android:baselineAligned">false</item>
+        <item name="android:gravity">center_vertical</item>
+    </style>
+
+    <style name="Widget.OpenDiKey.CampStep" parent="Widget.MaterialComponents.CompoundButton.CheckBox">
+        <item name="android:layout_width">0dp</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:layout_weight">1</item>
         <item name="android:clickable">false</item>
         <item name="android:focusable">false</item>
         <item name="android:button">@drawable/camp_step_checkbox_spaced</item>
         <item name="android:buttonTint">@null</item>
-        <item name="android:minHeight">36dp</item>
+        <item name="android:minHeight">28dp</item>
         <item name="android:paddingEnd">8dp</item>
         <item name="android:textColor">?attr/dkTextMuted</item>
     </style>

@@ -45,6 +45,8 @@
     <color name="attitude_ticks">#FFC6DFEB</color>
     <color name="attitude_accent">#FF05BEF5</color>
     <color name="gauge_charge">#FF3D8BFF</color>
-    <color name="gauge_fuel">#FF3DDC84</color>
+    <color name="dashboard_battery_charge">#0090FF</color>
+    <color name="dashboard_brake">#FFCC00</color>
+    <color name="dashboard_fuel">#00FF5D</color>
     <color name="gauge_caution">#FFF5B400</color>
 </resources>

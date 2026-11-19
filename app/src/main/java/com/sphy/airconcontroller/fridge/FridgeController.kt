@@ -8,7 +8,7 @@ import com.sphy.airconcontroller.R
 import java.io.File
 
 /**
- * App-wide fridge state shared by the home tile and [FridgeActivity].
+ * App-wide fridge state shared by the dashboard card and [FridgeActivity].
  * The ESP32 USB link stays enabled for the whole process so history keeps recording;
  * the Android BLE backup only runs while a fridge UI is visible ([attach]/[detach]).
  */
@@ -41,6 +41,9 @@ class FridgeController(private val context: Context, val usb: UsbFridgeSession) 
     val status: EvakoolProtocol.Status?
         get() = if (useUsb) usb.status else if (usb.safeForAndroid) client.status else null
 
+    val statusUpdatedAtMillis: Long?
+        get() = if (useUsb) usb.statusUpdatedAtMillis else client.statusUpdatedAtMillis
+
     val message: String
         get() = if (useUsb || !usb.safeForAndroid) usb.message else client.message
 
@@ -55,10 +58,6 @@ class FridgeController(private val context: Context, val usb: UsbFridgeSession) 
     /** Compartment (1 or 2) currently awaiting confirmation, if any. */
     val pendingCompartment: Int?
         get() = if (useUsb) usb.pending?.compartment else client.pending?.compartment
-
-    /** True once live readings have arrived during this app run; the home tile stays visible after that. */
-    var seenConnected = false
-        private set
 
     val connected: Boolean get() = status != null
 
@@ -228,7 +227,6 @@ class FridgeController(private val context: Context, val usb: UsbFridgeSession) 
             if (n.isNotBlank() && n != prefs.getString("usb_name", null)) prefs.edit().putString("usb_name", n).apply()
         }
         status?.let {
-            seenConnected = true
             history.record(it, System.currentTimeMillis())
         }
         checkAlerts()

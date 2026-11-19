@@ -77,8 +77,13 @@ class DashboardGrid @JvmOverloads constructor(
 
     fun initialize(layout: DashboardLayout, views: Map<DashboardCard, View>) {
         require(views.keys.containsAll(DashboardCard.entries)) { "Every library card needs a view" }
-        dashboard = layout
         cardViews = views
+        showLayout(layout)
+    }
+
+    fun showLayout(layout: DashboardLayout) {
+        check(!editing) { "Finish editing before changing pages" }
+        dashboard = layout
         render()
     }
 
@@ -121,7 +126,12 @@ class DashboardGrid @JvmOverloads constructor(
             repeat(3) { column ->
                 val index = rowIndex * 3 + column
                 val slot = if (index < cards.size) CardSlot() else FrameLayout(context)
-                row.addView(slot, LayoutParams(0, LayoutParams.MATCH_PARENT, 1f).apply {
+                val slotHeight = if (cards.getOrNull(index) == DashboardCard.DRIVE) {
+                    LayoutParams.WRAP_CONTENT
+                } else {
+                    LayoutParams.MATCH_PARENT
+                }
+                row.addView(slot, LayoutParams(0, slotHeight, 1f).apply {
                     if (column < 2) rightMargin = dp(10)
                 })
                 when {
@@ -171,7 +181,9 @@ class DashboardGrid @JvmOverloads constructor(
         slot.setBackgroundResource(R.drawable.bg_info_block)
         content.background = null
         slot.addView(content, FrameLayout.LayoutParams(
-            LayoutParams.MATCH_PARENT, LayoutParams.WRAP_CONTENT,
+            LayoutParams.MATCH_PARENT,
+            if (card == DashboardCard.MILEAGE) LayoutParams.MATCH_PARENT else LayoutParams.WRAP_CONTENT,
+            if (card == DashboardCard.EVAKOOL_FRIDGE) Gravity.CENTER_VERTICAL else Gravity.TOP,
         ))
         if (!editing) return
         // Cover interactive card contents only while editing so a hold anywhere can start a drag.

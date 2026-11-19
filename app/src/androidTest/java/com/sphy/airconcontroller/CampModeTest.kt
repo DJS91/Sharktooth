@@ -90,13 +90,39 @@ class CampModeTest {
             instrumentation.waitForIdleSync()
             instrumentation.runOnMainSync {
                 val enable = activity.findViewById<Button>(R.id.campModeEnable)
+                val saveSoc = activity.findViewById<android.widget.SeekBar>(R.id.campSaveSocTarget)
+                val saveSocSwitch = activity.findViewById<android.widget.CompoundButton>(R.id.campSaveSocSwitch)
+                assertTrue(activity.findViewById<TextView>(R.id.campSaveSocHeading).typeface.isBold)
+                assertTrue(activity.findViewById<TextView>(R.id.campSaveSocHelp).text.isNotBlank())
+                val saveSocValue = activity.findViewById<TextView>(R.id.campSaveSocValue)
+                activity.renderSaveSoc(CampModeController.SaveSocStatus())
+                assertFalse(saveSocSwitch.isEnabled)
+                assertFalse(saveSoc.isEnabled)
+                assertEquals(activity.getString(R.string.camp_save_soc_unavailable), saveSocValue.text.toString())
+                activity.renderSaveSoc(CampModeController.SaveSocStatus(
+                    com.sphy.airconcontroller.byd.BydSaveSocController.Reading(false, 45, 100),
+                ))
+                assertTrue(saveSocSwitch.isEnabled)
+                assertFalse(saveSocSwitch.isChecked)
+                assertFalse(saveSoc.isEnabled)
+                assertEquals(45, saveSoc.progress)
+                activity.renderSaveSoc(CampModeController.SaveSocStatus(
+                    com.sphy.airconcontroller.byd.BydSaveSocController.Reading(true, 60, 70),
+                ))
+                assertTrue(saveSocSwitch.isChecked)
+                assertTrue(saveSoc.isEnabled)
+                assertEquals(60, saveSoc.progress)
+                assertEquals(70, saveSoc.max)
                 val stop = activity.findViewById<Button>(R.id.campModeStopWindows)
                 assertEquals(View.GONE, stop.visibility)
                 assertEquals(stop.javaClass, enable.javaClass)
                 assertEquals(stop.backgroundTintList?.defaultColor, enable.backgroundTintList?.defaultColor)
                 assertEquals(stop.textSize, enable.textSize, 0f)
                 val list = activity.findViewById<ViewGroup>(R.id.campModeChecklist)
-                val rows = (0 until list.childCount).map { list.getChildAt(it) as CheckBox }
+                val rows = (0 until list.childCount).flatMap {
+                    val row = list.getChildAt(it) as ViewGroup
+                    (0 until row.childCount).map { column -> row.getChildAt(column) as CheckBox }
+                }
                 assertTrue(rows.all {
                     (it.gravity and Gravity.HORIZONTAL_GRAVITY_MASK) == Gravity.LEFT
                 })
@@ -119,8 +145,12 @@ class CampModeTest {
                 assertTrue(rows.none { it.text.contains("applying") })
                 activity.renderChecklist(CampModeSession.State(false, false, ""))
                 assertTrue(rows.none { it.isChecked })
+                assertEquals("Turn Controls Bar Lights off", rows[0].text.toString())
+                assertEquals("Disconnect Phone", rows[1].text.toString())
                 val idle = CampModeSession.State(false, false, "")
+                val windowSafety = activity.findViewById<View>(R.id.campModeWindowSafety)
                 activity.renderControls(idle, false, 80.0, 10)
+                assertEquals(View.GONE, windowSafety.visibility)
                 assertEquals(View.VISIBLE, enable.visibility)
                 assertFalse(enable.isEnabled)
                 assertEquals("Waiting for vehicle Park Gear", enable.text.toString())
@@ -136,6 +166,9 @@ class CampModeTest {
                 assertFalse(enable.isEnabled)
                 activity.renderControls(idle, true, 10.1, 10)
                 assertTrue(enable.isEnabled)
+                assertEquals(View.VISIBLE, windowSafety.visibility)
+                assertEquals(View.GONE, status.visibility)
+                assertEquals("", status.text.toString())
                 assertNotEquals(disabledTextColor, enable.currentTextColor)
                 activity.renderControls(idle, true, 10.1, 11)
                 assertFalse(enable.isEnabled)

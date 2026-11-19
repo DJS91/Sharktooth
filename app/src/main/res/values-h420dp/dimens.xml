@@ -1,0 +1,6 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <dimen name="camp_options_section_gap">10dp</dimen>
+    <dimen name="camp_action_row_gap">6dp</dimen>
+    <dimen name="camp_options_bottom_padding">16dp</dimen>
+</resources>

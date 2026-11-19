@@ -10,17 +10,13 @@ import android.view.View
 import android.view.ViewTreeObserver
 import android.view.animation.AccelerateDecelerateInterpolator
 import android.widget.FrameLayout
-import android.widget.TextView
 import androidx.test.ext.junit.runners.AndroidJUnit4
 import androidx.test.platform.app.InstrumentationRegistry
 import com.google.android.material.button.MaterialButtonToggleGroup
 import com.sphy.airconcontroller.dikey.DiKeySession.ConnectionState
-import com.sphy.airconcontroller.fridge.EvakoolProtocol
-import com.sphy.airconcontroller.fridge.isFridgeTilePreview
 import kotlinx.coroutines.flow.first
 import kotlinx.coroutines.runBlocking
 import org.junit.Assert.*
-import org.junit.Assume.assumeFalse
 import org.junit.Assume.assumeTrue
 import org.junit.Test
 import org.junit.runner.RunWith
@@ -253,37 +249,6 @@ class HomeNavigationTest {
                 } finally {
                     main.renderConnectionState(actualState)
                 }
-            }
-        } finally {
-            instrumentation.runOnMainSync { main.finish() }
-        }
-    }
-
-    @Test fun debugFridgePreviewDoesNotReplaceRealOrDisconnectedReadings() {
-        val real = EvakoolProtocol.Status(true, true, 6, -12, 4, -18, "12.5")
-        assertTrue(isFridgeTilePreview(true, false, null))
-        assertFalse(isFridgeTilePreview(false, false, null))
-        assertFalse(isFridgeTilePreview(true, true, null))
-        assertFalse(isFridgeTilePreview(true, true, real))
-        assertFalse(isFridgeTilePreview(true, false, real))
-
-        val instrumentation = InstrumentationRegistry.getInstrumentation()
-        val main = instrumentation.startActivitySync(
-            Intent(instrumentation.targetContext, MainActivity::class.java)
-                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
-        )
-        try {
-            instrumentation.waitForIdleSync()
-            val fridge = OpenDiKeyApp.from(main).fridge
-            assumeFalse("A real fridge has been seen", fridge.seenConnected)
-            instrumentation.runOnMainSync {
-                assertNull(fridge.status)
-                assertEquals(View.VISIBLE, main.findViewById<View>(R.id.homeFridgeButton).visibility)
-                val temperatures = main.findViewById<TextView>(R.id.homeFridgeTemperatures).text.toString()
-                assertTrue(temperatures.contains("4°C"))
-                assertTrue(temperatures.contains("-18°C"))
-                assertEquals("13.8 V\nEco", main.findViewById<TextView>(R.id.homeFridgeStatus).text.toString())
-                assertTrue(main.findViewById<View>(R.id.homeFridgeButton).contentDescription.contains("Example readings"))
             }
         } finally {
             instrumentation.runOnMainSync { main.finish() }

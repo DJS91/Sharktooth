@@ -49,6 +49,8 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
     val selectedAddress: String? get() = prefs.getString("address", null)
     var status: EvakoolProtocol.Status? = null
         private set
+    var statusUpdatedAtMillis: Long? = null
+        private set
     var message: String = context.getString(R.string.fridge_select_hint)
         private set
     var ready = false
@@ -282,6 +284,7 @@ class EvakoolClient(private val context: Context, private val changed: () -> Uni
         try {
             val value = EvakoolProtocol.parseStatus(frame)
             status = value
+            statusUpdatedAtMillis = System.currentTimeMillis()
             if (pendingMax != null && value.max == pendingMax) {
                 pendingMax = null
                 handler.removeCallbacks(modeTimeout)

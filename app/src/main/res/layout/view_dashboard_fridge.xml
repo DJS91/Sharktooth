@@ -10,30 +10,42 @@
     <ImageView
         android:id="@+id/dashboardFridgeLogo"
         android:layout_width="match_parent"
-        android:layout_height="56dp"
-        android:adjustViewBounds="true"
+        android:layout_height="32dp"
         android:contentDescription="@string/fridge_unknown_name"
         android:scaleType="fitCenter"
-        android:scaleX="0.5"
-        android:scaleY="0.5"
         android:src="@drawable/evakool_logo" />
 
     <TextView
         android:id="@+id/homeFridgeTemperatures"
+        style="@style/DashboardHeroValue"
         android:layout_width="match_parent"
-        android:layout_height="wrap_content"
         android:layout_marginTop="8dp"
-        android:gravity="center"
-        android:textAppearance="@style/TextAppearance.MaterialComponents.Headline5"
-        android:textColor="@color/text_primary" />
+        android:gravity="center" />
 
     <TextView
         android:id="@+id/homeFridgeStatus"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="4dp"
         android:gravity="center"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
+        android:textColor="@color/text_muted" />
+
+    <TextView
+        android:id="@+id/homeFridgePower"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+        android:textColor="@color/text_primary" />
+
+    <TextView
+        android:id="@+id/homeFridgeUpdated"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:layout_marginTop="4dp"
+        android:gravity="center"
+        android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
         android:textColor="@color/text_muted" />
 
     <TextView

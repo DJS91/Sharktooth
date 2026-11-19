@@ -27,7 +27,6 @@
     <color name="tyre_ok">#FF1E9E5A</color>
     <color name="accent_green_soft">#331E9E5A</color>
     <color name="gauge_charge">#FF1F6FD6</color>
-    <color name="gauge_fuel">#FF1E9E5A</color>
     <color name="gauge_caution">#FFE0A000</color>
     <color name="attitude_face">#406FACC4</color>
     <color name="attitude_edge">#186FACC4</color>

@@ -8,7 +8,7 @@
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:layout_gravity="center_horizontal"
-        android:layout_margin="8dp" />
+        android:layout_marginTop="4dp" />
 
     <ScrollView
         android:layout_width="match_parent"
@@ -19,16 +19,8 @@
             android:layout_width="match_parent"
             android:layout_height="wrap_content"
             android:orientation="vertical"
-            android:padding="16dp">
-
-            <TextView
-                android:layout_width="wrap_content"
-                android:layout_height="wrap_content"
-                android:layout_marginBottom="12dp"
-                android:text="@string/camp_mode_title"
-                android:textAppearance="@style/TextAppearance.MaterialComponents.Headline5"
-                android:textColor="@color/text_primary"
-                android:textStyle="bold" />
+            android:paddingHorizontal="12dp"
+            android:paddingVertical="2dp">
 
             <LinearLayout
                 android:layout_width="match_parent"
@@ -42,7 +34,7 @@
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="12dp"
-                    android:layout_weight="3">
+                    android:layout_weight="2">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -96,7 +88,7 @@
 
                                 <TextView
                                     style="@style/CampMetricLabel"
-                                    android:text="@string/camp_mode_traction_battery" />
+                                    android:text="@string/camp_mode_battery" />
 
                                 <TextView
                                     android:id="@+id/campModeSoc"
@@ -115,6 +107,14 @@
                             android:text="@string/camp_mode_waiting_for_park" />
 
                         <TextView
+                            android:id="@+id/campModeWindowSafety"
+                            style="@style/CampMetricLabel"
+                            android:layout_gravity="center_horizontal"
+                            android:gravity="center"
+                            android:text="@string/camp_mode_window_safety"
+                            android:visibility="gone" />
+
+                        <TextView
                             android:id="@+id/campModeReport"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
@@ -127,28 +127,92 @@
                     style="@style/Widget.OpenDiKey.CampCard"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="2">
+                    android:layout_weight="3">
 
                     <LinearLayout
                         android:layout_width="match_parent"
                         android:layout_height="wrap_content"
                         android:orientation="vertical"
-                        android:padding="16dp">
+                        android:paddingHorizontal="12dp"
+                        android:paddingTop="8dp"
+                        android:paddingBottom="@dimen/camp_options_bottom_padding">
 
-                        <TextView
-                            style="@style/CampSectionHeading"
-                            android:text="@string/camp_mode_battery_cutoff" />
+                        <LinearLayout
+                            android:id="@+id/campSaveSocControls"
+                            android:layout_width="match_parent"
+                            android:layout_height="wrap_content"
+                            android:layout_marginBottom="@dimen/camp_options_section_gap"
+                            android:baselineAligned="false"
+                            android:gravity="center_vertical"
+                            android:orientation="horizontal">
 
-                        <TextView
-                            style="@style/CampMetricLabel"
-                            android:text="@string/camp_mode_cutoff_help" />
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    android:id="@+id/campSaveSocHeading"
+                                    style="@style/CampSectionHeading"
+                                    android:text="@string/camp_save_soc" />
+
+                                <TextView
+                                    android:id="@+id/campSaveSocHelp"
+                                    style="@style/CampMetricLabel"
+                                    android:text="@string/camp_save_soc_help" />
+                            </LinearLayout>
+
+                            <com.google.android.material.switchmaterial.SwitchMaterial
+                                android:id="@+id/campSaveSocSwitch"
+                                android:layout_width="48dp"
+                                android:layout_height="48dp"
+                                android:enabled="false"
+                                android:saveEnabled="false"
+                                android:contentDescription="@string/camp_save_soc" />
+
+                            <SeekBar
+                                android:id="@+id/campSaveSocTarget"
+                                android:layout_width="0dp"
+                                android:layout_height="48dp"
+                                android:layout_weight="1"
+                                android:paddingHorizontal="10dp"
+                                android:min="25"
+                                android:max="100"
+                                android:progress="25"
+                                android:enabled="false"
+                                android:saveEnabled="false"
+                                android:contentDescription="@string/camp_save_soc_target" />
+
+                            <TextView
+                                android:id="@+id/campSaveSocValue"
+                                style="@style/CampMetricLabel"
+                                android:gravity="end"
+                                android:text="@string/camp_save_soc_unavailable" />
+                        </LinearLayout>
 
                         <LinearLayout
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:baselineAligned="false"
                             android:gravity="center_vertical"
                             android:orientation="horizontal">
+
+                            <LinearLayout
+                                android:layout_width="0dp"
+                                android:layout_height="wrap_content"
+                                android:layout_weight="1"
+                                android:layout_marginEnd="8dp"
+                                android:orientation="vertical">
+
+                                <TextView
+                                    style="@style/CampSectionHeading"
+                                    android:text="@string/camp_mode_battery_cutoff" />
+
+                                <TextView
+                                    style="@style/CampMetricLabel"
+                                    android:text="@string/camp_mode_cutoff_help" />
+                            </LinearLayout>
 
                             <Button
                                 android:id="@+id/campModeCutoffDecrease"
@@ -159,8 +223,7 @@
                             <TextView
                                 android:id="@+id/campModeCutoffValue"
                                 style="@style/CampSectionHeading"
-                                android:layout_width="0dp"
-                                android:layout_weight="1"
+                                android:minWidth="48dp"
                                 android:accessibilityLiveRegion="polite"
                                 android:gravity="center" />
 
@@ -174,8 +237,8 @@
                         <View
                             android:layout_width="match_parent"
                             android:layout_height="1dp"
-                            android:layout_marginTop="8dp"
-                            android:layout_marginBottom="12dp"
+                            android:layout_marginTop="4dp"
+                            android:layout_marginBottom="@dimen/camp_options_section_gap"
                             android:background="?attr/dkDividerSoft" />
 
                         <TextView
@@ -186,39 +249,51 @@
                             android:id="@+id/campModeChecklist"
                             android:layout_width="match_parent"
                             android:layout_height="wrap_content"
-                            android:layout_marginTop="4dp"
+                            android:layout_marginTop="2dp"
                             android:orientation="vertical">
 
-                            <CheckBox android:id="@+id/campStepDikey"
-                                style="@style/Widget.OpenDiKey.CampStep"
-                                android:text="@string/camp_mode_step_dikey" />
-                            <CheckBox android:id="@+id/campStepCarPlay"
-                                style="@style/Widget.OpenDiKey.CampStep"
-                                android:text="@string/camp_mode_step_carplay" />
-                            <CheckBox android:id="@+id/campStepBluetooth"
-                                style="@style/Widget.OpenDiKey.CampStep"
-                                android:text="@string/camp_mode_step_bluetooth" />
-                            <CheckBox android:id="@+id/campStepClimate"
-                                style="@style/Widget.OpenDiKey.CampStep"
-                                android:text="@string/camp_mode_step_climate" />
-                            <CheckBox android:id="@+id/campStepWindows"
-                                style="@style/Widget.OpenDiKey.CampStep"
-                                android:text="@string/camp_mode_step_windows" />
-                            <CheckBox android:id="@+id/campStepDrls"
-                                style="@style/Widget.OpenDiKey.CampStep"
-                                android:text="@string/camp_mode_step_drls" />
-                            <CheckBox android:id="@+id/campStepCluster"
-                                style="@style/Widget.OpenDiKey.CampStep"
-                                android:text="@string/camp_mode_step_cluster" />
-                            <CheckBox android:id="@+id/campStepHud"
-                                style="@style/Widget.OpenDiKey.CampStep"
-                                android:text="@string/camp_mode_step_hud" />
-                            <CheckBox android:id="@+id/campStepMedia"
-                                style="@style/Widget.OpenDiKey.CampStep"
-                                android:text="@string/camp_mode_step_media" />
-                            <CheckBox android:id="@+id/campStepScreen"
-                                style="@style/Widget.OpenDiKey.CampStep"
-                                android:text="@string/camp_mode_step_screen" />
+                            <LinearLayout
+                                style="@style/CampActionRow"
+                                android:layout_marginTop="0dp">
+                                <CheckBox android:id="@+id/campStepDikey"
+                                    style="@style/Widget.OpenDiKey.CampStep"
+                                    android:text="@string/camp_mode_step_dikey" />
+                                <CheckBox android:id="@+id/campStepCarPlay"
+                                    style="@style/Widget.OpenDiKey.CampStep"
+                                    android:text="@string/camp_mode_step_carplay" />
+                            </LinearLayout>
+                            <LinearLayout style="@style/CampActionRow">
+                                <CheckBox android:id="@+id/campStepBluetooth"
+                                    style="@style/Widget.OpenDiKey.CampStep"
+                                    android:text="@string/camp_mode_step_bluetooth" />
+                                <CheckBox android:id="@+id/campStepClimate"
+                                    style="@style/Widget.OpenDiKey.CampStep"
+                                    android:text="@string/camp_mode_step_climate" />
+                            </LinearLayout>
+                            <LinearLayout style="@style/CampActionRow">
+                                <CheckBox android:id="@+id/campStepWindows"
+                                    style="@style/Widget.OpenDiKey.CampStep"
+                                    android:text="@string/camp_mode_step_windows" />
+                                <CheckBox android:id="@+id/campStepDrls"
+                                    style="@style/Widget.OpenDiKey.CampStep"
+                                    android:text="@string/camp_mode_step_drls" />
+                            </LinearLayout>
+                            <LinearLayout style="@style/CampActionRow">
+                                <CheckBox android:id="@+id/campStepCluster"
+                                    style="@style/Widget.OpenDiKey.CampStep"
+                                    android:text="@string/camp_mode_step_cluster" />
+                                <CheckBox android:id="@+id/campStepHud"
+                                    style="@style/Widget.OpenDiKey.CampStep"
+                                    android:text="@string/camp_mode_step_hud" />
+                            </LinearLayout>
+                            <LinearLayout style="@style/CampActionRow">
+                                <CheckBox android:id="@+id/campStepMedia"
+                                    style="@style/Widget.OpenDiKey.CampStep"
+                                    android:text="@string/camp_mode_step_media" />
+                                <CheckBox android:id="@+id/campStepScreen"
+                                    style="@style/Widget.OpenDiKey.CampStep"
+                                    android:text="@string/camp_mode_step_screen" />
+                            </LinearLayout>
                         </LinearLayout>
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>

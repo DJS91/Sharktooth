@@ -1,8 +1,17 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <style name="DashboardHeroValue">
+        <item name="android:layout_width">wrap_content</item>
+        <item name="android:layout_height">wrap_content</item>
+        <item name="android:gravity">end</item>
+        <item name="android:textAppearance">@style/TextAppearance.MaterialComponents.Headline6</item>
+        <item name="android:textColor">@color/text_primary</item>
+        <item name="android:textStyle">bold</item>
+    </style>
+    <dimen name="home_navigation_tile_size">68dp</dimen>
     <style name="HomeNavigationItem">
         <item name="android:layout_width">match_parent</item>
-        <item name="android:layout_height">76dp</item>
+        <item name="android:layout_height">@dimen/home_navigation_tile_size</item>
         <item name="android:clickable">true</item>
         <item name="android:focusable">true</item>
         <item name="android:foreground">?attr/selectableItemBackground</item>

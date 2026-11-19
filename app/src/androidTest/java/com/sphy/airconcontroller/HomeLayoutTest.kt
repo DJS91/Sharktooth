@@ -265,12 +265,17 @@ class HomeLayoutTest {
         }
     }
 
-    @Test fun campPanelsStaySideBySideAndRemainScrollableOnSmallScreens() {
+    @Test fun campActionsFitOnShortLandscapeAndCanScrollOnSmallerScreens() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.runOnMainSync {
-            val context = ContextThemeWrapper(instrumentation.targetContext, R.style.Theme_OpenDiKey)
-            val density = context.resources.displayMetrics.density
-            for ((width, height) in listOf(640 to 360, 1120 to 640)) {
+            val base = instrumentation.targetContext
+            for ((width, height) in listOf(640 to 240, 800 to 360, 1120 to 640)) {
+                val config = Configuration(base.resources.configuration).apply {
+                    screenWidthDp = width
+                    screenHeightDp = height
+                }
+                val context = ContextThemeWrapper(base.createConfigurationContext(config), R.style.Theme_OpenDiKey)
+                val density = context.resources.displayMetrics.density
                 val root = LayoutInflater.from(context).inflate(R.layout.activity_camp_mode, null)
                 root.measure(
                     View.MeasureSpec.makeMeasureSpec((width * density).toInt(), View.MeasureSpec.EXACTLY),
@@ -286,30 +291,47 @@ class HomeLayoutTest {
                 assertTrue(overview.right < options.left)
                 assertEquals(overview.top, options.top)
                 val scroll = (overview.parent.parent as View).parent as android.widget.ScrollView
-                assertTrue("Long content must remain scrollable", height != 360 || scroll.canScrollVertically(1))
+                if (height == 240) {
+                    assertTrue("Long content must remain scrollable", scroll.canScrollVertically(1))
+                } else {
+                    assertFalse("All actions should fit without scrolling at ${width}x$height dp " +
+                        "(content=${scroll.getChildAt(0).height / density}, viewport=${scroll.height / density})",
+                        scroll.canScrollVertically(1))
+                }
                 val stop = root.findViewById<View>(R.id.campModeStopWindows)
                 assertSame("STOP WINDOWS must stay outside the scrolling checklist", root, stop.parent)
                 assertTrue("STOP WINDOWS must stay on screen", stop.top >= 0 && stop.bottom <= root.height)
                 val checklist = root.findViewById<ViewGroup>(R.id.campModeChecklist)
                 val cutoff = root.findViewById<View>(R.id.campModeCutoffValue)
+                val saveSoc = root.findViewById<View>(R.id.campSaveSocControls)
+                val minimumGap = if (height >= 420) 10 else 5
+                assertTrue("Save SoC and Battery cutoff should have at least ${minimumGap}dp of separation",
+                    (cutoff.parent as View).top - saveSoc.bottom >= (minimumGap * density).toInt())
+                assertEquals("Camp Mode is off",
+                    root.findViewById<TextView>(R.id.campModeHeading).text.toString())
                 assertSame(options, checklist.parent.parent)
+                val optionsContent = checklist.parent as View
+                val bottomInset = options.height - optionsContent.top - checklist.bottom
+                val minimumBottomInset = if (height >= 420) 16 else 8
+                assertTrue("Actions should have at least ${minimumBottomInset}dp below them inside the card",
+                    bottomInset >= (minimumBottomInset * density).toInt())
                 assertTrue((cutoff.parent as View).bottom < checklist.top)
-                val rows = (0 until checklist.childCount).map { checklist.getChildAt(it) as android.widget.CheckBox }
-                assertEquals(10, rows.size)
+                val rows = (0 until checklist.childCount).map { checklist.getChildAt(it) as ViewGroup }
+                assertEquals(5, rows.size)
+                val minimumRowGap = if (height >= 420) 6 else 1
                 for ((above, below) in rows.zipWithNext()) {
-                    assertTrue("Checklist rows must not overlap", above.bottom <= below.top)
+                    assertTrue("Checklist rows should have at least ${minimumRowGap}dp of separation",
+                        below.top - above.bottom >= (minimumRowGap * density).toInt().coerceAtLeast(1))
                 }
-                for (step in rows) {
-                    assertTrue("Each checklist label needs visible width", step.width > step.compoundPaddingLeft + step.compoundPaddingRight)
-                    assertTrue("Wrapped labels must not be clipped",
-                        step.layout.height <= step.height - step.compoundPaddingTop - step.compoundPaddingBottom)
-                    val contentHeight = maxOf(
-                        step.minimumHeight, step.layout.height + step.compoundPaddingTop + step.compoundPaddingBottom,
-                        step.buttonDrawable?.minimumHeight ?: 0, step.background?.minimumHeight ?: 0,
-                    )
-                    assertTrue("Checkboxes must not retain height measured with zero-width text",
-                        step.height <= contentHeight + density)
-                    assertTrue(step.left >= 0 && step.right <= (step.parent as View).width && step.bottom <= checklist.height)
+                for (row in rows) {
+                    assertEquals(2, row.childCount)
+                    for (column in 0 until row.childCount) {
+                        val step = row.getChildAt(column) as android.widget.CheckBox
+                        assertTrue("Each checklist label needs visible width", step.width > step.compoundPaddingLeft + step.compoundPaddingRight)
+                        assertTrue("Wrapped labels must not be clipped",
+                            step.layout.height <= step.height - step.compoundPaddingTop - step.compoundPaddingBottom)
+                        assertTrue(step.left >= 0 && step.right <= row.width && step.bottom <= row.height)
+                    }
                 }
             }
         }
@@ -337,8 +359,9 @@ class HomeLayoutTest {
                         android.widget.RadioButton(context) to expected, android.widget.EditText(context) to expected,
                         LayoutInflater.from(context).inflate(R.layout.activity_camp_tests, null)
                             .findViewById<TextView>(R.id.campTestDimOverlay) to expected,
-                    ) + (0 until checklist.childCount).map {
-                        (checklist.getChildAt(it) as TextView) to colors[1]
+                    ) + (0 until checklist.childCount).flatMap {
+                        val row = checklist.getChildAt(it) as ViewGroup
+                        (0 until row.childCount).map { column -> (row.getChildAt(column) as TextView) to colors[1] }
                     }
                     for ((label, color) in labels) {
                         assertEquals("${label.javaClass.simpleName} must follow the selected text palette",
@@ -386,17 +409,14 @@ class HomeLayoutTest {
         }
     }
 
-    @Test fun sidebarAndPageStayInsetAndFridgeAppearsAboveProjection() {
+    @Test fun sidebarAndPageStayInsetWithoutAFridgeShortcut() {
         InstrumentationRegistry.getInstrumentation().runOnMainSync {
             for (theme in listOf(R.style.Theme_OpenDiKey, R.style.Theme_OpenDiKey_Modern)) {
                 val context = ContextThemeWrapper(InstrumentationRegistry.getInstrumentation().targetContext, theme)
                 val root = LayoutInflater.from(context).inflate(R.layout.activity_main, null)
-                val fridge = root.findViewById<View>(R.id.homeFridgeButton)
                 val projection = root.findViewById<View>(R.id.homeProjectionButton)
                 val controls = root.findViewById<View>(R.id.homeControlsBarButton)
-                assertEquals(View.GONE, fridge.visibility)
                 assertEquals(View.GONE, controls.visibility)
-                fridge.visibility = View.VISIBLE
                 controls.visibility = View.VISIBLE
                 projection.visibility = View.VISIBLE
 
@@ -410,6 +430,10 @@ class HomeLayoutTest {
                 val page = root.findViewById<View>(R.id.homePageContainer)
                 val vehicle = root.findViewById<View>(R.id.homeVehicleInfoButton)
                 val rail = root.findViewById<View>(R.id.homeSidebar)
+                val fridgeItems = ArrayList<View>()
+                rail.findViewsWithText(fridgeItems, context.getString(R.string.fridge_title),
+                    View.FIND_VIEWS_WITH_TEXT or View.FIND_VIEWS_WITH_CONTENT_DESCRIPTION)
+                assertTrue("The fridge shortcut should not be in the sidebar", fridgeItems.isEmpty())
                 val sentryItems = ArrayList<View>()
                 root.findViewsWithText(sentryItems, context.getString(R.string.sentry_title),
                     View.FIND_VIEWS_WITH_TEXT or View.FIND_VIEWS_WITH_CONTENT_DESCRIPTION)
@@ -417,12 +441,22 @@ class HomeLayoutTest {
                 val navigationItems = listOf(
                     vehicle, controls,
                     root.findViewById(R.id.homeAdasButton),
-                    root.findViewById(R.id.homeModesButton), fridge, projection,
+                    root.findViewById(R.id.homeModesButton), projection,
                 )
                 assertTrue(page.left > 0 && page.width > rail.width)
                 assertTrue(page.right < rail.left)
+                assertTrue("Leave no more than 8dp of unused space at the outer edges",
+                    page.left <= 8 * density + 1 && root.width - rail.right <= 8 * density + 1 &&
+                        root.height - page.bottom - (page.parent as View).top <= 8 * density + 1)
+                assertTrue("Keep the top row compact", (page.parent as View).top <= 56 * density + 1)
+                assertTrue("Keep the sidebar compact", rail.width <= 80 * density + 1)
+                assertTrue("Keep the gap between panels narrow", rail.left - page.right <= 6 * density + 1)
+                for (id in listOf(R.id.mainDebugButton, R.id.mainSettingsButton)) {
+                    val button = root.findViewById<View>(id)
+                    assertTrue("Keep top buttons at least 48dp square",
+                        button.width >= 48 * density - 1 && button.height >= 48 * density - 1)
+                }
                 assertTrue(vehicle.top < controls.top)
-                assertTrue(fridge.bottom <= projection.top)
                 assertTrue(projection.bottom <= rail.height)
                 navigationItems.forEach { assertEquals("Navigation item must be square", it.width, it.height) }
                 val surfaceColor = (rail.background as GradientDrawable).color!!.defaultColor
@@ -442,12 +476,6 @@ class HomeLayoutTest {
                 }
                 assertFalse("Shadows must not be clipped at the top of the content row", (root as ViewGroup).clipChildren)
 
-                val temperatures = fridge.findViewById<TextView>(R.id.homeFridgeTemperatures)
-                val status = fridge.findViewById<TextView>(R.id.homeFridgeStatus)
-                val disconnected = fridge.findViewById<TextView>(R.id.homeFridgeDisconnected)
-                val reconnect = fridge.findViewById<Button>(R.id.homeFridgeReconnect)
-                temperatures.text = "L 4°C\nR -18°C"
-                status.text = "13.8 V\nMax"
                 val title = projection.findViewById<TextView>(R.id.homeProjectionTitle)
                 val countdown = projection.findViewById<TextView>(R.id.homeProjectionSubtitle)
                 title.visibility = View.GONE
@@ -458,36 +486,9 @@ class HomeLayoutTest {
                     View.MeasureSpec.makeMeasureSpec((720 * density).toInt(), View.MeasureSpec.EXACTLY),
                 )
                 root.layout(0, 0, root.measuredWidth, root.measuredHeight)
-                assertTrue(status.bottom <= fridge.height - fridge.paddingBottom)
-                assertEquals(2, temperatures.layout.lineCount)
-                assertEquals(0, temperatures.layout.getEllipsisCount(0))
-                assertEquals(0, temperatures.layout.getEllipsisCount(1))
-                assertEquals(2, status.layout.lineCount)
-                assertEquals(0, status.layout.getEllipsisCount(0))
-                assertEquals(0, status.layout.getEllipsisCount(1))
-                temperatures.text = "L -999°F\nR 999°F"
-                root.measure(
-                    View.MeasureSpec.makeMeasureSpec((1280 * density).toInt(), View.MeasureSpec.EXACTLY),
-                    View.MeasureSpec.makeMeasureSpec((720 * density).toInt(), View.MeasureSpec.EXACTLY),
-                )
-                root.layout(0, 0, root.measuredWidth, root.measuredHeight)
-                assertEquals(2, temperatures.layout.lineCount)
-                assertEquals(0, temperatures.layout.getEllipsisCount(0))
-                assertEquals(0, temperatures.layout.getEllipsisCount(1))
                 assertTrue(countdown.bottom <= projection.height - projection.paddingBottom)
                 assertTrue(countdown.layout.lineCount <= countdown.maxLines)
                 assertEquals(0, countdown.layout.getEllipsisCount(countdown.layout.lineCount - 1))
-                status.visibility = View.GONE
-                reconnect.visibility = View.VISIBLE
-                temperatures.visibility = View.GONE
-                disconnected.visibility = View.VISIBLE
-                root.measure(
-                    View.MeasureSpec.makeMeasureSpec((1280 * density).toInt(), View.MeasureSpec.EXACTLY),
-                    View.MeasureSpec.makeMeasureSpec((720 * density).toInt(), View.MeasureSpec.EXACTLY),
-                )
-                root.layout(0, 0, root.measuredWidth, root.measuredHeight)
-                assertTrue(reconnect.bottom <= fridge.height - fridge.paddingBottom)
-                assertEquals(0, disconnected.layout.getEllipsisCount(disconnected.layout.lineCount - 1))
             }
         }
     }
@@ -540,9 +541,13 @@ class HomeLayoutTest {
                 )
                 page.layout(0, 0, page.measuredWidth, page.measuredHeight)
                 assertNull(page.findViewById<View>(R.id.homePageTitle))
+                val dots = page.findViewById<View>(R.id.dashboardPageDots)
+                val swipeHost = page.findViewById<View>(R.id.dashboardSwipeHost)
                 val scroll = page.findViewById<View>(R.id.dashboardScroll)
-                assertEquals((16 * density).toInt(), scroll.top)
-                assertEquals(page.height - (16 * density).toInt(), scroll.bottom)
+                assertEquals(dots.bottom, swipeHost.top)
+                assertEquals(page.height - (8 * density).toInt(), swipeHost.bottom)
+                assertEquals(0, scroll.top)
+                assertEquals(swipeHost.height, scroll.bottom)
                 assertSame(scroll, grid.parent)
                 assertEquals(3, grid.childCount)
                 val slots = (0 until grid.childCount).flatMap { rowIndex ->
@@ -767,7 +772,7 @@ class HomeLayoutTest {
                 val gap = if (side == SidebarSide.LEFT) content.left - sidebar.right
                     else sidebar.left - content.right
                 assertEquals("Keep the rail separated from the page on either side",
-                    12 * page.resources.displayMetrics.density, gap.toFloat(), 1f)
+                    6 * page.resources.displayMetrics.density, gap.toFloat(), 1f)
             }
         }
         try {

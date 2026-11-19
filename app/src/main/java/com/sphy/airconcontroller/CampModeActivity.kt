@@ -5,17 +5,21 @@ import android.os.Bundle
 import android.view.View
 import android.widget.Button
 import android.widget.CheckBox
+import android.widget.SeekBar
 import android.widget.TextView
 import androidx.appcompat.app.AlertDialog
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
 import com.google.android.material.dialog.MaterialAlertDialogBuilder
+import com.google.android.material.switchmaterial.SwitchMaterial
+import com.sphy.airconcontroller.byd.BydSaveSocController
 import com.sphy.airconcontroller.camp.CampModeController
 import com.sphy.airconcontroller.camp.CampModeSession
 import com.sphy.airconcontroller.camp.CampStep
 import com.sphy.airconcontroller.camp.batteryAtCutoff
 import kotlinx.coroutines.flow.combine
+import kotlinx.coroutines.delay
 import kotlinx.coroutines.launch
 import java.text.NumberFormat
 
@@ -25,6 +29,7 @@ class CampModeActivity : HomeActivity() {
     internal var headlightReminderDialog: AlertDialog? = null
         private set
     private lateinit var controller: CampModeController
+    private var draggingSaveSoc = false
 
     override fun onCreate(savedInstanceState: Bundle?) {
         super.onCreate(savedInstanceState)
@@ -35,19 +40,22 @@ class CampModeActivity : HomeActivity() {
             if (controller.state.value.active) {
                 controller.exit()
             } else {
-                MaterialAlertDialogBuilder(this)
-                    .setTitle(R.string.camp_mode_enable)
-                    .setMessage(R.string.camp_mode_confirm)
-                    .setNegativeButton(android.R.string.cancel, null)
-                    .setPositiveButton(R.string.camp_mode_enable) { _, _ -> controller.enter() }
-                    .show()
+                controller.enter()
             }
         }
         findViewById<Button>(R.id.campModeStopWindows).setOnClickListener { controller.stopWindows() }
         findViewById<Button>(R.id.campModeCutoffDecrease).setOnClickListener { controller.adjustBatteryCutoff(-1) }
         findViewById<Button>(R.id.campModeCutoffIncrease).setOnClickListener { controller.adjustBatteryCutoff(1) }
+        bindSaveSoc()
         lifecycleScope.launch {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
+                launch { controller.saveSoc.collect(::renderSaveSoc) }
+                launch {
+                    while (true) {
+                        controller.refreshSaveSoc()
+                        delay(2000)
+                    }
+                }
                 launch { controller.state.collect(::renderChecklist) }
                 combine(controller.state, controller.vehicleStatus, controller.batteryCutoff) { state, vehicle, cutoff ->
                     Triple(state, vehicle, cutoff)
@@ -56,6 +64,58 @@ class CampModeActivity : HomeActivity() {
                     renderControls(state, vehicle.gear?.confirmedPark == true, vehicle.soc, cutoff)
                 }
             }
+        }
+    }
+
+    private fun bindSaveSoc() {
+        findViewById<SwitchMaterial>(R.id.campSaveSocSwitch).setOnClickListener {
+            val current = controller.saveSoc.value.reading?.enabled
+            renderSaveSoc(controller.saveSoc.value)
+            if (current != null) controller.setSaveSocEnabled(!current)
+        }
+        findViewById<SeekBar>(R.id.campSaveSocTarget).setOnSeekBarChangeListener(
+            object : SeekBar.OnSeekBarChangeListener {
+                override fun onStartTrackingTouch(bar: SeekBar) {
+                    draggingSaveSoc = true
+                }
+
+                override fun onProgressChanged(bar: SeekBar, progress: Int, fromUser: Boolean) {
+                    if (!fromUser || !bar.isEnabled) return
+                    if (draggingSaveSoc) {
+                        findViewById<TextView>(R.id.campSaveSocValue).text = percent(progress.toDouble())
+                    } else {
+                        commitSaveSocTarget(progress)
+                    }
+                }
+
+                override fun onStopTrackingTouch(bar: SeekBar) {
+                    draggingSaveSoc = false
+                    if (bar.isEnabled) commitSaveSocTarget(bar.progress)
+                    else renderSaveSoc(controller.saveSoc.value)
+                }
+            },
+        )
+    }
+
+    private fun commitSaveSocTarget(target: Int) {
+        val status = controller.saveSoc.value
+        renderSaveSoc(status)
+        if (target != status.reading?.target) controller.setSaveSocTarget(target)
+    }
+
+    internal fun renderSaveSoc(status: CampModeController.SaveSocStatus) {
+        val reading = status.reading
+        findViewById<SwitchMaterial>(R.id.campSaveSocSwitch).apply {
+            isChecked = reading?.enabled == true
+            isEnabled = reading?.enabled != null && !status.saving
+        }
+        val slider = findViewById<SeekBar>(R.id.campSaveSocTarget)
+        slider.isEnabled = reading?.enabled == true && reading.target != null && !status.saving
+        if (!draggingSaveSoc || !slider.isEnabled) {
+            slider.max = reading?.maximum ?: BydSaveSocController.MAX_TARGET
+            slider.progress = reading?.target ?: BydSaveSocController.MIN_TARGET
+            findViewById<TextView>(R.id.campSaveSocValue).text =
+                reading?.target?.let { percent(it.toDouble()) } ?: getString(R.string.camp_save_soc_unavailable)
         }
     }
 
@@ -85,6 +145,7 @@ class CampModeActivity : HomeActivity() {
         val lowBattery = batteryAtCutoff(soc, cutoff)
         val adjustable = !state.active && !state.busy
         val waitingForPark = adjustable && !parkConfirmed
+        val canStart = adjustable && parkConfirmed && soc != null && !lowBattery
         findViewById<Button>(R.id.campModeCutoffDecrease).isEnabled = adjustable && cutoff > 1
         findViewById<Button>(R.id.campModeCutoffIncrease).isEnabled = adjustable && cutoff < 99
         findViewById<TextView>(R.id.campModeCutoffValue).text = percent(cutoff.toDouble())
@@ -97,18 +158,18 @@ class CampModeActivity : HomeActivity() {
             }
         )
         findViewById<Button>(R.id.campModeEnable).apply {
-            isEnabled = !state.busy && !state.awaitingWake &&
-                (state.active || (parkConfirmed && soc != null && !lowBattery))
+            isEnabled = !state.busy && !state.awaitingWake && (state.active || canStart)
             setText(when {
                 state.active && !state.awaitingWake && !state.busy -> R.string.camp_mode_retry_restore
                 waitingForPark -> R.string.camp_mode_waiting_for_park
                 else -> R.string.camp_mode_enable
             })
         }
+        findViewById<View>(R.id.campModeWindowSafety).visibility =
+            if (canStart) View.VISIBLE else View.GONE
         findViewById<Button>(R.id.campModeStopWindows).visibility =
             if (state.busy && state.currentStep != null) View.VISIBLE else View.GONE
         findViewById<TextView>(R.id.campModeStatus).apply {
-            visibility = if (waitingForPark) View.GONE else View.VISIBLE
             val message = when {
                 state.busy -> R.string.camp_mode_working
                 state.awaitingWake -> R.string.camp_mode_waiting
@@ -116,8 +177,9 @@ class CampModeActivity : HomeActivity() {
                 waitingForPark -> null
                 soc == null -> R.string.camp_mode_soc_unavailable
                 lowBattery -> R.string.camp_mode_soc_at_cutoff
-                else -> R.string.camp_mode_idle
+                else -> null
             }
+            visibility = if (message == null) View.GONE else View.VISIBLE
             text = message?.let { getString(it) }.orEmpty()
         }
         if (!state.remindHeadlights) reminderDialogPresented = false

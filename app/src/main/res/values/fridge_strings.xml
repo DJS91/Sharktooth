@@ -23,7 +23,17 @@
     <string name="fridge_graph_target">target</string>
     <string name="fridge_voltage">Voltage: %1$s V</string>
     <string name="fridge_tile_voltage">%1$s V</string>
-    <string name="fridge_tile_example_readings">Example readings</string>
+    <string name="fridge_tile_details">%1$s · %2$s</string>
+    <string name="fridge_tile_power">Power: %1$s</string>
+    <string name="fridge_tile_updated">Last updated: %1$s</string>
+    <plurals name="fridge_tile_seconds_ago">
+        <item quantity="one">%d second ago</item>
+        <item quantity="other">%d seconds ago</item>
+    </plurals>
+    <plurals name="fridge_tile_minutes_ago">
+        <item quantity="one">%d minute ago</item>
+        <item quantity="other">%d minutes ago</item>
+    </plurals>
     <string name="fridge_power_title">Fridge power</string>
     <string name="fridge_on">On</string>
     <string name="fridge_off">Off</string>
@@ -37,7 +47,6 @@
     <string name="fridge_android_wait_off">Waiting for the ESP32 to confirm fridge OFF. Update its firmware or unplug USB before using Android Bluetooth.</string>
     <string name="fridge_select_hint">Tap to select your EVAKOOL fridge</string>
     <string name="fridge_no_readings">Left: &#8212; / Right: &#8212;\nNo live readings</string>
-    <string name="fridge_disconnected_tile">Disconnected</string>
     <string name="dashboard_fridge_disconnected">Fridge disconnected</string>
     <string name="fridge_alert_channel">Camping fridge alerts</string>
     <string name="fridge_alert_channel_description">Fridge disconnected for over 2 minutes, or a compartment warming well above its target.</string>

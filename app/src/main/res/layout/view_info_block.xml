@@ -8,26 +8,7 @@
     android:orientation="vertical"
     android:padding="14dp">
 
-    <TextView
-        android:id="@+id/infoBlockTitle"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle2"
-        android:textColor="@color/heading"
-        android:textStyle="bold"
-        tools:text="Battery &amp; Fuel" />
-
-    <TextView
-        android:id="@+id/infoBlockHero"
-        android:layout_width="match_parent"
-        android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
-        android:textAppearance="@style/TextAppearance.MaterialComponents.Headline4"
-        android:textColor="@color/text_primary"
-        android:textStyle="bold"
-        android:visibility="gone"
-        tools:text="91%"
-        tools:visibility="visible" />
+    <include layout="@layout/view_dashboard_card_header" />
 
     <TextView
         android:id="@+id/infoBlockSubtitle"

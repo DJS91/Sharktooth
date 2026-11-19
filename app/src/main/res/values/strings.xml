@@ -1,5 +1,28 @@
 <resources>
     <string name="dashboard_edit_hint">Edit dashboard: hold a card, then drag it to the insertion marker to reorder.</string>
+    <string name="dashboard_edit_empty">Edit this dashboard</string>
+    <string name="dashboard_page_number">Dashboard %1$d of %2$d</string>
+    <string name="dashboard_sample_data">Sample data</string>
+    <item type="id" name="dashboardPedalGauge" />
+    <item type="id" name="dashboardRpmGraph" />
+    <string name="dashboard_rpm_last_hour">RPM · Last hour</string>
+    <string name="dashboard_rpm_minutes_ago">−%1$d min</string>
+    <string name="dashboard_rpm_now">Now</string>
+    <string name="dashboard_rpm_no_history">No RPM history available</string>
+    <string name="dashboard_pedal_accelerate">Accelerate</string>
+    <string name="dashboard_pedals">Pedals</string>
+    <item type="id" name="dashboardPedalPeaks" />
+    <string name="dashboard_pedal_peaks">Today’s peaks\nAccel %1$s · Brake %2$s</string>
+    <string name="dashboard_value_unavailable">—</string>
+    <string name="dashboard_mileage_hero"><annotation role="label">EV</annotation> ^1\n<annotation role="label">HEV</annotation> ^2</string>
+    <string name="dashboard_speed">Speed</string>
+    <string name="dashboard_distance_driven">Distance driven</string>
+    <string name="dashboard_tyre_status">Tyre status</string>
+    <string name="dashboard_outside_temperature">Outside temperature</string>
+    <string name="dashboard_tyres_ok">OK</string>
+    <string name="dashboard_tyres_check">Check tyres</string>
+    <string name="dashboard_fuel_economy">Lifetime fuel economy</string>
+    <string name="dashboard_lifetime_fuel_used">Lifetime fuel used</string>
     <string name="dashboard_done">Done</string>
     <string name="dashboard_add_card">Add card</string>
     <string name="dashboard_add_named_card">Add %1$s</string>
@@ -404,7 +427,7 @@
   <string name="vehicle_info_pack_fmt">Pack ~%1$s kWh</string>
   <string name="vehicle_info_usable_fmt">%1$s kWh left</string>
   <string name="vehicle_info_remaining_fmt">Remaining %1$s%%</string>
-  <string name="vehicle_info_gear_fmt">Gear %1$s</string>
+  <string name="vehicle_info_gear_fmt">Gear ^1</string>
   <string name="vehicle_info_tyres_unbound">Not bound</string>
   <string name="vehicle_info_row_ev_range">EV range</string>
   <string name="vehicle_info_row_fuel">Fuel</string>

@@ -8,6 +8,7 @@ import android.util.AttributeSet
 import android.view.View
 import androidx.annotation.ColorInt
 import androidx.core.content.ContextCompat
+import androidx.core.graphics.ColorUtils
 import com.sphy.airconcontroller.R
 import kotlin.math.max
 import kotlin.math.min
@@ -31,8 +32,13 @@ class PercentBar @JvmOverloads constructor(
     private var displayPct = 0f
     private var targetPct = 0f
 
-    fun setFillColor(@ColorInt color: Int) {
+    fun setFillColor(@ColorInt color: Int, glowRadius: Float = 0f) {
         fillPaint.color = color
+        if (glowRadius > 0f) {
+            fillPaint.setShadowLayer(glowRadius, 0f, 0f, ColorUtils.setAlphaComponent(color, 170))
+        } else {
+            fillPaint.clearShadowLayer()
+        }
         invalidate()
     }
 
@@ -62,15 +68,19 @@ class PercentBar @JvmOverloads constructor(
     }
 
     override fun onDraw(canvas: Canvas) {
-        val h = height.toFloat()
-        val w = width.toFloat()
+        val left = paddingLeft.toFloat()
+        val top = paddingTop.toFloat()
+        val right = (width - paddingRight).toFloat()
+        val bottom = (height - paddingBottom).toFloat()
+        val h = bottom - top
+        val w = right - left
         val radius = h / 2f
-        rect.set(0f, 0f, w, h)
+        rect.set(left, top, right, bottom)
         canvas.drawRoundRect(rect, radius, radius, trackPaint)
 
         val fillW = max(0f, min(w, w * displayPct / 100f))
         if (fillW <= 0f) return
-        rect.set(0f, 0f, fillW, h)
+        rect.set(left, top, left + fillW, bottom)
         canvas.drawRoundRect(rect, radius, radius, fillPaint)
     }
 

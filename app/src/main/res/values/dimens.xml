@@ -1,6 +1,9 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
     <dimen name="diagnostic_qr_size">240dp</dimen>
+    <dimen name="camp_options_section_gap">5dp</dimen>
+    <dimen name="camp_action_row_gap">1dp</dimen>
+    <dimen name="camp_options_bottom_padding">8dp</dimen>
     <!-- Opacity of the cabin photo behind every screen (see OpenDiKeyActivity). -->
     <item name="bg_photo_alpha" format="float" type="dimen">0.2</item>
 </resources>

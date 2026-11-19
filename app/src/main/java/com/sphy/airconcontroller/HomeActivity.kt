@@ -39,7 +39,6 @@ import com.sphy.airconcontroller.apps.ProjectionAutoSwitch
 import com.sphy.airconcontroller.boot.AdasAutoApplyCoordinator
 import com.sphy.airconcontroller.dikey.DiKeySession
 import com.sphy.airconcontroller.usb.DiKeyUsbBridge
-import com.sphy.airconcontroller.fridge.FridgeTile
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.storage.SidebarSide
 import com.sphy.airconcontroller.ui.OpenDiKeyActivity
@@ -57,7 +56,6 @@ internal fun controlsBarAvailable(isDebug: Boolean, state: DiKeySession.Connecti
 
 open class HomeActivity : OpenDiKeyActivity() {
     private lateinit var session: DiKeySession
-    private lateinit var fridgeTile: FridgeTile
     private lateinit var connStatus: android.widget.TextView
     private lateinit var connDot: android.view.View
     private var dotPulse: ObjectAnimator? = null
@@ -142,8 +140,6 @@ open class HomeActivity : OpenDiKeyActivity() {
     }
 
     private fun setupHome() {
-        fridgeTile = FridgeTile(this)
-
         connStatus = findViewById(R.id.mainConnStatus)
         connDot = findViewById(R.id.mainConnDot)
         adasIcon = findViewById(R.id.homeAdasIcon)
@@ -295,7 +291,6 @@ open class HomeActivity : OpenDiKeyActivity() {
             is ColorConfigActivity, is ButtonMappingActivity -> R.id.homeControlsBarButton
             is AdasActivity -> R.id.homeAdasButton
             is PetModeActivity, is CampModeActivity -> R.id.homeModesButton
-            is com.sphy.airconcontroller.fridge.FridgeActivity -> R.id.homeFridgeButton
             else -> null
         }
         selectedNavigationItemId?.let { findViewById<View>(it).isSelected = true }
@@ -382,7 +377,6 @@ open class HomeActivity : OpenDiKeyActivity() {
             ColorConfigActivity::class.java, ButtonMappingActivity::class.java -> R.id.homeControlsBarButton
             AdasActivity::class.java -> R.id.homeAdasButton
             CampModeActivity::class.java, PetModeActivity::class.java -> R.id.homeModesButton
-            com.sphy.airconcontroller.fridge.FridgeActivity::class.java -> R.id.homeFridgeButton
             else -> null
         }
         val highlight = findViewById<View>(R.id.homeNavigationHighlight)
@@ -437,7 +431,6 @@ open class HomeActivity : OpenDiKeyActivity() {
         if (animatePageOnResume) {
             preparePageTransition()
         }
-        fridgeTile.start()
         if (this is MainActivity) {
             session.ensureConnected()
             // Retry after boot if the vehicle services were not ready when the process started.
@@ -605,7 +598,6 @@ open class HomeActivity : OpenDiKeyActivity() {
     override fun onStop() {
         dashboardHoldCancelled = true
         dashboardHoldHandler.removeCallbacks(dashboardHoldRunnable)
-        fridgeTile.stop()
         super.onStop()
     }
 

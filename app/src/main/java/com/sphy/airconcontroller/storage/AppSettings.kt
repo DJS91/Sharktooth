@@ -80,22 +80,53 @@ data class LedRestoreSnapshot(
 class AppSettings(context: Context) {
     private val prefs = context.getSharedPreferences(PREFS_NAME, Context.MODE_PRIVATE)
 
+    internal data class PedalPeaks(val accelerator: Float?, val brake: Float?)
+
+    internal fun recordPedalPeaks(day: Long, accelerator: Double?, brake: Double?): PedalPeaks {
+        val sameDay = prefs.getLong("pedal_peak_day", Long.MIN_VALUE) == day
+        val oldAccelerator = prefs.getFloat("pedal_peak_accelerator", -1f).takeIf { sameDay && it >= 0f }
+        val oldBrake = prefs.getFloat("pedal_peak_brake", -1f).takeIf { sameDay && it >= 0f }
+        fun peak(old: Float?, reading: Double?): Float? {
+            val valid = reading?.takeIf { it.isFinite() && it in 0.0..100.0 }?.toFloat()
+            return if (valid == null || (old != null && old >= valid)) old else valid
+        }
+        val peaks = PedalPeaks(peak(oldAccelerator, accelerator), peak(oldBrake, brake))
+        if (!sameDay || peaks.accelerator != oldAccelerator || peaks.brake != oldBrake) {
+            prefs.edit()
+                .putLong("pedal_peak_day", day)
+                .putFloat("pedal_peak_accelerator", peaks.accelerator ?: -1f)
+                .putFloat("pedal_peak_brake", peaks.brake ?: -1f)
+                .apply()
+        }
+        return peaks
+    }
+
     var dashboardCards: List<DashboardCard>
-        get() {
-            val saved = prefs.getString("dashboard_cards", null) ?: return DashboardCard.defaultCards
-            if (saved.isEmpty()) return emptyList()
-            val cards = saved.split(",").mapNotNull { name ->
-                DashboardCard.entries.find { it.name == name }.also {
-                    if (it == null) Log.w("AppSettings", "Ignoring unknown dashboard card: $name")
-                }
+        get() = dashboardCardsForPage(0)
+        set(value) = saveDashboardCardsForPage(0, value)
+
+    fun dashboardCardsForPage(page: Int): List<DashboardCard> {
+        val saved = prefs.getString(dashboardPageKey(page), null)
+            ?: return if (page == 0) DashboardCard.defaultCards else emptyList()
+        if (saved.isEmpty()) return emptyList()
+        val cards = saved.split(",").mapNotNull { name ->
+            DashboardCard.entries.find { it.name == name }.also {
+                if (it == null) Log.w("AppSettings", "Ignoring unknown dashboard card: $name")
             }
-            if (cards.distinct().size != cards.size) Log.w("AppSettings", "Removing duplicate dashboard cards")
-            return cards.distinct()
         }
-        set(value) {
-            require(value.distinct().size == value.size) { "Dashboard cards must be unique" }
-            prefs.edit().putString("dashboard_cards", value.joinToString(",") { it.name }).apply()
-        }
+        if (cards.distinct().size != cards.size) Log.w("AppSettings", "Removing duplicate dashboard cards")
+        return cards.distinct()
+    }
+
+    fun saveDashboardCardsForPage(page: Int, cards: List<DashboardCard>) {
+        require(cards.distinct().size == cards.size) { "Dashboard cards must be unique" }
+        prefs.edit().putString(dashboardPageKey(page), cards.joinToString(",") { it.name }).apply()
+    }
+
+    private fun dashboardPageKey(page: Int): String {
+        require(page >= 0) { "Dashboard page must be nonnegative" }
+        return if (page == 0) "dashboard_cards" else "dashboard_cards_page_$page"
+    }
 
     var telemetryEnabled: Boolean
         get() = prefs.getBoolean("telemetry_enabled", false)
