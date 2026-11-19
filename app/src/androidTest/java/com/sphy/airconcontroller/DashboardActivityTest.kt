@@ -252,8 +252,8 @@ class DashboardActivityTest {
                     val card = slot.tag as? DashboardCard ?: continue
                     if (card == DashboardCard.EVAKOOL_FRIDGE) continue
                     val title = slot.findViewById<TextView>(R.id.infoBlockTitle)
-                    assertEquals(Color.parseColor("#AA808080"), title.shadowColor)
-                    assertTrue(title.shadowRadius > 0f)
+                    assertEquals(page.getColor(R.color.dashboard_title_shadow), title.shadowColor)
+                    if (Color.alpha(title.shadowColor) > 0) assertTrue(title.shadowRadius > 0f)
                     val hero = slot.findViewById<TextView>(R.id.infoBlockHero)
                     val caption = slot.findViewById<TextView>(R.id.infoBlockHeroLabel)
                     if (card == DashboardCard.ATTITUDE) {
@@ -457,6 +457,25 @@ class DashboardActivityTest {
                 }
             } finally {
                 image.recycle()
+            }
+        }
+    }
+
+    @Test fun dashboardTitleGlowIsOnlyVisibleInDarkMode() {
+        instrumentation.runOnMainSync {
+            for (mode in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
+                val configured = context.createConfigurationContext(Configuration().apply { uiMode = mode })
+                val themed = android.view.ContextThemeWrapper(configured, R.style.Theme_OpenDiKey)
+                val inflater = android.view.LayoutInflater.from(themed)
+                for (layout in listOf(R.layout.view_dashboard_card_header, R.layout.view_attitude_block)) {
+                    val title = inflater.inflate(layout, null).findViewById<TextView>(R.id.infoBlockTitle)
+                    if (mode == Configuration.UI_MODE_NIGHT_NO) {
+                        assertEquals(0, Color.alpha(title.shadowColor))
+                    } else {
+                        assertEquals(Color.parseColor("#AA808080"), title.shadowColor)
+                        assertTrue(title.shadowRadius > 0f)
+                    }
+                }
             }
         }
     }

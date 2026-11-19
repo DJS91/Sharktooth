@@ -10,6 +10,7 @@
     <color name="color_setting_choice_fill">#FF101418</color>
     <color name="color_setting_choice_checked_text">@color/white</color>
     <color name="dashboard_library_background">#FF343C46</color>
+    <color name="dashboard_title_shadow">#AA808080</color>
     <!--
         Palettes. Screens never use these directly: res/color/bg_base, surface, text_primary, accent_orange ...
         are theme-driven selectors (see attrs.xml) that resolve to the Classic or Modern set below for

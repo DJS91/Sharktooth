@@ -6,6 +6,7 @@
 <resources>
     <color name="color_setting_panel">#FFD0D7E0</color>
     <color name="dashboard_library_background">#FFD0D7E0</color>
+    <color name="dashboard_title_shadow">#00000000</color>
     <color name="color_setting_choice_fill">#FFBAC5D2</color>
     <color name="color_setting_choice_checked_text">#FF14181D</color>
     <color name="classic_bg">#FFDCE1E8</color>
