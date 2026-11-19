@@ -171,7 +171,7 @@
                             android:id="@+id/homeVehicleInfoButton"
                             style="@style/HomeNavigationItem"
                             android:contentDescription="@string/vehicle_info_title">
-                            <ImageView style="@style/HomeNavigationIcon" android:src="@drawable/ic_dial" />
+                            <ImageView style="@style/HomeNavigationIcon" android:src="@drawable/ic_lucide_gauge" />
                             <TextView style="@style/HomeNavigationLabel" android:text="@string/vehicle_info_title" />
                         </LinearLayout>
 
@@ -180,7 +180,10 @@
                             style="@style/HomeNavigationItem"
                             android:contentDescription="@string/controls_bar_title"
                             android:visibility="gone">
-                            <ImageView style="@style/HomeNavigationIcon" android:src="@drawable/ic_button" />
+                            <ImageView
+                                style="@style/HomeNavigationIcon"
+                                android:layout_width="52dp"
+                                android:src="@drawable/ic_controls_dials" />
                             <TextView style="@style/HomeNavigationLabel" android:text="@string/controls_bar_title" />
                         </LinearLayout>
 
@@ -199,7 +202,7 @@
                             android:id="@+id/homeModesButton"
                             style="@style/HomeNavigationItem"
                             android:contentDescription="@string/modes_title">
-                            <ImageView style="@style/HomeNavigationIcon" android:src="@drawable/ic_pet_paw" android:tint="@color/accent_orange" />
+                            <ImageView style="@style/HomeNavigationIcon" android:src="@drawable/ic_lucide_tent" />
                             <TextView style="@style/HomeNavigationLabel" android:text="@string/modes_title" />
                         </LinearLayout>
                     </LinearLayout>

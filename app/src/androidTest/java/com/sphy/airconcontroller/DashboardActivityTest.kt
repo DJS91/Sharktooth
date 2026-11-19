@@ -550,6 +550,39 @@ class DashboardActivityTest {
         }
     }
 
+    @Test fun powerFlowFitsHalfTheDashboardEvenBesideATallerCard() {
+        AppSettings(context).dashboardCards = listOf(DashboardCard.POWER_FLOW, DashboardCard.ENGINE)
+        val page = open(samples = true)
+        val viewport = page.findViewById<View>(R.id.dashboardSwipeHost)
+        val diagram = page.findViewById<View>(R.id.dashboardPowerFlowDiagram)
+        val card = (diagram.parent as View).parent as View
+        val slot = card.parent as View
+        val row = slot.parent as ViewGroup
+        var initialHeight = 0
+        instrumentation.runOnMainSync {
+            assertTrue(slot.height <= viewport.height / 2)
+            initialHeight = diagram.height
+            viewport.layoutParams = (viewport.layoutParams as LinearLayout.LayoutParams).apply {
+                height = (320 * page.resources.displayMetrics.density).toInt()
+                weight = 0f
+            }
+            val neighbor = row.getChildAt(1)
+            neighbor.layoutParams = (neighbor.layoutParams as LinearLayout.LayoutParams).apply {
+                height = (220 * page.resources.displayMetrics.density).toInt()
+            }
+        }
+        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync {
+            assertTrue(diagram.height in 1 until initialHeight)
+            assertTrue("Power Flow should occupy at most half the viewport", slot.height <= viewport.height / 2)
+            assertTrue("The taller neighboring slot should not stretch Power Flow", row.height > slot.height)
+            val rpm = card.findViewById<TextView>(R.id.dashboardPowerFlowRpm)
+            val footer = (rpm.parent as View).parent as View
+            assertTrue(footer.top >= diagram.bottom)
+            assertTrue(footer.bottom + (footer.parent as View).top <= card.height - card.paddingBottom)
+        }
+    }
+
     @Test fun driveGaugeStaysAtTheSameHeightWhenTheHeaderGrows() {
         AppSettings(context).dashboardCards = listOf(DashboardCard.DRIVE)
         val page = open(samples = true)

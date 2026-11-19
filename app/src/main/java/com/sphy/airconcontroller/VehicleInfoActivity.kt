@@ -393,14 +393,7 @@ open class VehicleInfoActivity : HomeActivity() {
         ).apply { marginStart = dp(6) })
         bindPedalPeaks(if (showDashboardSamples) AppSettings.PedalPeaks(68f, 42f) else AppSettings.PedalPeaks(null, null))
         driveMetaHost.addView(parkBrakeRow)
-        val updateGaugeHeight = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            if (swipeHost.measuredHeight > 0 && driveBlock.isAttachedToWindow) {
-                val surroundingHeight = driveBlock.measuredHeight - pedalGauge.measuredHeight
-                pedalGauge.maxHeight = (swipeHost.measuredHeight / 2 - surroundingHeight).coerceAtLeast(0)
-            }
-        }
-        swipeHost.addOnLayoutChangeListener(updateGaugeHeight)
-        driveBlock.addOnLayoutChangeListener(updateGaugeHeight)
+        limitDashboardGraphicHeight(driveBlock, pedalGauge) { pedalGauge.maxHeight = it }
         blockHost.addView(driveBlock)
 
         mileageHost = addSimpleBlock(
@@ -475,10 +468,14 @@ open class VehicleInfoActivity : HomeActivity() {
         val fridgeView = inflater.inflate(R.layout.view_dashboard_fridge, blockHost, false)
         fridgeCard = FridgeTile(this, fridgeView, if (showDashboardSamples) DashboardSamples.fridge else null)
         val powerFlowBlock = inflater.inflate(R.layout.view_info_block, blockHost, false)
+        powerFlowBlock.setPaddingRelative(powerFlowBlock.paddingStart, dp(4), powerFlowBlock.paddingEnd, dp(4))
         powerFlowBlock.setDashboardTitle(R.string.dashboard_power_flow, R.drawable.ic_card_engine)
         powerFlowPower = powerFlowBlock.findViewById(R.id.infoBlockHero)
+        powerFlowPower.includeFontPadding = false
+        powerFlowBlock.findViewById<TextView>(R.id.infoBlockHeroLabel).includeFontPadding = false
         powerFlowBlock.setHeroLabel(R.string.vehicle_info_row_power)
         val flowRows = powerFlowBlock.findViewById<LinearLayout>(R.id.infoBlockRows)
+        flowRows.layoutParams = (flowRows.layoutParams as LinearLayout.LayoutParams).apply { topMargin = 0 }
         powerFlowView = PowerFlowView(this).apply { id = R.id.dashboardPowerFlowDiagram }
         flowRows.addView(powerFlowView, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
@@ -497,6 +494,7 @@ open class VehicleInfoActivity : HomeActivity() {
                 id = valueId
                 gravity = alignment
                 setTextAppearance(com.google.android.material.R.style.TextAppearance_MaterialComponents_Body2)
+                includeFontPadding = false
                 setTextColor(getColor(R.color.text_primary))
                 setTypeface(typeface, Typeface.BOLD)
             }
@@ -505,6 +503,7 @@ open class VehicleInfoActivity : HomeActivity() {
                 setText(label)
                 gravity = alignment
                 setTextAppearance(com.google.android.material.R.style.TextAppearance_MaterialComponents_Caption)
+                includeFontPadding = false
                 setTextColor(getColor(R.color.text_muted))
             })
             flowFooter.addView(column, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
@@ -513,6 +512,7 @@ open class VehicleInfoActivity : HomeActivity() {
         powerFlowRegen = footerReading(R.id.dashboardRegenEnergy, R.string.dashboard_flow_regen_today, Gravity.START)
         powerFlowRpm = footerReading(R.id.dashboardPowerFlowRpm, R.string.vehicle_info_block_engine, Gravity.END)
         flowRows.addView(flowFooter)
+        limitDashboardGraphicHeight(powerFlowBlock, powerFlowView) { powerFlowView.maxHeight = it }
         showDailyRegen(if (showDashboardSamples) 1.275 else settings.dailyRegenKwh(LocalDate.now().toEpochDay()))
         bindPowerFlow(null, null, null)
         dashboardGrid.initialize(DashboardLayout(settings.dashboardCardsForPage(dashboardPage)), mapOf(
@@ -530,6 +530,17 @@ open class VehicleInfoActivity : HomeActivity() {
         ))
 
         dashboardReady = true
+    }
+
+    private fun limitDashboardGraphicHeight(card: View, graphic: View, setMaxHeight: (Int) -> Unit) {
+        val update = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
+            if (swipeHost.measuredHeight > 0 && card.isAttachedToWindow) {
+                val surroundingHeight = card.measuredHeight - graphic.measuredHeight
+                setMaxHeight((swipeHost.measuredHeight / 2 - surroundingHeight).coerceAtLeast(0))
+            }
+        }
+        swipeHost.addOnLayoutChangeListener(update)
+        card.addOnLayoutChangeListener(update)
     }
 
     internal fun bindDashboardAttitude(ax: Double, ay: Double, az: Double) {

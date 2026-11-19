@@ -545,6 +545,8 @@ class HomeLayoutTest {
                 val swipeHost = page.findViewById<View>(R.id.dashboardSwipeHost)
                 val scroll = page.findViewById<View>(R.id.dashboardScroll)
                 assertEquals(dots.bottom, swipeHost.top)
+                assertTrue("The page dots and top padding should leave more room for cards",
+                    swipeHost.top <= (22 * density + 1).toInt())
                 assertEquals(page.height - (8 * density).toInt(), swipeHost.bottom)
                 assertEquals(0, scroll.top)
                 assertEquals(swipeHost.height, scroll.bottom)

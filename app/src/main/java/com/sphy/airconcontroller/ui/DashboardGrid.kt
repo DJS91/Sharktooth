@@ -126,10 +126,9 @@ class DashboardGrid @JvmOverloads constructor(
             repeat(3) { column ->
                 val index = rowIndex * 3 + column
                 val slot = if (index < cards.size) CardSlot() else FrameLayout(context)
-                val slotHeight = if (cards.getOrNull(index) == DashboardCard.DRIVE) {
-                    LayoutParams.WRAP_CONTENT
-                } else {
-                    LayoutParams.MATCH_PARENT
+                val slotHeight = when (cards.getOrNull(index)) {
+                    DashboardCard.DRIVE, DashboardCard.POWER_FLOW -> LayoutParams.WRAP_CONTENT
+                    else -> LayoutParams.MATCH_PARENT
                 }
                 row.addView(slot, LayoutParams(0, slotHeight, 1f).apply {
                     if (column < 2) rightMargin = dp(10)
