@@ -335,7 +335,7 @@ open class VehicleInfoActivity : HomeActivity() {
             batteryMetaHost, getString(R.string.vehicle_info_row_soc), R.color.dashboard_battery_charge, glow = true,
         )
         fuelBar = addPercentRow(
-            batteryMetaHost, getString(R.string.vehicle_info_row_fuel), R.color.dashboard_fuel, glow = true,
+            batteryMetaHost, getString(R.string.vehicle_info_row_fuel), R.color.dashboard_accent_blue, glow = true,
         )
         blockHost.addView(batteryBlock)
 
@@ -513,7 +513,7 @@ open class VehicleInfoActivity : HomeActivity() {
         flowRows.addView(flowFooter)
         limitDashboardGraphicHeight(powerFlowBlock, powerFlowView) { powerFlowView.maxHeight = it }
         showDailyRegen(if (showDashboardSamples) 1.275 else settings.dailyRegenKwh(LocalDate.now().toEpochDay()))
-        bindPowerFlow(null, null, null)
+        bindPowerFlow(null, null, null, null)
         dashboardGrid.initialize(DashboardLayout(settings.dashboardCardsForPage(dashboardPage)), mapOf(
             DashboardCard.BATTERY to batteryBlock,
             DashboardCard.DRIVE to driveBlock,
@@ -639,7 +639,7 @@ open class VehicleInfoActivity : HomeActivity() {
     private fun bindSnapshot(snap: BydVehicleInfoController.Snapshot) {
         val b = snap.battery
         bindDashboardBattery(b)
-        bindPowerFlow(b.socPct, snap.dynamics.enginePowerKw, snap.dynamics.engineRpm)
+        bindPowerFlow(b.socPct, snap.dynamics.enginePowerKw, snap.dynamics.engineRpm, snap.dynamics.speedKmh)
         val mileage = SpannableString(TextUtils.expandTemplate(
             getText(R.string.dashboard_mileage_hero), fmt(b.evMilesKm, " km"), fmt(b.hevMilesKm, " km"),
         ))
@@ -856,8 +856,8 @@ open class VehicleInfoActivity : HomeActivity() {
     private fun fmt(v: Double?, suffix: String = ""): String =
         if (v == null) "—" else trimNum(v) + suffix
 
-    internal fun bindPowerFlow(soc: Double?, power: Double?, rpm: Double?) {
-        powerFlowView.bind(soc, power, rpm)
+    internal fun bindPowerFlow(soc: Double?, power: Double?, rpm: Double?, speedKmh: Double?) {
+        powerFlowView.bind(soc, power, rpm, speedKmh)
         val powerText = powerFlowView.powerText()
         val rpmText = powerFlowView.rpmText()
         if (powerFlowPower.text != powerText) powerFlowPower.text = powerText

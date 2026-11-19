@@ -2,6 +2,7 @@ package com.sphy.airconcontroller
 
 import android.content.Context
 import android.content.Intent
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.Canvas
 import android.graphics.Color
@@ -42,6 +43,7 @@ import com.sphy.airconcontroller.ui.DashboardGrid
 import com.sphy.airconcontroller.ui.AttitudeHorizonView
 import com.sphy.airconcontroller.ui.PercentBar
 import com.sphy.airconcontroller.ui.PedalGauge
+import com.sphy.airconcontroller.ui.PowerFlowView
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -95,7 +97,7 @@ class DashboardActivityTest {
         }
     }
 
-    @Test fun batteryCardShowsHealthAboveTheBlueChargeAndGreenFuelBars() {
+    @Test fun batteryCardShowsHealthAboveTheGreenChargeAndBlueFuelBars() {
         AppSettings(context).dashboardCards = listOf(DashboardCard.BATTERY)
         val page = open()
         instrumentation.runOnMainSync {
@@ -112,8 +114,8 @@ class DashboardActivityTest {
             assertEquals("—", value.text.toString())
 
             listOf(
-                Triple(R.string.vehicle_info_row_soc, "#0090FF", rows.getChildAt(0)),
-                Triple(R.string.vehicle_info_row_fuel, "#00FF5D", rows.getChildAt(1)),
+                Triple(R.string.vehicle_info_row_soc, "#00FF5D", rows.getChildAt(0)),
+                Triple(R.string.vehicle_info_row_fuel, "#0090FF", rows.getChildAt(1)),
             ).forEach { (labelId, color, row) ->
                 assertEquals(page.getString(labelId), row.findViewById<TextView>(R.id.percentRowLabel).text.toString())
                 val bar = row.findViewById<PercentBar>(R.id.percentRowBar)
@@ -288,7 +290,7 @@ class DashboardActivityTest {
                 assertFlowAt(blue, *axlePoints, *batteryPoints)
                 assertFlowAt(amber, 384 to 284, 403 to 297)
 
-                page.bindPowerFlow(23.0, -18.0, 0.0)
+                page.bindPowerFlow(23.0, -18.0, 0.0, 48.0)
                 assertEquals("-18 kW", hero.text.toString())
                 assertTrue(diagram.contentDescription.contains("Battery 23%. Regenerating"))
                 assertActiveRoutes(green)
@@ -302,46 +304,84 @@ class DashboardActivityTest {
                     return Color.green(pixel) - maxOf(Color.red(pixel), Color.blue(pixel))
                 }
                 val regenGlow = haloGreenness()
-                page.bindPowerFlow(23.0, 0.0, 1100.0)
+                page.bindPowerFlow(23.0, 0.0, 1100.0, 48.0)
                 assertActiveRoutes(amber)
                 val idleGlow = haloGreenness()
                 assertTrue("The pack should have a subtle green halo at rest", idleGlow > 0)
                 assertTrue("Charging should brighten the halo", regenGlow > idleGlow + 15)
-                page.bindPowerFlow(23.0, -18.0, 1100.0)
+                page.bindPowerFlow(23.0, -18.0, 1100.0, 48.0)
                 assertActiveRoutes(green, amber)
                 assertEquals("Net charging should glow with the engine running too", regenGlow, haloGreenness())
 
-                page.bindPowerFlow(100.0, 0.0, 0.0)
+                page.bindPowerFlow(23.0, -18.0, 1100.0, 0.0)
+                assertActiveRoutes()
+                assertEquals("-18 kW", hero.text.toString())
+                assertEquals(page.getString(R.string.dashboard_flow_rpm,
+                    java.text.NumberFormat.getNumberInstance().format(1100)), rpm.text.toString())
+                assertTrue(batteryGreenAt(297, 220))
+                page.bindPowerFlow(23.0, -18.0, 1100.0, -4.0)
+                assertActiveRoutes(green, amber)
+                page.bindPowerFlow(23.0, 35.0, 1100.0, 0.0)
+                assertActiveRoutes()
+                page.bindPowerFlow(23.0, 35.0, 1100.0, null)
+                assertActiveRoutes()
+
+                page.bindPowerFlow(100.0, 0.0, 0.0, 48.0)
                 assertActiveRoutes()
                 assertTrue("A full charge should reach the back of the pack", batteryGreenAt(204, 163))
 
-                page.bindPowerFlow(0.0, 0.0, 0.0)
+                page.bindPowerFlow(0.0, 0.0, 0.0, 48.0)
                 assertActiveRoutes()
                 assertFalse("An empty pack should not show a green cell", batteryGreenAt(297, 220))
 
-                page.bindPowerFlow(24.0, 0.0, 1100.0)
+                page.bindPowerFlow(24.0, 0.0, 1100.0, 48.0)
                 assertTrue(diagram.contentDescription.contains("No battery flow"))
                 assertActiveRoutes(amber)
 
-                page.bindPowerFlow(null, Double.NaN, null)
+                page.bindPowerFlow(null, Double.NaN, null, 48.0)
                 assertEquals("—", hero.text.toString())
                 assertTrue(diagram.contentDescription.contains("Flow unavailable"))
                 assertActiveRoutes()
                 fun alphaAt(x: Int, y: Int) =
                     Color.alpha(image.getPixel((left + x * scale).toInt(), (top + y * scale).toInt()))
-                assertEquals("The dark cabin interior should be 80% transparent", 51, alphaAt(305, 151))
+                val roofAlpha = alphaAt(218, 30)
+                assertTrue("The dark interior should have about one fifth of the roof opacity",
+                    kotlin.math.abs(roofAlpha / 5f - alphaAt(305, 151)) <= 1f)
                 assertEquals("The background outside the truck should remain clear", 0, alphaAt(0, 0))
-                assertTrue("Shadows should fade rather than cut off abruptly", alphaAt(274, 277) in 52..160)
-                assertEquals("The bright roof should stay visible", 255, alphaAt(218, 30))
+                assertTrue("Shadows should fade rather than cut off abruptly",
+                    alphaAt(274, 277).toFloat() / roofAlpha in 0.2f..0.63f)
                 for ((x, y) in listOf(304 to 219, 145 to 122, 360 to 268, 407 to 235)) {
                     val pixel = image.getPixel((left + x * scale).toInt(), (top + y * scale).toInt())
                     val channels = listOf(Color.red(pixel), Color.green(pixel), Color.blue(pixel))
                     assertTrue("The photo must not show baked-in charge or flow near ($x, $y)",
-                        Color.alpha(pixel) == 255 && channels.max() - channels.min() <= 20)
+                        Color.alpha(pixel) == roofAlpha && channels.max() - channels.min() <= 20)
                 }
             } finally {
                 image.recycle()
             }
+        }
+    }
+
+    @Test fun powerFlowPhotoIsFainterInLightModeWithoutFadingBatteryCells() {
+        instrumentation.runOnMainSync {
+            fun render(mode: Int): Pair<Int, Int> {
+                val themed = context.createConfigurationContext(Configuration().apply { uiMode = mode })
+                val view = PowerFlowView(themed)
+                view.bind(23.0, 0.0, 0.0, 0.0)
+                view.layout(0, 0, 500, 378)
+                val image = Bitmap.createBitmap(500, 378, Bitmap.Config.ARGB_8888)
+                try {
+                    view.draw(Canvas(image))
+                    return Color.alpha(image.getPixel(218, 30)) to image.getPixel(297, 220)
+                } finally {
+                    image.recycle()
+                }
+            }
+            val (darkRoof, darkCell) = render(Configuration.UI_MODE_NIGHT_YES)
+            val (lightRoof, lightCell) = render(Configuration.UI_MODE_NIGHT_NO)
+            assertEquals(255, darkRoof)
+            assertTrue(lightRoof.toFloat() / darkRoof in 0.69f..0.71f)
+            assertEquals(darkCell, lightCell)
         }
     }
 
@@ -403,6 +443,11 @@ class DashboardActivityTest {
             val chart = Bitmap.createBitmap(graph.width, graph.height, Bitmap.Config.ARGB_8888)
             try {
                 graph.draw(Canvas(chart))
+                val amber = Color.parseColor("#FFB45C")
+                assertTrue("The RPM trace should use the same amber as the engine route",
+                    (chart.width / 3..chart.width * 2 / 3).any { x ->
+                        (0 until chart.height).any { y -> chart.getPixel(x, y) == amber }
+                    })
                 val labelColor = page.getColor(R.color.text_muted)
                 fun hasLabel(xs: IntRange, ys: IntRange) =
                     xs.any { x -> ys.any { y -> chart.getPixel(x, y) == labelColor } }
@@ -498,12 +543,12 @@ class DashboardActivityTest {
                 gauge.draw(Canvas(bitmap))
                 val ink = ((cx - size * 0.22f).toInt()..(cx + size * 0.22f).toInt()).map { x ->
                     ((cy - size * 0.2f).toInt()..(cy + size * 0.06f).toInt()).filter { y ->
-                        bitmap.getPixel(x, y) == Color.WHITE
+                        bitmap.getPixel(x, y) == page.getColor(R.color.text_primary)
                     }
                 }.dropWhile { it.isEmpty() }
                 val digit = ink.takeWhile { it.isNotEmpty() }.flatten()
                 val symbol = ink.dropWhile { it.isNotEmpty() }.flatten()
-                assertTrue("The digit and percent symbol should both render in white",
+                assertTrue("The digit and percent symbol should both use the theme text colour",
                     digit.isNotEmpty() && symbol.isNotEmpty())
                 val digitHeight = digit.max() - digit.min() + 1
                 val symbolHeight = symbol.max() - symbol.min() + 1

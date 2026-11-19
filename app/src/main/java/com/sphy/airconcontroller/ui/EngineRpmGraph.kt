@@ -99,7 +99,7 @@ internal class EngineRpmGraph(context: Context) : View(context) {
             }
             canvas.drawText(timeLabels[index], x, height - label.descent(), label)
         }
-        paint.color = context.getColor(R.color.dashboard_battery_charge)
+        paint.color = context.getColor(R.color.dashboard_engine)
         path.rewind()
         var previous: Long? = null
         for (sample in samples) {

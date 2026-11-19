@@ -1,6 +1,7 @@
 package com.sphy.airconcontroller.ui
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Bitmap
 import android.graphics.BitmapFactory
 import android.graphics.Canvas
@@ -22,8 +23,11 @@ import kotlin.math.min
 import kotlin.math.roundToInt
 
 internal class PowerFlowView(context: Context) : View(context) {
-    private val truck = requireNotNull(context.getDrawable(R.drawable.power_flow_photo)).apply {
+    private val truck = requireNotNull(context.getDrawable(R.drawable.power_flow_photo)).mutate().apply {
         setBounds(0, 0, WIDTH, HEIGHT)
+        if (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK == Configuration.UI_MODE_NIGHT_NO) {
+            alpha = (255 * 0.7f).roundToInt()
+        }
     }
     // Positions are in the cropped photo's pixel coordinates.
     private val rearMotor = PointF(145f, 122f)
@@ -60,6 +64,7 @@ internal class PowerFlowView(context: Context) : View(context) {
         },
     )
     private val engineRoute = Route(pointOnLine(rearMotor, frontMotor, 410f), frontMotor)
+    private val engineColor = context.getColor(R.color.dashboard_engine)
     private val batteryCell = BitmapFactory.decodeResource(resources, R.drawable.power_flow_battery_cell)
     private val cellPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
     private val cellMatrix = Matrix()
@@ -95,17 +100,21 @@ internal class PowerFlowView(context: Context) : View(context) {
     private var charge: Double? = null
     private var power: Double? = null
     private var rpm: Double? = null
+    private var moving = false
     private var chargeText = unavailable
     private val visibleArea = Rect()
 
-    fun bind(soc: Double?, powerKw: Double?, engineRpm: Double?) {
+    fun bind(soc: Double?, powerKw: Double?, engineRpm: Double?, speedKmh: Double?) {
         val nextCharge = soc?.takeIf { it.isFinite() && it in 0.0..100.0 }
         val nextPower = powerKw?.takeIf { it.isFinite() }
         val nextRpm = engineRpm?.takeIf { it.isFinite() && it >= 0.0 }
-        if (nextCharge == charge && nextPower == power && nextRpm == rpm && contentDescription != null) return
+        val nextMoving = speedKmh != null && speedKmh.isFinite() && speedKmh != 0.0
+        if (nextCharge == charge && nextPower == power && nextRpm == rpm && nextMoving == moving &&
+            contentDescription != null) return
         charge = nextCharge
         power = nextPower
         rpm = nextRpm
+        moving = nextMoving
         chargeText = nextCharge?.let { percentFormat.format(it / 100) } ?: unavailable
         val batteryStatus = when {
             nextPower == null -> R.string.dashboard_flow_unavailable
@@ -156,23 +165,26 @@ internal class PowerFlowView(context: Context) : View(context) {
         truck.draw(canvas)
 
         drawCharge(canvas)
-        val phase = SystemClock.uptimeMillis() % FLOW_PERIOD_MS / FLOW_PERIOD_MS.toFloat()
-        val powerKw = power ?: 0.0
-        val engineRunning = (rpm ?: 0.0) > 0.0
+        val powerKw = if (moving) power ?: 0.0 else 0.0
+        val showEngineRoute = moving && (rpm ?: 0.0) > 0.0
         val drivetrainColor = when {
             powerKw > 0.0 -> DISCHARGE
             powerKw < 0.0 -> REGEN
             else -> null
         }
-        if (drivetrainColor != null) {
-            drawAxle(canvas, rear, drivetrainColor, phase, reverse = powerKw < 0.0)
-            drawAxle(canvas, front, drivetrainColor, phase, reverse = powerKw < 0.0)
+        val animate = drivetrainColor != null || showEngineRoute
+        if (animate) {
+            val phase = SystemClock.uptimeMillis() % FLOW_PERIOD_MS / FLOW_PERIOD_MS.toFloat()
+            if (drivetrainColor != null) {
+                drawAxle(canvas, rear, drivetrainColor, phase, reverse = powerKw < 0.0)
+                drawAxle(canvas, front, drivetrainColor, phase, reverse = powerKw < 0.0)
+            }
+            if (showEngineRoute) drawRoute(canvas, engineRoute, engineColor, phase)
         }
-        if (engineRunning) drawRoute(canvas, engineRoute, ENGINE, phase)
         canvas.restore()
 
         // The flow is a live status indicator, not a system UI transition.
-        if ((powerKw != 0.0 || engineRunning) && isShown && windowVisibility == VISIBLE &&
+        if (animate && isShown && windowVisibility == VISIBLE &&
             getLocalVisibleRect(visibleArea)) {
             postInvalidateDelayed(33L)
         }
@@ -331,6 +343,5 @@ internal class PowerFlowView(context: Context) : View(context) {
         const val BATTERY_SEAM = 0x880C7C05.toInt()
         const val DISCHARGE = 0xFF1687DB.toInt()
         const val REGEN = 0xFF19C76A.toInt()
-        const val ENGINE = 0xFFFFB45C.toInt()
     }
 }

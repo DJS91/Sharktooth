@@ -2,7 +2,6 @@ package com.sphy.airconcontroller.ui
 
 import android.content.Context
 import android.graphics.Canvas
-import android.graphics.Color
 import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
@@ -21,7 +20,7 @@ internal class PedalGauge(context: Context) : View(context) {
         textAlign = Paint.Align.CENTER
     }
     private val colours = intArrayOf(
-        context.getColor(R.color.dashboard_battery_charge),
+        context.getColor(R.color.dashboard_accent_blue),
         context.getColor(R.color.dashboard_brake),
     )
     private val track = context.getColor(R.color.surface_stroke)
@@ -113,10 +112,15 @@ internal class PedalGauge(context: Context) : View(context) {
             val x = cx + radius * cos(angle).toFloat()
             val y = cy + radius * sin(angle).toFloat()
             val dotRadius = minOf(stroke * 0.85f, size * 0.05f)
-            paint.color = textColor
-            canvas.drawCircle(x, y, dotRadius, paint)
+            if (lightPalette) {
+                paint.setShadowLayer(stroke * 0.65f, 0f, 0f, 0xAA808080.toInt())
+            } else {
+                paint.color = textColor
+                canvas.drawCircle(x, y, dotRadius, paint)
+            }
             paint.color = colours[i]
             canvas.drawCircle(x, y, dotRadius * 0.65f, paint)
+            paint.clearShadowLayer()
         }
         paint.typeface = Typeface.DEFAULT_BOLD
         drawReading(canvas, cx, cy + size * 0.035f, size * 0.23f)
@@ -148,14 +152,7 @@ internal class PedalGauge(context: Context) : View(context) {
     }
 
     private fun drawReadingText(canvas: Canvas, text: String, x: Float, baseline: Float) {
-        if (lightPalette) {
-            paint.style = Paint.Style.STROKE
-            paint.strokeWidth = 2 * density
-            paint.color = textColor
-            canvas.drawText(text, x, baseline, paint)
-            paint.style = Paint.Style.FILL
-        }
-        paint.color = Color.WHITE
+        paint.color = textColor
         canvas.drawText(text, x, baseline, paint)
     }
 
