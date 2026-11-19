@@ -9,18 +9,18 @@ Sharktooth is an open source and free app for the BYD Shark 6's head unit to dis
 
 ## Features
 
-- **Vehicle dashboard** — Battery, range, fuel, tyres, driving data and head-unit status. **ESP32: not required.**
+- **[Customizable Dashboard](docs/feature-guide.md#customizable-dashboard)** — Swipe between five independently configurable dashboards. Add, remove and rearrange live cards for battery, range, fuel, tyres, driving data and more, including Power Flow and an optional EVAKOOL fridge card if you have a compatible bluetooth fridge. See what you want, how you want it! **ESP32: not required for the Dashboard.**
 - **ADAS profiles** — View and apply driver-assistance settings, with optional automatic application. **ESP32: not required.**
+- **[Camping Mode](docs/feature-guide.md#camping-mode)** — With the vehicle on and in Park, run a checklist that closes the windows, turns off climate and the centre screen, dims the cluster and more. Wake the screen to end the camp session, or set a battery cutoff to end it automatically if it gets too low. **ESP32: not required.**
 - **Pet Mode** — Keep the display awake and maintain a configured climate profile while the vehicle is READY. **ESP32: not required.**
-- **Sentry** — Install, update and launch the separate [Strike](https://github.com/DJS91/Strike) app. **ESP32: not required.**
-- **CarPlay / Android Auto** — Launch from the home screen or switch automatically when connected. **ESP32: not required.**
-- **DiKey controls (optional)** — Map buttons, control climate with the dials, and configure button and ambient lighting. **ESP32: optional**; direct Bluetooth requires compatible head-unit BLE.
+- **CarPlay / Android Auto auto launch** — Launch from the home screen or switch automatically when connected. **ESP32: not required.**
+- **DiKey controls (optional)** — Have physical A\C buttons, control climate with the dials, and configure button and ambient lighting. **ESP32: optional**; direct Bluetooth requires compatible head-unit BLE.
 - **[EVAKOOL camping fridge](docs/camping-fridge.md)** — Monitor temperatures and voltage, control power and settings, and view history and alerts. **ESP32: optional**; the default uses the bridge, with a direct Android Bluetooth backup.
 - **[ESP32 WiFi](docs/esp32-wifi.md)** — Connect the bridge to a 2.4 GHz network. **ESP32: required.**
 - **[Home Assistant telemetry integration](docs/home-assistant-telemetry.md)** — Optionally send vehicle, climate, ADAS and location data via HTTPS. **ESP32: required** via USB with WiFi connected.
 - **Background listener and updates** — Keep the connection alive and check GitHub for new releases. **ESP32: not required**, except when using a bridge connection.
 
-Compared with upstream Open DiKey, this fork adds fridge integration, telemetry, ESP32 WiFi tools, phone projection and dial fan-mode timeout.
+Compared with upstream Open DiKey, this fork adds Camping Mode, a customizable Dashboard, fridge integration, telemetry, ESP32 WiFi tools, phone projection, UI overhaul and more.
 
 For detailed setup, privacy, troubleshooting and safety information, see the [feature guide](docs/feature-guide.md).
 
