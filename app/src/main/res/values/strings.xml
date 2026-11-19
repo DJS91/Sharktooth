@@ -10,6 +10,7 @@
     <string name="dashboard_rpm_now">Now</string>
     <string name="dashboard_rpm_no_history">No RPM history available</string>
     <string name="dashboard_pedal_accelerate">Accelerate</string>
+    <string name="dashboard_pedal_label">Pedal</string>
     <string name="dashboard_pedals">Pedals</string>
     <item type="id" name="dashboardPedalPeaks" />
     <item type="id" name="dashboardPowerFlowDiagram" />

@@ -31,6 +31,7 @@ class BydVehicleInfoController(context: Context) {
 
     /** VIN is static; caching avoids BYD OTA SDK log spam from getAutoVIN every poll. */
     @Volatile private var cachedVin: String? = null
+    @Volatile private var lastRejectedEngineRpm: Double? = null
 
     @Volatile
     var lastBindError: String? = null
@@ -326,7 +327,7 @@ class BydVehicleInfoController(context: Context) {
             energyMode = energy?.let { num(it, "getEnergyMode")?.toInt() },
             operationMode = energy?.let { num(it, "getOperationMode")?.toInt() },
             powerLevel = bodywork?.let { num(it, "getPowerLevel")?.toInt() },
-            engineRpm = engine?.let { num(it, "getEngineSpeed")?.toInt() },
+            engineRpm = engine?.let { readEngineRpm(it)?.toInt() },
         )
     }
 
@@ -513,7 +514,7 @@ class BydVehicleInfoController(context: Context) {
             gearRaw = gear,
             parkBrake = gearbox?.let { num(it, "getParkBrakeSwitch")?.toInt() },
             enginePowerKw = engine?.let { num(it, "getEnginePower") },
-            engineRpm = engine?.let { num(it, "getEngineSpeed") },
+            engineRpm = engine?.let { readEngineRpm(it) },
             oilLevel = engine?.let { num(it, "getOilLevel") },
             displacementL = engine?.let { num(it, "getEngineDisplacement") },
             engineCode = engine?.let { invokeString(it, "getEngineCode") },
@@ -537,6 +538,20 @@ class BydVehicleInfoController(context: Context) {
         val vin = invokeString(body, "getAutoVIN") ?: invokeString(body, "getVIN")
         if (!vin.isNullOrBlank()) cachedVin = vin
         return vin
+    }
+
+    private fun readEngineRpm(engine: Any): Double? {
+        val raw = num(engine, "getEngineSpeed")
+        val rpm = validatedEngineRpm(raw)
+        if (raw != null && rpm == null) {
+            if (lastRejectedEngineRpm != raw) {
+                Log.w(TAG, "Engine.getEngineSpeed returned $raw outside the documented 0..8000 rpm range")
+            }
+            lastRejectedEngineRpm = raw
+        } else {
+            lastRejectedEngineRpm = null
+        }
+        return rpm
     }
 
     fun dumpAll(): String {
@@ -570,6 +585,7 @@ class BydVehicleInfoController(context: Context) {
                 "VehicleHealth" to "getBatteryHealthStatus",
                 "Engine" to "getMotorPower",
                 "Engine" to "getEnginePower",
+                "Engine" to "getEngineSpeed",
                 "Charging" to "getChargingPower",
                 "Charging" to "getChargeBatteryTemp",
                 "Charging" to "getChargingCapacity",
@@ -839,6 +855,10 @@ class BydVehicleInfoController(context: Context) {
     }
 
     companion object {
+        // BYD API V1.0.5, section 6.8.5: getEngineSpeed returns 0..8000 r/min.
+        internal fun validatedEngineRpm(raw: Double?): Double? =
+            raw?.takeIf { it.isFinite() && it in 0.0..8000.0 }
+
         private const val REBIND_INTERVAL_MS = 5_000L
         private const val TAG = "BydVehicleInfo"
         /** Plausible remaining usable energy (kWh) for passenger BYDs. */

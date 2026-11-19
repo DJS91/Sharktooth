@@ -9,6 +9,10 @@
 
     <TextView
         android:id="@id/infoBlockTitle"
+        android:shadowColor="#AA808080"
+        android:shadowDx="0"
+        android:shadowDy="0"
+        android:shadowRadius="4"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle2"

@@ -467,18 +467,29 @@ open class VehicleInfoActivity : HomeActivity() {
         )
         val fridgeView = inflater.inflate(R.layout.view_dashboard_fridge, blockHost, false)
         fridgeCard = FridgeTile(this, fridgeView, if (showDashboardSamples) DashboardSamples.fridge else null)
-        val powerFlowBlock = inflater.inflate(R.layout.view_info_block, blockHost, false)
+        val powerFlowBlock = inflater.inflate(R.layout.view_dashboard_power_flow, blockHost, false) as FrameLayout
         powerFlowBlock.setDashboardTitle(R.string.dashboard_power_flow, R.drawable.ic_card_engine)
         powerFlowPower = powerFlowBlock.findViewById(R.id.infoBlockHero)
         powerFlowPower.includeFontPadding = false
-        powerFlowBlock.findViewById<TextView>(R.id.infoBlockHeroLabel).includeFontPadding = false
+        val powerFlowHeroLabel = powerFlowBlock.findViewById<TextView>(R.id.infoBlockHeroLabel).apply {
+            includeFontPadding = false
+        }
         powerFlowBlock.setHeroLabel(R.string.vehicle_info_row_power)
         val flowRows = powerFlowBlock.findViewById<LinearLayout>(R.id.infoBlockRows)
-        flowRows.layoutParams = (flowRows.layoutParams as LinearLayout.LayoutParams).apply { topMargin = 0 }
         powerFlowView = PowerFlowView(this).apply { id = R.id.dashboardPowerFlowDiagram }
-        flowRows.addView(powerFlowView, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+        powerFlowBlock.addView(powerFlowView, 0, FrameLayout.LayoutParams(
+            FrameLayout.LayoutParams.MATCH_PARENT, FrameLayout.LayoutParams.WRAP_CONTENT,
         ))
+        powerFlowRpm = TextView(this).apply {
+            id = R.id.dashboardPowerFlowRpm
+            gravity = Gravity.END
+            setTextAppearance(com.google.android.material.R.style.TextAppearance_MaterialComponents_Caption)
+            includeFontPadding = false
+            setTextColor(getColor(R.color.text_primary))
+        }
+        (powerFlowHeroLabel.parent as LinearLayout).addView(powerFlowRpm, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(4) })
         val flowFooter = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.BOTTOM
@@ -509,9 +520,7 @@ open class VehicleInfoActivity : HomeActivity() {
             return value
         }
         powerFlowRegen = footerReading(R.id.dashboardRegenEnergy, R.string.dashboard_flow_regen_today, Gravity.START)
-        powerFlowRpm = footerReading(R.id.dashboardPowerFlowRpm, R.string.vehicle_info_block_engine, Gravity.END)
         flowRows.addView(flowFooter)
-        limitDashboardGraphicHeight(powerFlowBlock, powerFlowView) { powerFlowView.maxHeight = it }
         showDailyRegen(if (showDashboardSamples) 1.275 else settings.dailyRegenKwh(LocalDate.now().toEpochDay()))
         bindPowerFlow(null, null, null, null)
         dashboardGrid.initialize(DashboardLayout(settings.dashboardCardsForPage(dashboardPage)), mapOf(

@@ -6,7 +6,6 @@ import android.graphics.Paint
 import android.graphics.RectF
 import android.graphics.Typeface
 import android.view.View
-import androidx.core.graphics.ColorUtils
 import com.sphy.airconcontroller.R
 import kotlin.math.roundToInt
 import kotlin.math.cos
@@ -31,9 +30,10 @@ internal class PedalGauge(context: Context) : View(context) {
     private val values = arrayOfNulls<Double>(2)
     private val peaks = arrayOfNulls<Float>(2)
     private val textColor = context.getColor(R.color.text_primary)
-    private val lightPalette = ColorUtils.calculateLuminance(textColor) < 0.5
+    private val captionColor = context.getColor(R.color.text_muted)
     private var reading: String? = null
     private var label = context.getString(R.string.dashboard_pedals)
+    private var activePedal = false
     var maxHeight = Int.MAX_VALUE
         set(value) {
             if (field == value) return
@@ -57,6 +57,7 @@ internal class PedalGauge(context: Context) : View(context) {
             first != null && first > 0 -> 0
             else -> null
         }
+        activePedal = active != null
         label = active?.let { labels[it] } ?: context.getString(R.string.dashboard_pedals)
         val percent = active?.let { values[it] } ?: if (first == 0.0 && second == 0.0) 0.0 else null
         reading = percent?.let { String.format("%.0f", it) }
@@ -89,7 +90,7 @@ internal class PedalGauge(context: Context) : View(context) {
         val cx = width / 2f
         val size = minOf(width.toFloat(), height / ARC_HEIGHT_RATIO, 256 * density)
         val cy = size / 2f
-        val stroke = minOf(6f * density, size * 0.05f)
+        val stroke = minOf(9f * density, size * 0.065f)
         if (stroke <= 0f) return
         paint.style = Paint.Style.STROKE
         paint.strokeWidth = stroke
@@ -111,23 +112,28 @@ internal class PedalGauge(context: Context) : View(context) {
             val angle = Math.toRadians(135.0 + 270 * peak / 100)
             val x = cx + radius * cos(angle).toFloat()
             val y = cy + radius * sin(angle).toFloat()
-            val dotRadius = minOf(stroke * 0.85f, size * 0.05f)
-            if (lightPalette) {
-                paint.setShadowLayer(stroke * 0.65f, 0f, 0f, 0xAA808080.toInt())
-            } else {
-                paint.color = textColor
-                canvas.drawCircle(x, y, dotRadius, paint)
-            }
+            val dotRadius = stroke * 0.42f
             paint.color = colours[i]
-            canvas.drawCircle(x, y, dotRadius * 0.65f, paint)
-            paint.clearShadowLayer()
+            canvas.drawCircle(x, y, dotRadius, paint)
         }
         paint.typeface = Typeface.DEFAULT_BOLD
-        drawReading(canvas, cx, cy + size * 0.035f, size * 0.23f)
+        drawReading(canvas, cx, cy + size * 0.035f, size * 0.2024f)
         paint.color = textColor
         paint.typeface = Typeface.DEFAULT
-        paint.textSize = size * 0.11f
-        canvas.drawText(label, cx, cy + size * 0.19f, paint)
+        paint.textSize = size * 0.0726f
+        val labelBaseline = cy + size * 0.19f
+        canvas.drawText(label, cx, labelBaseline, paint)
+        if (activePedal) {
+            val captionBaseline = labelBaseline + paint.textSize * 1.1f
+            paint.textSize *= 0.8f
+            paint.color = captionColor
+            canvas.drawText(
+                context.getString(R.string.dashboard_pedal_label),
+                cx,
+                captionBaseline,
+                paint,
+            )
+        }
     }
 
     private fun drawReading(canvas: Canvas, cx: Float, baseline: Float, numberSize: Float) {
@@ -140,15 +146,13 @@ internal class PedalGauge(context: Context) : View(context) {
 
         val numberWidth = paint.measureText(number)
         val unitSize = numberSize * 0.55f
-        val gap = numberSize * 0.04f
+        val gap = numberSize * 0.08f
         paint.textSize = unitSize
         val unitWidth = paint.measureText("%")
-
-        // Center the number and its raised suffix together.
         paint.textSize = numberSize
-        drawReadingText(canvas, number, cx - (gap + unitWidth) / 2, baseline)
+        drawReadingText(canvas, number, cx, baseline)
         paint.textSize = unitSize
-        drawReadingText(canvas, "%", cx + (numberWidth + gap) / 2, baseline - numberSize * 0.32f)
+        drawReadingText(canvas, "%", cx + numberWidth / 2 + gap + unitWidth / 2, baseline - numberSize * 0.32f)
     }
 
     private fun drawReadingText(canvas: Canvas, text: String, x: Float, baseline: Float) {

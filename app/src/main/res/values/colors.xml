@@ -48,6 +48,6 @@
     <color name="dashboard_accent_blue">#0090FF</color>
     <color name="dashboard_engine">#FFB45C</color>
     <color name="dashboard_brake">#FFCC00</color>
-    <color name="dashboard_battery_charge">#00FF5D</color>
+    <color name="dashboard_battery_charge">#33FF00</color>
     <color name="gauge_caution">#FFF5B400</color>
 </resources>

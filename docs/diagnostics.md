@@ -1,5 +1,11 @@
 # Diagnostics and troubleshooting
 
+## Engine RPM
+
+The Engine card and Power Flow use `BYDAutoEngineDevice.getEngineSpeed()`, documented in the bundled BYD API V1.0.5 reference, section 6.8.5, as engine speed in rpm with a range of 0–8,000. Out-of-range readings are shown as unavailable, not converted to zero, and do not activate the engine flow.
+
+If RPM is unavailable or appears stuck, the vehicle information dump includes the raw `Engine.getEngineSpeed` result. A read-only comparison on the head unit with the engine stopped and running is needed to confirm this firmware's signal; EV mode alone is not used to invent an RPM reading.
+
 ## Camp Mode API inventory
 
 On the head unit, open **Debug → Diagnostics report → Run diagnostics** (not the climate write test). The **Camp Mode API inventory** section lists relevant public window and display-mode SDK method signatures and constant names without invoking them. This is discovery information, not proof that a command is safe or supported. Share only that section when possible; the full report may include vehicle identifiers and device addresses.

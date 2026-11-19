@@ -140,24 +140,14 @@ internal class PowerFlowView(context: Context) : View(context) {
         R.string.dashboard_flow_rpm, numberFormat.format(it),
     ) } ?: unavailable
 
-    var maxHeight = Int.MAX_VALUE
-        set(value) {
-            if (field == value) return
-            field = value
-            requestLayout()
-        }
-
     override fun onMeasure(widthMeasureSpec: Int, heightMeasureSpec: Int) {
-        val density = resources.displayMetrics.density
-        val preferred = MAX_WIDTH_DP * density
-        val width = resolveSize(preferred.roundToInt(), widthMeasureSpec)
-        val diagramWidth = min(width.toFloat(), preferred)
-        val diagramHeight = (diagramWidth * HEIGHT / WIDTH).roundToInt()
-        setMeasuredDimension(width, resolveSize(min(diagramHeight, maxHeight), heightMeasureSpec))
+        val width = MeasureSpec.getSize(widthMeasureSpec)
+        val diagramHeight = (width * HEIGHT.toFloat() / WIDTH * 0.9f).roundToInt()
+        setMeasuredDimension(width, resolveSize(diagramHeight, heightMeasureSpec))
     }
 
     override fun onDraw(canvas: Canvas) {
-        val scale = min(width / WIDTH.toFloat(), height / HEIGHT.toFloat())
+        val scale = min(width / WIDTH.toFloat() * 0.9f, height / HEIGHT.toFloat())
         if (scale <= 0f) return
         canvas.save()
         canvas.translate((width - WIDTH * scale) / 2f, (height - HEIGHT * scale) / 2f)
@@ -334,7 +324,6 @@ internal class PowerFlowView(context: Context) : View(context) {
     private companion object {
         const val WIDTH = 500
         const val HEIGHT = 378
-        const val MAX_WIDTH_DP = 432
         const val FLOW_PERIOD_MS = 1_200L
         const val PULSE_RADIUS = 13f
         const val BATTERY_CELLS = 12

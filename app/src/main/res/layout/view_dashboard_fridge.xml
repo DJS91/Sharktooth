@@ -19,20 +19,21 @@
         android:id="@+id/homeFridgeTemperatures"
         style="@style/DashboardHeroValue"
         android:layout_width="match_parent"
-        android:layout_marginTop="8dp"
+        android:layout_marginTop="16dp"
         android:gravity="center" />
 
     <TextView
         android:id="@+id/homeFridgeStatus"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="12dp"
         android:gravity="center"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Body1"
         android:textColor="@color/text_muted" />
 
     <TextView
         android:id="@+id/homeFridgePower"
+        android:layout_marginTop="10dp"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:gravity="center"
@@ -43,7 +44,7 @@
         android:id="@+id/homeFridgeUpdated"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
-        android:layout_marginTop="4dp"
+        android:layout_marginTop="10dp"
         android:gravity="center"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Caption"
         android:textColor="@color/text_muted" />

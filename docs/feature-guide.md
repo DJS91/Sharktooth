@@ -22,8 +22,8 @@ Open **Dashboard** (gauge icon) for live vehicle and head-unit readings. The fir
 
 | Card | Readings and controls |
 | --- | --- |
-| **Battery & Fuel** | Battery health, capacity, charge, fuel level, and electric, fuel and combined range estimates. The green bar shows charge; the blue bar shows fuel. |
-| **Drive** | Speed, gear, parking brake status and pedal use. The blue outer arc shows accelerator input and the yellow inner arc shows brake input. The centre shows the active pedal and its percentage, with brake taking priority. Dots and figures mark the highest readings recorded while Dashboard was open that day. Peaks are saved across restarts and reset each day. |
+| **Battery & Fuel** | Battery health, capacity, charge, fuel level, and electric, fuel and combined range estimates. The bright green (`#33FF00`) bar shows charge; the blue bar shows fuel. |
+| **Drive** | Speed, gear, parking brake status and pedal use. The blue outer arc shows accelerator input and the yellow inner arc shows brake input. The centre shows the percentage above the active pedal name and a smaller grey **Pedal** caption, with brake taking priority. Dots and figures mark the highest readings recorded while Dashboard was open that day. Peaks are saved across restarts and reset each day. |
 | **Tyres** | Pressure and status for each tyre. The card shows **OK** only when all four report normal status. |
 | **Consumption** | Lifetime fuel economy, fuel used, electric consumption and energy charged. |
 | **Mileage** | EV and HEV distances, odometer, drive time and average speed. |
@@ -34,7 +34,9 @@ Open **Dashboard** (gauge icon) for live vehicle and head-unit readings. The fir
 
 ### Optional cards
 
-- **Power Flow:** The green battery display shows current charge. While the vehicle is moving, blue paths flow toward the wheels when the battery is supplying power, and green paths flow toward the battery when it is charging. An amber path shows that the engine is running. At 0 km/h the paths are hidden, but the power, charge and RPM readings remain visible. The animation shows overall flow, not which axle is active, and engine RPM alone does not mean the battery is charging. **Regen today** estimates the energy recovered in kWh from readings collected while Dashboard is open. It is saved across restarts and resets each day. Engine RPM appears beside it.
+Dashboard card titles have a soft grey glow. The Power Flow illustration keeps its proportions in a compact card, with readings layered over the image. The card scrolls with the Dashboard when it extends below the screen.
+
+- **Power Flow:** The green battery display shows current charge. The power reading appears at the top right, with engine RPM below it; **Regen today** appears at the bottom left. While the vehicle is moving, blue paths flow toward the wheels when the battery is supplying power, and green paths flow toward the battery when it is charging. An amber path shows that the engine is running. At 0 km/h the paths are hidden, but the power, charge and RPM readings remain visible. The animation shows overall flow, not which axle is active, and engine RPM alone does not mean the battery is charging. **Regen today** estimates the energy recovered in kWh from readings collected while Dashboard is open. It is saved across restarts and resets each day.
 - **EVAKOOL fridge:** Shows both compartment temperatures, supply voltage, Eco/Max mode, power state and how recently the fridge reported in. Use **Reconnect** if the card shows **Fridge disconnected**. Tap the connected card outside edit mode to open controls and history.
 
 If the Dashboard is labelled **Sample data**, the readings are examples, not live vehicle data. The sample fridge card is display-only.

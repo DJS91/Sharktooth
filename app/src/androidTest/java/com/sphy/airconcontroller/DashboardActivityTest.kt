@@ -114,7 +114,7 @@ class DashboardActivityTest {
             assertEquals("—", value.text.toString())
 
             listOf(
-                Triple(R.string.vehicle_info_row_soc, "#00FF5D", rows.getChildAt(0)),
+                Triple(R.string.vehicle_info_row_soc, "#33FF00", rows.getChildAt(0)),
                 Triple(R.string.vehicle_info_row_fuel, "#0090FF", rows.getChildAt(1)),
             ).forEach { (labelId, color, row) ->
                 assertEquals(page.getString(labelId), row.findViewById<TextView>(R.id.percentRowLabel).text.toString())
@@ -165,6 +165,8 @@ class DashboardActivityTest {
                     val card = slot.tag as? DashboardCard ?: continue
                     if (card == DashboardCard.EVAKOOL_FRIDGE) continue
                     val title = slot.findViewById<TextView>(R.id.infoBlockTitle)
+                    assertEquals(Color.parseColor("#AA808080"), title.shadowColor)
+                    assertTrue(title.shadowRadius > 0f)
                     val hero = slot.findViewById<TextView>(R.id.infoBlockHero)
                     val caption = slot.findViewById<TextView>(R.id.infoBlockHeroLabel)
                     if (card == DashboardCard.ATTITUDE) {
@@ -192,7 +194,7 @@ class DashboardActivityTest {
                 }
             }
             val rows = page.findViewById<LinearLayout>(R.id.infoBlockRows)
-            listOf("76%" to "#0090FF", "61%" to "#00FF5D").forEachIndexed { index, (text, color) ->
+            listOf("76%" to "#33FF00", "61%" to "#0090FF").forEachIndexed { index, (text, color) ->
                 val row = rows.getChildAt(index)
                 assertEquals(text, row.findViewById<TextView>(R.id.percentRowValue).text.toString())
                 val bar = row.findViewById<PercentBar>(R.id.percentRowBar)
@@ -218,6 +220,13 @@ class DashboardActivityTest {
             assertEquals(Gravity.CENTER, temperatures.gravity)
             assertEquals(page.findViewById<TextView>(R.id.infoBlockHero).textSize, temperatures.textSize, 0f)
             assertTrue(temperatures.top >= logo.bottom)
+            val density = page.resources.displayMetrics.density
+            assertTrue(temperatures.top - logo.bottom >= 16 * density - 1)
+            assertTrue(status.top - temperatures.bottom >= 12 * density - 1)
+            val power = page.findViewById<TextView>(R.id.homeFridgePower)
+            val age = page.findViewById<TextView>(R.id.homeFridgeUpdated)
+            assertTrue(power.top - status.bottom >= 10 * density - 1)
+            assertTrue(age.top - power.bottom >= 10 * density - 1)
             val fridgeSlot = fridge.parent as View
             assertTrue(kotlin.math.abs(fridge.top - (fridgeSlot.height - fridge.bottom)) <= 1)
             assertEquals("L 4°C  R -12°C", temperatures.text.toString())
@@ -242,12 +251,13 @@ class DashboardActivityTest {
             val amber = Color.parseColor("#FFB45C")
             val regen = page.findViewById<TextView>(R.id.dashboardRegenEnergy)
             val rpm = page.findViewById<TextView>(R.id.dashboardPowerFlowRpm)
-            val engine = (rpm.parent as LinearLayout).getChildAt(1) as TextView
             assertEquals("1.275 kWh", regen.text.toString())
-            assertEquals("Engine", engine.text.toString())
-            assertTrue(engine.top >= rpm.bottom && engine.textSize < rpm.textSize)
-            assertEquals(rpm.right, engine.right)
-            assertTrue((regen.parent as View).left < (rpm.parent as View).left)
+            val powerLabel = page.findViewById<TextView>(R.id.infoBlockHeroLabel)
+            assertTrue(rpm.top >= powerLabel.bottom)
+            assertEquals(page.getString(R.string.dashboard_flow_rpm,
+                java.text.NumberFormat.getNumberInstance().format(1650)), rpm.text.toString())
+            assertTrue(rpm.textSize < hero.textSize)
+            assertEquals(powerLabel.right, rpm.right)
             val image = Bitmap.createBitmap(diagram.width, diagram.height, Bitmap.Config.ARGB_8888)
             val pixels = IntArray(image.width * image.height)
             fun assertActiveRoutes(vararg expected: Int) {
@@ -256,7 +266,7 @@ class DashboardActivityTest {
                 image.getPixels(pixels, 0, image.width, 0, 0, image.width, image.height)
                 assertEquals(expected.toSet(), setOf(blue, green, amber).filter { it in pixels }.toSet())
             }
-            val scale = minOf(image.width / 500f, image.height / 378f)
+            val scale = minOf(image.width / 500f * 0.9f, image.height / 378f)
             val left = (image.width - 500 * scale) / 2f
             val top = (image.height - 378 * scale) / 2f
             fun batteryGreenAt(x: Int, y: Int): Boolean {
@@ -372,7 +382,10 @@ class DashboardActivityTest {
                 val image = Bitmap.createBitmap(500, 378, Bitmap.Config.ARGB_8888)
                 try {
                     view.draw(Canvas(image))
-                    return Color.alpha(image.getPixel(218, 30)) to image.getPixel(297, 220)
+                    assertEquals("The smaller image should leave a clear top margin",
+                        Color.TRANSPARENT, image.getPixel(218, 10))
+                    return Color.alpha(image.getPixel((25 + 218 * 0.9f).toInt(), (18.9f + 30 * 0.9f).toInt())) to
+                        image.getPixel((25 + 297 * 0.9f).toInt(), (18.9f + 220 * 0.9f).toInt())
                 } finally {
                     image.recycle()
                 }
@@ -395,7 +408,7 @@ class DashboardActivityTest {
             val bitmap = Bitmap.createBitmap(diagram.width, diagram.height, Bitmap.Config.ARGB_8888)
             try {
                 diagram.draw(Canvas(bitmap))
-                val scale = minOf(bitmap.width / 500f, bitmap.height / 378f)
+                val scale = minOf(bitmap.width / 500f * 0.9f, bitmap.height / 378f)
                 val left = (bitmap.width - 500 * scale) / 2f
                 val top = (bitmap.height - 378 * scale) / 2f
                 // Follow the exposed rear axle, away from the percentage and battery halo.
@@ -515,7 +528,7 @@ class DashboardActivityTest {
                 val cx = gauge.width / 2f
                 val size = minOf(gauge.width.toFloat(), gauge.height / 0.86f, 256 * density)
                 val cy = size / 2f
-                val stroke = minOf(6 * density, size * 0.05f)
+                val stroke = minOf(9 * density, size * 0.065f)
                 val radius = size / 2f - stroke
                 listOf(
                     radius to Color.parseColor("#0090FF"),
@@ -536,25 +549,45 @@ class DashboardActivityTest {
                         (cx + r * kotlin.math.cos(angle)).toInt(),
                         (cy + r * kotlin.math.sin(angle)).toInt(),
                     ))
+                    for (edge in listOf(r - stroke * 0.65f, r + stroke * 0.65f)) {
+                        assertNotEquals("The solid peak dot should fit within the arc width", color,
+                            bitmap.getPixel(
+                                (cx + edge * kotlin.math.cos(angle)).toInt(),
+                                (cy + edge * kotlin.math.sin(angle)).toInt(),
+                            ))
+                    }
                 }
-                // Use a single digit to distinguish the two glyphs by the gap between them.
                 gauge.set(0.0, 0.0)
+                assertEquals("Pedals: 0%", gauge.contentDescription.toString())
                 bitmap.eraseColor(Color.TRANSPARENT)
                 gauge.draw(Canvas(bitmap))
-                val ink = ((cx - size * 0.22f).toInt()..(cx + size * 0.22f).toInt()).map { x ->
-                    ((cy - size * 0.2f).toInt()..(cy + size * 0.06f).toInt()).filter { y ->
-                        bitmap.getPixel(x, y) == page.getColor(R.color.text_primary)
+                val textPaint = android.graphics.Paint().apply {
+                    typeface = android.graphics.Typeface.DEFAULT_BOLD
+                    textSize = size * 0.2024f
+                }
+                val gapX = (cx + textPaint.measureText("0") / 2 + textPaint.textSize * 0.04f).toInt()
+                assertTrue("The percent sign must leave a clear gap after the centred value",
+                    ((cy - size * 0.2f).toInt()..(cy + size * 0.04f).toInt()).all { y ->
+                        Color.alpha(bitmap.getPixel(gapX, y)) == 0
+                    })
+                assertTrue("The percent sign should be drawn to the right of that gap",
+                    (gapX + 1..(cx + size * 0.3f).toInt()).any { x ->
+                        ((cy - size * 0.2f).toInt()..cy.toInt()).any { y ->
+                            Color.alpha(bitmap.getPixel(x, y)) > 0
+                        }
+                    })
+                gauge.set(0.0, 12.0)
+                assertEquals("Brake: 12%", gauge.contentDescription.toString())
+                bitmap.eraseColor(Color.TRANSPARENT)
+                gauge.draw(Canvas(bitmap))
+                val captionColor = page.getColor(R.color.text_muted)
+                val captionPixels = ((cx - size * 0.15f).toInt()..(cx + size * 0.15f).toInt()).flatMap { x ->
+                    ((cy + size * 0.21f).toInt()..(cy + size * 0.27f).toInt()).map { y ->
+                        bitmap.getPixel(x, y)
                     }
-                }.dropWhile { it.isEmpty() }
-                val digit = ink.takeWhile { it.isNotEmpty() }.flatten()
-                val symbol = ink.dropWhile { it.isNotEmpty() }.flatten()
-                assertTrue("The digit and percent symbol should both use the theme text colour",
-                    digit.isNotEmpty() && symbol.isNotEmpty())
-                val digitHeight = digit.max() - digit.min() + 1
-                val symbolHeight = symbol.max() - symbol.min() + 1
-                assertTrue("The percent symbol should be smaller than the digit", symbolHeight < digitHeight * 0.75f)
-                assertTrue("The percent symbol should sit near the top of the digit",
-                    symbol.max() < digit.max() - digitHeight * 0.25f)
+                }
+                assertTrue("The smaller Pedal caption should use the muted grey text colour",
+                    captionPixels.any { it == captionColor })
             } finally {
                 bitmap.recycle()
             }
@@ -595,12 +628,12 @@ class DashboardActivityTest {
         }
     }
 
-    @Test fun powerFlowFitsHalfTheDashboardEvenBesideATallerCard() {
+    @Test fun powerFlowFillsCardWidthWithoutTheHalfDashboardHeightLimit() {
         AppSettings(context).dashboardCards = listOf(DashboardCard.POWER_FLOW, DashboardCard.ENGINE)
         val page = open(samples = true)
         val viewport = page.findViewById<View>(R.id.dashboardSwipeHost)
         val diagram = page.findViewById<View>(R.id.dashboardPowerFlowDiagram)
-        val card = (diagram.parent as View).parent as View
+        val card = diagram.parent as View
         val slot = card.parent as View
         val row = slot.parent as ViewGroup
         var initialHeight = 0
@@ -610,7 +643,19 @@ class DashboardActivityTest {
             assertEquals(engineCard.paddingBottom, card.paddingBottom)
             assertEquals(engineCard.paddingStart, card.paddingStart)
             assertEquals(engineCard.paddingEnd, card.paddingEnd)
-            assertTrue(slot.height <= viewport.height / 2)
+            assertEquals(card.width - card.paddingLeft - card.paddingRight, diagram.width)
+            assertTrue(kotlin.math.abs(diagram.height - diagram.width * 378f / 500f * 0.9f) <= 1f)
+            assertEquals("The header and footer must not add height beyond the image",
+                diagram.height + card.paddingTop + card.paddingBottom, card.height)
+            val header = card.findViewById<TextView>(R.id.infoBlockTitle).parent as View
+            assertEquals(diagram.top, header.top)
+            assertTrue("The header must draw above the image",
+                (card as ViewGroup).indexOfChild(header) > card.indexOfChild(diagram))
+            val footerRows = card.findViewById<View>(R.id.infoBlockRows)
+            val stackedHeight = diagram.height + header.height + footerRows.height +
+                card.paddingTop + card.paddingBottom
+            assertEquals("Overlaying the readings must save the full header and footer height",
+                header.height + footerRows.height, stackedHeight - card.height)
             initialHeight = diagram.height
             viewport.layoutParams = (viewport.layoutParams as LinearLayout.LayoutParams).apply {
                 height = (320 * page.resources.displayMetrics.density).toInt()
@@ -623,13 +668,30 @@ class DashboardActivityTest {
         }
         instrumentation.waitForIdleSync()
         instrumentation.runOnMainSync {
-            assertTrue(diagram.height in 1 until initialHeight)
-            assertTrue("Power Flow should occupy at most half the viewport", slot.height <= viewport.height / 2)
-            assertTrue("The taller neighboring slot should not stretch Power Flow", row.height > slot.height)
+            assertEquals("A short viewport must not shrink the truck", initialHeight, diagram.height)
+            assertTrue("Power Flow must be allowed to exceed half the viewport", slot.height > viewport.height / 2)
+            val regen = card.findViewById<TextView>(R.id.dashboardRegenEnergy)
             val rpm = card.findViewById<TextView>(R.id.dashboardPowerFlowRpm)
-            val footer = (rpm.parent as View).parent as View
-            assertTrue(footer.top >= diagram.bottom)
-            assertTrue(footer.bottom + (footer.parent as View).top <= card.height - card.paddingBottom)
+            val footer = (regen.parent as View).parent as View
+            assertTrue("Engine RPM should appear under the Power label in the card header",
+                rpm.top >= card.findViewById<TextView>(R.id.infoBlockHeroLabel).bottom)
+            val footerTop = footer.top + (footer.parent as View).top
+            assertTrue("The footer should overlap the image instead of sitting below it",
+                footerTop < diagram.bottom)
+            assertEquals(card.height - card.paddingBottom, footer.bottom + (footer.parent as View).top)
+        }
+    }
+
+    @Test fun powerFlowUsesAvailableWidthWithoutAPreferredWidthCap() {
+        instrumentation.runOnMainSync {
+            val view = PowerFlowView(context)
+            val density = context.resources.displayMetrics.density
+            view.measure(
+                View.MeasureSpec.makeMeasureSpec((700 * density).toInt(), View.MeasureSpec.AT_MOST),
+                View.MeasureSpec.makeMeasureSpec((800 * density).toInt(), View.MeasureSpec.AT_MOST),
+            )
+            assertEquals((700 * density).toInt(), view.measuredWidth)
+            assertTrue(kotlin.math.abs(view.measuredHeight - view.measuredWidth * 378f / 500f * 0.9f) <= 1f)
         }
     }
 
