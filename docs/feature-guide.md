@@ -34,7 +34,7 @@ Open **Dashboard** (gauge icon) for live vehicle and head-unit readings. The fir
 
 ### Charge and fuel used on a trip
 
-Each confirmed shift from **Park to Drive**, while the vehicle is ready, records the start time, odometer, charge and fuel levels immediately. The elapsed minutes and distance update while Dashboard is open. Missing trip or distance readings show a dash. Each bar keeps a faint, colour-matched fill at its starting level behind the live fill. The grey, normal-weight figure beside the current percentage shows the net percentage points used, for example **74%** followed by **-2%** after leaving with 76%.
+Each confirmed shift from **Park to Drive**, while the vehicle is ready, records the start time, odometer, charge and fuel levels immediately. The elapsed minutes and distance update while Dashboard is open. Missing trip or distance readings show a dash. Each bar keeps a translucent, colour-matched fill at its starting level behind the live fill; this starting-level fill is stronger in light mode. The grey, normal-weight figure beside the current percentage shows the net percentage points used, for example **74%** followed by **-2%** after leaving with 76%.
 
 The starting levels stay fixed through stops, Dashboard navigation and app restarts, until the next Park-to-Drive shift. Sharktooth's background listener must be running to observe that shift; opening the app after departure cannot reconstruct missed starting levels. Unavailable departure readings are left unknown. Charging or refuelling reduces the net used figure, which is hidden when the current level is at or above the starting level. Sample data shows charge at **76% -6%** after leaving with 82%, and fuel at **61% -4%** after leaving with 65%.
 

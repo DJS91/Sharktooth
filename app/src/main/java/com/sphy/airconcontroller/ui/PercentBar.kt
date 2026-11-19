@@ -1,6 +1,7 @@
 package com.sphy.airconcontroller.ui
 
 import android.content.Context
+import android.content.res.Configuration
 import android.graphics.Canvas
 import android.graphics.Paint
 import android.graphics.RectF
@@ -36,7 +37,9 @@ class PercentBar @JvmOverloads constructor(
 
     fun setFillColor(@ColorInt color: Int, glowRadius: Float = 0f) {
         fillPaint.color = color
-        startPaint.color = ColorUtils.setAlphaComponent(color, 45)
+        val startAlpha = if (resources.configuration.uiMode and Configuration.UI_MODE_NIGHT_MASK ==
+            Configuration.UI_MODE_NIGHT_NO) 100 else 45
+        startPaint.color = ColorUtils.setAlphaComponent(color, startAlpha)
         if (glowRadius > 0f) {
             fillPaint.setShadowLayer(glowRadius, 0f, 0f, ColorUtils.setAlphaComponent(color, 170))
         } else {

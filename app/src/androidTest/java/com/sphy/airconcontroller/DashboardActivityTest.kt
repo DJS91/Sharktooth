@@ -179,6 +179,41 @@ class DashboardActivityTest {
         }
     }
 
+    @Test fun tripStartingBarsAreMoreOpaqueOnlyInLightMode() {
+        instrumentation.runOnMainSync {
+            for (mode in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
+                val configured = context.createConfigurationContext(Configuration().apply { uiMode = mode })
+                val themed = android.view.ContextThemeWrapper(configured, R.style.Theme_OpenDiKey)
+                for (colorId in listOf(R.color.dashboard_battery_charge, R.color.dashboard_accent_blue)) {
+                    val color = themed.getColor(colorId)
+                    val bar = PercentBar(themed).apply {
+                        setFillColor(color)
+                        setPercent(40.0, animate = false)
+                        setStartPercent(80.0)
+                        layout(0, 0, 200, 20)
+                    }
+                    val image = Bitmap.createBitmap(200, 20, Bitmap.Config.ARGB_8888)
+                    try {
+                        bar.draw(Canvas(image))
+                        val track = image.getPixel(180, 10)
+                        val alpha = if (mode == Configuration.UI_MODE_NIGHT_NO) 100 else 45
+                        val expected = ColorUtils.compositeColors(
+                            ColorUtils.setAlphaComponent(color, alpha), track,
+                        )
+                        val actual = image.getPixel(120, 10)
+                        assertEquals(Color.alpha(expected), Color.alpha(actual))
+                        assertEquals(Color.red(expected).toDouble(), Color.red(actual).toDouble(), 1.0)
+                        assertEquals(Color.green(expected).toDouble(), Color.green(actual).toDouble(), 1.0)
+                        assertEquals(Color.blue(expected).toDouble(), Color.blue(actual).toDouble(), 1.0)
+                        assertEquals("The current fill must stay opaque", color, image.getPixel(40, 10))
+                    } finally {
+                        image.recycle()
+                    }
+                }
+            }
+        }
+    }
+
     @Test fun tripUsageStateSurvivesReopeningSettings() {
         val settings = AppSettings(context)
         val original = settings.tripUsageState
