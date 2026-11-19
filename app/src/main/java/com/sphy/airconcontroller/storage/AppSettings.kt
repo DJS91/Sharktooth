@@ -101,6 +101,19 @@ class AppSettings(context: Context) {
         return peaks
     }
 
+    internal fun dailyRegenKwh(day: Long): Double =
+        if (prefs.getLong("regen_day", Long.MIN_VALUE) == day) {
+            Double.fromBits(prefs.getLong("regen_kwh", 0L))
+        } else 0.0
+
+    internal fun addDailyRegenKwh(day: Long, deltaKwh: Double): Double {
+        val total = dailyRegenKwh(day) + deltaKwh
+        if (deltaKwh > 0) {
+            prefs.edit().putLong("regen_day", day).putLong("regen_kwh", total.toBits()).apply()
+        }
+        return total
+    }
+
     var dashboardCards: List<DashboardCard>
         get() = dashboardCardsForPage(0)
         set(value) = saveDashboardCardsForPage(0, value)

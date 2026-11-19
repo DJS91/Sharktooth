@@ -143,6 +143,7 @@ class DashboardActivityTest {
                 DashboardCard.TYRES to "OK", DashboardCard.CONSUMPTION to "9.1 L/100km",
                 DashboardCard.MILEAGE to "EV 7200 km\nHEV 5280 km", DashboardCard.TABLET to "24%",
                 DashboardCard.ENGINE to "1650 rpm", DashboardCard.CHASSIS to "23°C",
+                DashboardCard.POWER_FLOW to "+35 kW",
             )
             val captions = mapOf(
                 DashboardCard.BATTERY to "State of health",
@@ -153,6 +154,7 @@ class DashboardActivityTest {
                 DashboardCard.TABLET to "CPU",
                 DashboardCard.ENGINE to "RPM",
                 DashboardCard.CHASSIS to "Outside temperature",
+                DashboardCard.POWER_FLOW to "Power",
             )
             for (i in 0 until grid.childCount) {
                 val row = grid.getChildAt(i) as ViewGroup
@@ -223,6 +225,162 @@ class DashboardActivityTest {
             assertEquals("Power: On", page.findViewById<TextView>(R.id.homeFridgePower).text.toString())
             val updated = page.findViewById<TextView>(R.id.homeFridgeUpdated).text
             assertTrue(Regex("""Last updated: \d+ seconds? ago""").matches(updated))
+        }
+    }
+
+    @Test fun powerFlowShowsDischargeRegenAndEngineActivityIndependently() {
+        val settings = AppSettings(context)
+        settings.dashboardCards = listOf(DashboardCard.POWER_FLOW)
+        val page = open(samples = true)
+        instrumentation.runOnMainSync {
+            val diagram = page.findViewById<View>(R.id.dashboardPowerFlowDiagram)
+            val hero = page.findViewById<TextView>(R.id.infoBlockHero)
+            val blue = Color.parseColor("#1687DB")
+            val green = Color.parseColor("#19C76A")
+            val amber = Color.parseColor("#FFB45C")
+            val regen = page.findViewById<TextView>(R.id.dashboardRegenEnergy)
+            val rpm = page.findViewById<TextView>(R.id.dashboardPowerFlowRpm)
+            val engine = (rpm.parent as LinearLayout).getChildAt(1) as TextView
+            assertEquals("1.275 kWh", regen.text.toString())
+            assertEquals("Engine", engine.text.toString())
+            assertTrue(engine.top >= rpm.bottom && engine.textSize < rpm.textSize)
+            assertEquals(rpm.right, engine.right)
+            assertTrue((regen.parent as View).left < (rpm.parent as View).left)
+            val image = Bitmap.createBitmap(diagram.width, diagram.height, Bitmap.Config.ARGB_8888)
+            val pixels = IntArray(image.width * image.height)
+            fun assertActiveRoutes(vararg expected: Int) {
+                image.eraseColor(Color.TRANSPARENT)
+                diagram.draw(Canvas(image))
+                image.getPixels(pixels, 0, image.width, 0, 0, image.width, image.height)
+                assertEquals(expected.toSet(), setOf(blue, green, amber).filter { it in pixels }.toSet())
+            }
+            val scale = minOf(image.width / 500f, image.height / 378f)
+            val left = (image.width - 500 * scale) / 2f
+            val top = (image.height - 378 * scale) / 2f
+            fun batteryGreenAt(x: Int, y: Int): Boolean {
+                val color = image.getPixel((left + x * scale).toInt(), (top + y * scale).toInt())
+                return Color.green(color) > 125 && Color.green(color) > 2 * maxOf(Color.red(color), Color.blue(color))
+            }
+            fun assertFlowAt(color: Int, vararg points: Pair<Int, Int>) {
+                for ((x, y) in points) {
+                    val px = (left + x * scale).toInt()
+                    val py = (top + y * scale).toInt()
+                    assertTrue("Expected a lit drivetrain component near ($x, $y)",
+                        (px - 4..px + 4).any { sx ->
+                            (py - 4..py + 4).any { sy ->
+                                val pixel = image.getPixel(sx, sy)
+                                pixel == color ||
+                                    (Color.red(pixel) in Color.red(color)..220 &&
+                                        Color.blue(pixel) - Color.red(pixel) >= 25 && color == blue) ||
+                                    (Color.green(pixel) - Color.red(pixel) >= 25 && color == green) ||
+                                    (Color.red(pixel) - Color.blue(pixel) >= 25 && color == amber)
+                            }
+                        })
+                }
+            }
+            val axlePoints = arrayOf(101 to 145, 190 to 99, 125 to 138,
+                310 to 304, 407 to 235, 345 to 293)
+            val batteryPoints = arrayOf(177 to 144, 317 to 239, 329 to 247)
+            try {
+                assertEquals("+35 kW", hero.text.toString())
+                assertTrue(diagram.contentDescription.contains("Battery 76%"))
+                assertActiveRoutes(blue, amber)
+                assertFlowAt(blue, *axlePoints, *batteryPoints)
+                assertFlowAt(amber, 384 to 284, 403 to 297)
+
+                page.bindPowerFlow(23.0, -18.0, 0.0)
+                assertEquals("-18 kW", hero.text.toString())
+                assertTrue(diagram.contentDescription.contains("Battery 23%. Regenerating"))
+                assertActiveRoutes(green)
+                assertFlowAt(green, *axlePoints, *batteryPoints)
+                assertTrue("The charged cells should have a bright green top", batteryGreenAt(297, 220))
+                assertTrue("The charged cells should extend down the side of the pack", batteryGreenAt(252, 251))
+                assertFalse("The uncharged pack should stay neutral", batteryGreenAt(204, 163))
+
+                fun haloGreenness(): Int {
+                    val pixel = image.getPixel((left + 187 * scale).toInt(), (top + 143 * scale).toInt())
+                    return Color.green(pixel) - maxOf(Color.red(pixel), Color.blue(pixel))
+                }
+                val regenGlow = haloGreenness()
+                page.bindPowerFlow(23.0, 0.0, 1100.0)
+                assertActiveRoutes(amber)
+                val idleGlow = haloGreenness()
+                assertTrue("The pack should have a subtle green halo at rest", idleGlow > 0)
+                assertTrue("Charging should brighten the halo", regenGlow > idleGlow + 15)
+                page.bindPowerFlow(23.0, -18.0, 1100.0)
+                assertActiveRoutes(green, amber)
+                assertEquals("Net charging should glow with the engine running too", regenGlow, haloGreenness())
+
+                page.bindPowerFlow(100.0, 0.0, 0.0)
+                assertActiveRoutes()
+                assertTrue("A full charge should reach the back of the pack", batteryGreenAt(204, 163))
+
+                page.bindPowerFlow(0.0, 0.0, 0.0)
+                assertActiveRoutes()
+                assertFalse("An empty pack should not show a green cell", batteryGreenAt(297, 220))
+
+                page.bindPowerFlow(24.0, 0.0, 1100.0)
+                assertTrue(diagram.contentDescription.contains("No battery flow"))
+                assertActiveRoutes(amber)
+
+                page.bindPowerFlow(null, Double.NaN, null)
+                assertEquals("—", hero.text.toString())
+                assertTrue(diagram.contentDescription.contains("Flow unavailable"))
+                assertActiveRoutes()
+                fun alphaAt(x: Int, y: Int) =
+                    Color.alpha(image.getPixel((left + x * scale).toInt(), (top + y * scale).toInt()))
+                assertEquals("The dark cabin interior should be 80% transparent", 51, alphaAt(305, 151))
+                assertEquals("The background outside the truck should remain clear", 0, alphaAt(0, 0))
+                assertTrue("Shadows should fade rather than cut off abruptly", alphaAt(274, 277) in 52..160)
+                assertEquals("The bright roof should stay visible", 255, alphaAt(218, 30))
+                for ((x, y) in listOf(304 to 219, 145 to 122, 360 to 268, 407 to 235)) {
+                    val pixel = image.getPixel((left + x * scale).toInt(), (top + y * scale).toInt())
+                    val channels = listOf(Color.red(pixel), Color.green(pixel), Color.blue(pixel))
+                    assertTrue("The photo must not show baked-in charge or flow near ($x, $y)",
+                        Color.alpha(pixel) == 255 && channels.max() - channels.min() <= 20)
+                }
+            } finally {
+                image.recycle()
+            }
+        }
+    }
+
+    @Test fun powerFlowRedrawsAndMovesSoftHighlightsWhileVisible() {
+        AppSettings(context).dashboardCards = listOf(DashboardCard.POWER_FLOW)
+        val page = open(samples = true)
+        val diagram = page.findViewById<View>(R.id.dashboardPowerFlowDiagram)
+        val frames = java.util.concurrent.CountDownLatch(3)
+        val listener = android.view.ViewTreeObserver.OnDrawListener { frames.countDown() }
+        fun capture(): List<Int> {
+            val bitmap = Bitmap.createBitmap(diagram.width, diagram.height, Bitmap.Config.ARGB_8888)
+            try {
+                diagram.draw(Canvas(bitmap))
+                val scale = minOf(bitmap.width / 500f, bitmap.height / 378f)
+                val left = (bitmap.width - 500 * scale) / 2f
+                val top = (bitmap.height - 378 * scale) / 2f
+                // Follow the exposed rear axle, away from the percentage and battery halo.
+                return (173..207).map { x ->
+                    val y = 122 - (x - 145) * 33f / 64
+                    bitmap.getPixel((left + x * scale).toInt(), (top + y * scale).toInt())
+                }
+            } finally {
+                bitmap.recycle()
+            }
+        }
+        try {
+            instrumentation.runOnMainSync { diagram.viewTreeObserver.addOnDrawListener(listener) }
+            assertTrue("The visible flow should schedule its own redraws",
+                frames.await(3, java.util.concurrent.TimeUnit.SECONDS))
+            val captures = mutableListOf<List<Int>>()
+            repeat(8) {
+                instrumentation.runOnMainSync { captures.add(capture()) }
+                SystemClock.sleep(80)
+            }
+            assertTrue("The highlight should move along the axle", captures.distinct().size > 1)
+            val peakRed = captures.flatten().maxOf { Color.red(it) }
+            assertTrue("The highlight should stay visible without becoming pure white", peakRed in 100..205)
+        } finally {
+            instrumentation.runOnMainSync { diagram.viewTreeObserver.removeOnDrawListener(listener) }
         }
     }
 

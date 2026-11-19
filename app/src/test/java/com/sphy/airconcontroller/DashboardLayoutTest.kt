@@ -6,25 +6,27 @@ import org.junit.Assert.*
 import org.junit.Test
 
 class DashboardLayoutTest {
+    private val optionalCards = listOf(DashboardCard.EVAKOOL_FRIDGE, DashboardCard.POWER_FLOW)
+
     @Test fun removingAndReaddingReturnsCardToLibraryAndAppendsIt() {
         val layout = DashboardLayout()
         val first = layout.cards.first()
         layout.remove(first)
-        assertEquals(listOf(first, DashboardCard.EVAKOOL_FRIDGE), layout.available)
+        assertEquals(listOf(first) + optionalCards, layout.available)
         layout.add(first)
         assertEquals(first, layout.cards.last())
-        assertEquals(listOf(DashboardCard.EVAKOOL_FRIDGE), layout.available)
+        assertEquals(optionalCards, layout.available)
     }
 
-    @Test fun fridgeIsAnOptionalLibraryCardAndItsSelectionPersists() {
+    @Test fun optionalLibraryCardsAreNotAddedByDefaultAndTheirSelectionPersists() {
         val layout = DashboardLayout()
         assertEquals(DashboardCard.defaultCards, layout.cards)
-        assertEquals(listOf(DashboardCard.EVAKOOL_FRIDGE), layout.available)
-        layout.add(DashboardCard.EVAKOOL_FRIDGE)
+        assertEquals(optionalCards, layout.available)
+        optionalCards.forEach(layout::add)
         assertTrue(layout.available.isEmpty())
         assertEquals(layout.cards, DashboardLayout(layout.cards).cards)
-        layout.remove(DashboardCard.EVAKOOL_FRIDGE)
-        assertEquals(listOf(DashboardCard.EVAKOOL_FRIDGE), layout.available)
+        optionalCards.forEach(layout::remove)
+        assertEquals(optionalCards, layout.available)
     }
 
     @Test fun movingForwardShiftsInterveningCardsLeftAndPreservesSavedOrder() {

@@ -13,10 +13,11 @@ enum class DashboardCard(@param:StringRes val title: Int) {
     TABLET(R.string.vehicle_info_block_tablet),
     ENGINE(R.string.vehicle_info_block_engine),
     CHASSIS(R.string.vehicle_info_block_chassis),
-    EVAKOOL_FRIDGE(R.string.fridge_unknown_name);
+    EVAKOOL_FRIDGE(R.string.fridge_unknown_name),
+    POWER_FLOW(R.string.dashboard_power_flow);
 
     companion object {
-        val defaultCards: List<DashboardCard> = entries.filterNot { it == EVAKOOL_FRIDGE }
+        val defaultCards: List<DashboardCard> = entries.filterNot { it == EVAKOOL_FRIDGE || it == POWER_FLOW }
     }
 }
 

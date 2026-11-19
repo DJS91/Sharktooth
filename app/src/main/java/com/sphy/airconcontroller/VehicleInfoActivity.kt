@@ -44,6 +44,8 @@ import com.sphy.airconcontroller.ui.DashboardLayout
 import com.sphy.airconcontroller.ui.DashboardSamples
 import com.sphy.airconcontroller.ui.DashboardSwipeHost
 import com.sphy.airconcontroller.ui.PercentBar
+import com.sphy.airconcontroller.ui.PowerFlowView
+import com.sphy.airconcontroller.ui.RegenEnergySampler
 import com.sphy.airconcontroller.ui.PedalGauge
 import com.sphy.airconcontroller.ui.EngineRpmGraph
 import com.sphy.airconcontroller.ui.EngineRpmHistory
@@ -53,6 +55,7 @@ import kotlinx.coroutines.isActive
 import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
+import java.text.NumberFormat
 import kotlin.math.atan2
 import kotlin.math.sqrt
 
@@ -91,6 +94,15 @@ open class VehicleInfoActivity : HomeActivity() {
     private lateinit var driveHero: TextView
     private lateinit var driveSubtitle: TextView
     private lateinit var parkBrakeValue: TextView
+    private lateinit var powerFlowView: PowerFlowView
+    private lateinit var powerFlowRpm: TextView
+    private lateinit var powerFlowPower: TextView
+    private lateinit var powerFlowRegen: TextView
+    private val regenSampler = RegenEnergySampler()
+    private val regenFormat = NumberFormat.getNumberInstance().apply {
+        minimumFractionDigits = 3
+        maximumFractionDigits = 3
+    }
     private lateinit var pedalPeakText: TextView
     private var displayedPedalPeaks: AppSettings.PedalPeaks? = null
     private lateinit var engineHost: LinearLayout
@@ -153,6 +165,10 @@ open class VehicleInfoActivity : HomeActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (isActive) {
                     val snap = withContext(Dispatchers.IO) { info.snapshot(includeImu = false) }
+                    val capturedAt = SystemClock.elapsedRealtime()
+                    val captureDay = LocalDate.now().toEpochDay()
+                    val recovered = regenSampler.sample(captureDay, capturedAt, snap.dynamics.enginePowerKw)
+                    showDailyRegen(settings.addDailyRegenKwh(captureDay, recovered))
                     val soc = withContext(Dispatchers.IO) { tabletSoc.snapshot() }
                     bindSnapshot(snap)
                     bindTabletSoc(soc)
@@ -292,6 +308,7 @@ open class VehicleInfoActivity : HomeActivity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onStop() {
+        regenSampler.reset()
         swipeHost.resetSwipe()
         fridgeCard.stop()
         sensorManager?.unregisterListener(accelListener)
@@ -457,6 +474,47 @@ open class VehicleInfoActivity : HomeActivity() {
         )
         val fridgeView = inflater.inflate(R.layout.view_dashboard_fridge, blockHost, false)
         fridgeCard = FridgeTile(this, fridgeView, if (showDashboardSamples) DashboardSamples.fridge else null)
+        val powerFlowBlock = inflater.inflate(R.layout.view_info_block, blockHost, false)
+        powerFlowBlock.setDashboardTitle(R.string.dashboard_power_flow, R.drawable.ic_card_engine)
+        powerFlowPower = powerFlowBlock.findViewById(R.id.infoBlockHero)
+        powerFlowBlock.setHeroLabel(R.string.vehicle_info_row_power)
+        val flowRows = powerFlowBlock.findViewById<LinearLayout>(R.id.infoBlockRows)
+        powerFlowView = PowerFlowView(this).apply { id = R.id.dashboardPowerFlowDiagram }
+        flowRows.addView(powerFlowView, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+        ))
+        val flowFooter = LinearLayout(this).apply {
+            orientation = LinearLayout.HORIZONTAL
+            gravity = Gravity.BOTTOM
+            isBaselineAligned = false
+        }
+        fun footerReading(valueId: Int, label: Int, alignment: Int): TextView {
+            val column = LinearLayout(this).apply {
+                orientation = LinearLayout.VERTICAL
+                gravity = alignment
+            }
+            val value = TextView(this).apply {
+                id = valueId
+                gravity = alignment
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_MaterialComponents_Body2)
+                setTextColor(getColor(R.color.text_primary))
+                setTypeface(typeface, Typeface.BOLD)
+            }
+            column.addView(value)
+            column.addView(TextView(this).apply {
+                setText(label)
+                gravity = alignment
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_MaterialComponents_Caption)
+                setTextColor(getColor(R.color.text_muted))
+            })
+            flowFooter.addView(column, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            return value
+        }
+        powerFlowRegen = footerReading(R.id.dashboardRegenEnergy, R.string.dashboard_flow_regen_today, Gravity.START)
+        powerFlowRpm = footerReading(R.id.dashboardPowerFlowRpm, R.string.vehicle_info_block_engine, Gravity.END)
+        flowRows.addView(flowFooter)
+        showDailyRegen(if (showDashboardSamples) 1.275 else settings.dailyRegenKwh(LocalDate.now().toEpochDay()))
+        bindPowerFlow(null, null, null)
         dashboardGrid.initialize(DashboardLayout(settings.dashboardCardsForPage(dashboardPage)), mapOf(
             DashboardCard.BATTERY to batteryBlock,
             DashboardCard.DRIVE to driveBlock,
@@ -468,6 +526,7 @@ open class VehicleInfoActivity : HomeActivity() {
             DashboardCard.ENGINE to engineHost.parent as View,
             DashboardCard.CHASSIS to chassisHost.parent as View,
             DashboardCard.EVAKOOL_FRIDGE to fridgeView,
+            DashboardCard.POWER_FLOW to powerFlowBlock,
         ))
 
         dashboardReady = true
@@ -570,6 +629,7 @@ open class VehicleInfoActivity : HomeActivity() {
     private fun bindSnapshot(snap: BydVehicleInfoController.Snapshot) {
         val b = snap.battery
         bindDashboardBattery(b)
+        bindPowerFlow(b.socPct, snap.dynamics.enginePowerKw, snap.dynamics.engineRpm)
         val mileage = SpannableString(TextUtils.expandTemplate(
             getText(R.string.dashboard_mileage_hero), fmt(b.evMilesKm, " km"), fmt(b.hevMilesKm, " km"),
         ))
@@ -785,6 +845,19 @@ open class VehicleInfoActivity : HomeActivity() {
 
     private fun fmt(v: Double?, suffix: String = ""): String =
         if (v == null) "—" else trimNum(v) + suffix
+
+    internal fun bindPowerFlow(soc: Double?, power: Double?, rpm: Double?) {
+        powerFlowView.bind(soc, power, rpm)
+        val powerText = powerFlowView.powerText()
+        val rpmText = powerFlowView.rpmText()
+        if (powerFlowPower.text != powerText) powerFlowPower.text = powerText
+        if (powerFlowRpm.text != rpmText) powerFlowRpm.text = rpmText
+    }
+
+    private fun showDailyRegen(kwh: Double) {
+        val text = getString(R.string.dashboard_flow_kwh, regenFormat.format(kwh))
+        if (powerFlowRegen.text != text) powerFlowRegen.text = text
+    }
 
     private fun bindPedalPeaks(peaks: AppSettings.PedalPeaks) {
         if (displayedPedalPeaks == peaks) return

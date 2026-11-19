@@ -12,6 +12,19 @@
     <string name="dashboard_pedal_accelerate">Accelerate</string>
     <string name="dashboard_pedals">Pedals</string>
     <item type="id" name="dashboardPedalPeaks" />
+    <item type="id" name="dashboardPowerFlowDiagram" />
+    <item type="id" name="dashboardPowerFlowRpm" />
+    <item type="id" name="dashboardRegenEnergy" />
+    <string name="dashboard_power_flow">Power Flow</string>
+    <string name="dashboard_flow_kw">%1$s kW</string>
+    <string name="dashboard_flow_rpm">%1$s rpm</string>
+    <string name="dashboard_flow_regen_today">Regen today</string>
+    <string name="dashboard_flow_kwh">%1$s kWh</string>
+    <string name="dashboard_flow_description">Battery %1$s. %2$s. Power: %3$s. Engine: %4$s.</string>
+    <string name="dashboard_flow_unavailable">Flow unavailable</string>
+    <string name="dashboard_flow_using_power">Discharging</string>
+    <string name="dashboard_flow_regen">Regenerating</string>
+    <string name="dashboard_flow_idle">No battery flow</string>
     <string name="dashboard_pedal_peaks">Today’s peaks\nAccel %1$s · Brake %2$s</string>
     <string name="dashboard_value_unavailable">—</string>
     <string name="dashboard_mileage_hero"><annotation role="label">EV</annotation> ^1\n<annotation role="label">HEV</annotation> ^2</string>
