@@ -468,7 +468,6 @@ open class VehicleInfoActivity : HomeActivity() {
         val fridgeView = inflater.inflate(R.layout.view_dashboard_fridge, blockHost, false)
         fridgeCard = FridgeTile(this, fridgeView, if (showDashboardSamples) DashboardSamples.fridge else null)
         val powerFlowBlock = inflater.inflate(R.layout.view_info_block, blockHost, false)
-        powerFlowBlock.setPaddingRelative(powerFlowBlock.paddingStart, dp(4), powerFlowBlock.paddingEnd, dp(4))
         powerFlowBlock.setDashboardTitle(R.string.dashboard_power_flow, R.drawable.ic_card_engine)
         powerFlowPower = powerFlowBlock.findViewById(R.id.infoBlockHero)
         powerFlowPower.includeFontPadding = false

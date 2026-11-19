@@ -560,6 +560,11 @@ class DashboardActivityTest {
         val row = slot.parent as ViewGroup
         var initialHeight = 0
         instrumentation.runOnMainSync {
+            val engineCard = (row.getChildAt(1) as ViewGroup).getChildAt(0)
+            assertEquals(engineCard.paddingTop, card.paddingTop)
+            assertEquals(engineCard.paddingBottom, card.paddingBottom)
+            assertEquals(engineCard.paddingStart, card.paddingStart)
+            assertEquals(engineCard.paddingEnd, card.paddingEnd)
             assertTrue(slot.height <= viewport.height / 2)
             initialHeight = diagram.height
             viewport.layoutParams = (viewport.layoutParams as LinearLayout.LayoutParams).apply {
