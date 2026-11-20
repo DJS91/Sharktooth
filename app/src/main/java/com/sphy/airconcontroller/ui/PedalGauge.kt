@@ -34,6 +34,8 @@ internal class PedalGauge(context: Context) : View(context) {
     private var reading: String? = null
     private var label = context.getString(R.string.dashboard_pedals)
     private var activePedal = false
+    var naturalHeight = 0
+        private set
     var maxHeight = Int.MAX_VALUE
         set(value) {
             if (field == value) return
@@ -83,6 +85,7 @@ internal class PedalGauge(context: Context) : View(context) {
         val preferred = (256 * density).roundToInt()
         val width = resolveSize(preferred, widthMeasureSpec)
         val height = (minOf(width, preferred) * ARC_HEIGHT_RATIO).roundToInt()
+        naturalHeight = height
         setMeasuredDimension(width, resolveSize(minOf(height, maxHeight), heightMeasureSpec))
     }
 

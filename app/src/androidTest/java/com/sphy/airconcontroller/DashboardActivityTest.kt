@@ -244,6 +244,15 @@ class DashboardActivityTest {
             assertSame(title.parent, details.parent)
             assertEquals(title.left, details.left)
             assertTrue(details.top >= title.bottom)
+            val rows = page.findViewById<LinearLayout>(R.id.infoBlockRows)
+            val chargeRow = rows.getChildAt(0)
+            val fuelRow = rows.getChildAt(1)
+            val chargeBar = chargeRow.findViewById<View>(R.id.percentRowBar)
+            val fuelLabel = fuelRow.findViewById<TextView>(R.id.percentRowLabel)
+            assertTrue("Trip details should be larger than the bar labels", details.textSize > fuelLabel.textSize)
+            val gap = fuelRow.top + fuelLabel.top - (chargeRow.top + chargeBar.bottom)
+            assertTrue("Charge and fuel rows should have less than 8 dp between them",
+                gap < 8 * page.resources.displayMetrics.density)
             page.bindDashboardBattery(
                 BydVehicleInfoController.BatteryInfo(bound = true, odoKm = 12_481.5),
                 trip = trip, nowMs = 1_081_000L,
@@ -493,6 +502,27 @@ class DashboardActivityTest {
             } finally {
                 image.recycle()
             }
+        }
+    }
+
+    @Test fun liveDriveReadsUpdatePowerWithoutReplacingChargeOrRpm() {
+        AppSettings(context).dashboardCards = listOf(DashboardCard.POWER_FLOW)
+        val page = open(samples = true)
+        instrumentation.runOnMainSync {
+            val power = page.findViewById<TextView>(R.id.infoBlockHero)
+            val rpm = page.findViewById<TextView>(R.id.dashboardPowerFlowRpm)
+            val diagram = page.findViewById<View>(R.id.dashboardPowerFlowDiagram)
+            page.bindPowerFlow(76.0, 35.0, 1650.0, 48.0)
+            val originalRpm = rpm.text.toString()
+            for ((reading, expected) in listOf(12.5 to "+12.5 kW", -18.0 to "-18 kW", 0.0 to "0 kW")) {
+                page.bindDriveLive(BydVehicleInfoController.DriveLive(48.0, null, null, reading))
+                assertEquals(expected, power.text.toString())
+                assertEquals(originalRpm, rpm.text.toString())
+                assertTrue(diagram.contentDescription.contains("Battery 76%"))
+            }
+            page.bindDriveLive(BydVehicleInfoController.DriveLive(0.0, null, null, null))
+            assertEquals("—", power.text.toString())
+            assertEquals(originalRpm, rpm.text.toString())
         }
     }
 
@@ -749,6 +779,30 @@ class DashboardActivityTest {
         assertEquals(AppSettings.PedalPeaks(null, 10f), settings.recordPedalPeaks(day + 1, null, 10.0))
     }
 
+    @Test fun smallerDriveGaugeReducesTheWholeTopRowByFivePercent() {
+        AppSettings(context).dashboardCards = listOf(
+            DashboardCard.BATTERY, DashboardCard.DRIVE, DashboardCard.TYRES, DashboardCard.ENGINE,
+        )
+        val page = open(samples = true)
+        instrumentation.runOnMainSync {
+            val gauge = page.findViewById<PedalGauge>(R.id.dashboardPedalGauge)
+            val rows = gauge.parent as View
+            val card = rows.parent as View
+            val slot = card.parent as View
+            val grid = page.findViewById<DashboardGrid>(R.id.dashboardGrid)
+            val topRow = grid.getChildAt(0) as ViewGroup
+            val nextRow = grid.getChildAt(1)
+            val surroundingHeight = card.height - gauge.height
+            val viewport = page.findViewById<View>(R.id.dashboardSwipeHost)
+            val originalHeight = minOf(gauge.naturalHeight + surroundingHeight, viewport.height / 2)
+            val expectedHeight = kotlin.math.round(originalHeight * 0.95f).toInt()
+            assertEquals("The Drive card should be 5% shorter, not just its gauge", expectedHeight, slot.height)
+            assertEquals("The Drive card should set the reduced top-row height", expectedHeight, topRow.height)
+            assertEquals(expectedHeight + (10 * page.resources.displayMetrics.density).toInt(), nextRow.top)
+            assertTrue(gauge.height < gauge.naturalHeight)
+        }
+    }
+
     @Test fun driveCardShrinksWhenTheDashboardViewportGetsShorter() {
         AppSettings(context).dashboardCards = listOf(DashboardCard.DRIVE, DashboardCard.ATTITUDE)
         val page = open(samples = true)
@@ -844,13 +898,23 @@ class DashboardActivityTest {
         val gauge = page.findViewById<PedalGauge>(R.id.dashboardPedalGauge)
         val speed = page.findViewById<TextView>(R.id.infoBlockHero)
         val gear = page.findViewById<TextView>(R.id.infoBlockSubtitle)
+        val rows = gauge.parent as View
+        val card = rows.parent as ViewGroup
         fun gaugeTop() = gauge.top + (gauge.parent as View).top
         var originalTop = 0
         var originalHeight = 0
+        var originalCardHeight = 0
         var originalGearTop = 0
         instrumentation.runOnMainSync {
             originalTop = gaugeTop()
             originalHeight = gauge.height
+            originalCardHeight = card.height
+            assertEquals("The gauge should start behind the header without a top inset",
+                card.paddingTop, originalTop)
+            assertEquals("The header must not add height above the gauge and footer",
+                card.paddingTop + rows.height + card.paddingBottom, originalCardHeight)
+            assertTrue("The header should draw over the gauge",
+                card.indexOfChild(rows) < card.indexOfChild(gear.parent as View))
             originalGearTop = gear.top
             speed.text = "123\nkm/h"
         }
@@ -859,6 +923,7 @@ class DashboardActivityTest {
             assertTrue("The taller speed reading should move the gear down", gear.top > originalGearTop)
             assertEquals("The gauge should not move with the gear", originalTop, gaugeTop())
             assertEquals(originalHeight, gauge.height)
+            assertEquals("The header should not increase the card height", originalCardHeight, card.height)
         }
     }
 

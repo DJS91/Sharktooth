@@ -5,13 +5,11 @@
     android:background="@drawable/bg_info_block"
     android:padding="14dp">
 
-    <!-- A fixed inset keeps the centered gauge independent of the header's measured height. -->
     <LinearLayout
         android:id="@id/infoBlockRows"
         android:layout_width="match_parent"
         android:layout_height="wrap_content"
         android:layout_gravity="top"
-        android:layout_marginTop="44dp"
         android:orientation="vertical" />
 
     <LinearLayout

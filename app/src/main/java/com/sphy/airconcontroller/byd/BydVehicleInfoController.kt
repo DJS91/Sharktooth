@@ -304,6 +304,7 @@ class BydVehicleInfoController(context: Context) {
         val speedKmh: Double?,
         val accelPedalPct: Double?,
         val brakePedalPct: Double?,
+        val enginePowerKw: Double? = null,
     )
 
     data class ReadyState(
@@ -331,14 +332,16 @@ class BydVehicleInfoController(context: Context) {
         )
     }
 
-    /** Lightweight speed/pedal read for a faster UI refresh loop. */
+    /** Lightweight speed, pedal and power read for a faster UI refresh loop. */
     fun readDriveLive(): DriveLive {
         if (devices.isEmpty()) bind()
-        val speed = devices["Speed"] ?: return DriveLive(null, null, null)
+        val speed = devices["Speed"]
+        val engine = devices["Engine"]
         return DriveLive(
-            speedKmh = num(speed, "getCurrentSpeed"),
-            accelPedalPct = num(speed, "getAccelerateDeepness"),
-            brakePedalPct = num(speed, "getBrakeDeepness"),
+            speedKmh = speed?.let { num(it, "getCurrentSpeed") },
+            accelPedalPct = speed?.let { num(it, "getAccelerateDeepness") },
+            brakePedalPct = speed?.let { num(it, "getBrakeDeepness") },
+            enginePowerKw = engine?.let { num(it, "getEnginePower") },
         )
     }
 

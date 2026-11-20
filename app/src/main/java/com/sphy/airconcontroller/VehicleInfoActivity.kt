@@ -100,6 +100,9 @@ open class VehicleInfoActivity : HomeActivity() {
     private lateinit var powerFlowRpm: TextView
     private lateinit var powerFlowPower: TextView
     private lateinit var powerFlowRegen: TextView
+    private var powerFlowSoc: Double? = null
+    private var powerFlowEngineRpm: Double? = null
+    private var latestDriveLive: BydVehicleInfoController.DriveLive? = null
     private val regenSampler = RegenEnergySampler()
     private val regenFormat = NumberFormat.getNumberInstance().apply {
         minimumFractionDigits = 3
@@ -183,14 +186,7 @@ open class VehicleInfoActivity : HomeActivity() {
             repeatOnLifecycle(Lifecycle.State.STARTED) {
                 while (isActive) {
                     val drive = withContext(Dispatchers.IO) { info.readDriveLive() }
-                    if (dashboardReady) {
-                        driveHero.visibility = View.VISIBLE
-                        driveHero.text = fmt(drive.speedKmh, " km/h")
-                        pedalGauge.set(drive.accelPedalPct, drive.brakePedalPct)
-                        bindPedalPeaks(settings.recordPedalPeaks(
-                            LocalDate.now().toEpochDay(), drive.accelPedalPct, drive.brakePedalPct,
-                        ))
-                    }
+                    bindDriveLive(drive)
                     delay(DRIVE_POLL_INTERVAL_MS)
                 }
             }
@@ -332,6 +328,7 @@ open class VehicleInfoActivity : HomeActivity() {
         batteryHealthValue = batteryBlock.findViewById(R.id.infoBlockHero)
         batteryBlock.setHeroLabel(R.string.vehicle_info_row_soh)
         batterySubtitle = batteryBlock.findViewById(R.id.infoBlockSubtitle)
+        batterySubtitle.textSize = 16f
         val batteryTitle = batteryBlock.findViewById<TextView>(R.id.infoBlockTitle)
         val batteryHeader = batteryTitle.parent as LinearLayout
         val titleColumnParams = batteryTitle.layoutParams
@@ -406,7 +403,7 @@ open class VehicleInfoActivity : HomeActivity() {
         ).apply { marginStart = dp(6) })
         bindPedalPeaks(if (showDashboardSamples) AppSettings.PedalPeaks(68f, 42f) else AppSettings.PedalPeaks(null, null))
         driveMetaHost.addView(parkBrakeRow)
-        limitDashboardGraphicHeight(driveBlock, pedalGauge) { pedalGauge.maxHeight = it }
+        limitDashboardGraphicHeight(driveBlock, pedalGauge)
         blockHost.addView(driveBlock)
 
         mileageHost = addSimpleBlock(
@@ -553,11 +550,12 @@ open class VehicleInfoActivity : HomeActivity() {
         dashboardReady = true
     }
 
-    private fun limitDashboardGraphicHeight(card: View, graphic: View, setMaxHeight: (Int) -> Unit) {
+    private fun limitDashboardGraphicHeight(card: View, graphic: PedalGauge) {
         val update = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
             if (swipeHost.measuredHeight > 0 && card.isAttachedToWindow) {
                 val surroundingHeight = card.measuredHeight - graphic.measuredHeight
-                setMaxHeight((swipeHost.measuredHeight / 2 - surroundingHeight).coerceAtLeast(0))
+                val fullHeight = minOf(graphic.naturalHeight + surroundingHeight, swipeHost.measuredHeight / 2)
+                graphic.maxHeight = ((fullHeight * 0.95f).roundToInt() - surroundingHeight).coerceAtLeast(0)
             }
         }
         swipeHost.addOnLayoutChangeListener(update)
@@ -672,7 +670,13 @@ open class VehicleInfoActivity : HomeActivity() {
         val b = snap.battery
         val trip = if (showDashboardSamples) DashboardSamples.tripUsage else settings.tripUsageState
         bindDashboardBattery(b, trip.startCharge, trip.startFuel, trip)
-        bindPowerFlow(b.socPct, snap.dynamics.enginePowerKw, snap.dynamics.engineRpm, snap.dynamics.speedKmh)
+        val live = latestDriveLive
+        bindPowerFlow(
+            b.socPct,
+            if (live != null) live.enginePowerKw else snap.dynamics.enginePowerKw,
+            snap.dynamics.engineRpm,
+            if (live != null) live.speedKmh else snap.dynamics.speedKmh,
+        )
         val mileage = SpannableString(TextUtils.expandTemplate(
             getText(R.string.dashboard_mileage_hero), fmt(b.evMilesKm, " km"), fmt(b.hevMilesKm, " km"),
         ))
@@ -890,11 +894,25 @@ open class VehicleInfoActivity : HomeActivity() {
         if (v == null) "—" else trimNum(v) + suffix
 
     internal fun bindPowerFlow(soc: Double?, power: Double?, rpm: Double?, speedKmh: Double?) {
+        powerFlowSoc = soc
+        powerFlowEngineRpm = rpm
         powerFlowView.bind(soc, power, rpm, speedKmh)
         val powerText = powerFlowView.powerText()
         val rpmText = powerFlowView.rpmText()
         if (powerFlowPower.text != powerText) powerFlowPower.text = powerText
         if (powerFlowRpm.text != rpmText) powerFlowRpm.text = rpmText
+    }
+
+    internal fun bindDriveLive(drive: BydVehicleInfoController.DriveLive) {
+        latestDriveLive = drive
+        if (!dashboardReady) return
+        driveHero.visibility = View.VISIBLE
+        driveHero.text = fmt(drive.speedKmh, " km/h")
+        pedalGauge.set(drive.accelPedalPct, drive.brakePedalPct)
+        bindPedalPeaks(settings.recordPedalPeaks(
+            LocalDate.now().toEpochDay(), drive.accelPedalPct, drive.brakePedalPct,
+        ))
+        bindPowerFlow(powerFlowSoc, drive.enginePowerKw, powerFlowEngineRpm, drive.speedKmh)
     }
 
     private fun showDailyRegen(kwh: Double) {
