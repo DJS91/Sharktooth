@@ -263,13 +263,12 @@ class DashboardActivityTest {
         }
     }
 
-    @Test fun debugDashboardStartsWithLabeledSamplesAndFilledBars() {
+    @Test fun debugDashboardShowsOnlyTheLogoWithSampleReadingsAndFilledBars() {
         AppSettings(context).dashboardCards = DashboardCard.entries
         val page = open(samples = true)
         instrumentation.runOnMainSync {
-            assertTrue(page.findViewById<TextView>(R.id.homeTitle).text.contains(
-                page.getString(R.string.dashboard_sample_data),
-            ))
+            assertEquals(page.getString(R.string.hub_title),
+                page.findViewById<TextView>(R.id.homeTitle).text.toString())
             val grid = page.findViewById<DashboardGrid>(R.id.dashboardGrid)
             val expected = mapOf(
                 DashboardCard.BATTERY to "98%", DashboardCard.DRIVE to "48 km/h",

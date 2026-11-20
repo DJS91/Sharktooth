@@ -162,7 +162,6 @@ open class VehicleInfoActivity : HomeActivity() {
         intent.removeExtra(EXTRA_EDIT_DASHBOARD)
 
         if (showDashboardSamples) {
-            findViewById<TextView>(R.id.homeTitle).append(" · " + getString(R.string.dashboard_sample_data))
             bindSnapshot(DashboardSamples.vehicle)
             bindTabletSoc(DashboardSamples.headUnit)
             bindDashboardAttitude(ax = 1.2, ay = -0.8, az = 9.7)
@@ -999,7 +998,7 @@ open class VehicleInfoActivity : HomeActivity() {
         private const val PAGE_COUNT = 5
         private val rpmHistory = EngineRpmHistory()
         private const val POLL_INTERVAL_MS = 2_000L
-        private const val DRIVE_POLL_INTERVAL_MS = 200L
+        private const val DRIVE_POLL_INTERVAL_MS = 50L
         private const val POWER_POLL_INTERVAL_MS = 20L
     }
 }

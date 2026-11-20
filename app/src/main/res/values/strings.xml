@@ -2,7 +2,6 @@
     <string name="dashboard_edit_hint">Edit dashboard: hold a card, then drag it to the insertion marker to reorder.</string>
     <string name="dashboard_edit_empty">Edit this dashboard</string>
     <string name="dashboard_page_number">Dashboard %1$d of %2$d</string>
-    <string name="dashboard_sample_data">Sample data</string>
     <item type="id" name="dashboardPedalGauge" />
     <item type="id" name="dashboardRpmGraph" />
     <string name="dashboard_rpm_last_hour">RPM · Last hour</string>

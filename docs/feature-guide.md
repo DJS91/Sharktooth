@@ -45,9 +45,9 @@ Dashboard card titles have a soft grey glow in dark mode only. The Power Flow il
 - **Power Flow:** The green battery display shows current charge. The power reading appears at the top right, with engine RPM below it; **Regen today** appears at the bottom left. While the vehicle is moving, blue paths flow toward the wheels when the battery is supplying power, and green paths flow toward the battery when it is charging. An amber path shows that the engine is running. At 0 km/h the paths are hidden, but the power, charge and RPM readings remain visible. The animation shows overall flow, not which axle is active, and engine RPM alone does not mean the battery is charging. **Regen today** estimates the energy recovered in kWh from readings collected while Dashboard is open. It is saved across restarts and resets each day.
 - **EVAKOOL fridge:** Shows both compartment temperatures, supply voltage, Eco/Max mode, power state and how recently the fridge reported in. Use **Reconnect** if the card shows **Fridge disconnected**. Tap the connected card outside edit mode to open controls and history.
 
-The Power Flow power reading refreshes up to fifty times per second while Dashboard is open, subject to the vehicle supplying new data. Other vehicle readings keep their own refresh rates.
+The Drive speed and pedal readings refresh up to twenty times per second while Dashboard is open. The Power Flow power reading refreshes up to fifty times per second. Both depend on the vehicle supplying new data; other vehicle readings keep their own refresh rates.
 
-If the Dashboard is labelled **Sample data**, the readings are examples, not live vehicle data. The sample fridge card is display-only.
+The debug app opens Dashboard with example readings, not live vehicle data. The sample fridge card is display-only.
 
 ## Camping Mode
 
