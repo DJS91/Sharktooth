@@ -2,18 +2,19 @@
 <LinearLayout xmlns:android="http://schemas.android.com/apk/res/android"
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
+    android:clipChildren="false"
     android:gravity="top"
     android:orientation="horizontal">
 
-    <TextView
+    <com.sphy.airconcontroller.ui.DashboardTitleView
         android:id="@+id/infoBlockTitle"
         android:layout_width="0dp"
         android:layout_height="wrap_content"
         android:layout_weight="1"
-        android:shadowColor="@color/dashboard_title_shadow"
+        android:shadowColor="?attr/dkSurface"
         android:shadowDx="0"
         android:shadowDy="0"
-        android:shadowRadius="4"
+        android:shadowRadius="16"
         android:textAppearance="@style/TextAppearance.MaterialComponents.Subtitle2"
         android:textColor="@color/heading"
         android:textStyle="bold" />

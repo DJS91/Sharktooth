@@ -56,22 +56,6 @@ class SentrySection(private val activity: AppCompatActivity, root: View) : Defau
     init {
         panels = listOf(
             CompanionPanel(
-                root = root.findViewById(R.id.overdrivePanel),
-                installer = CompanionApps.overdrive,
-                fallbackIcon = R.drawable.ic_sentry,
-                badge = R.string.overdrive_badge,
-                badgeColor = R.color.tyre_ok,
-                badgeBackground = R.color.accent_green_soft,
-                installTitle = R.string.overdrive_install_title,
-                installedTitle = R.string.overdrive_title,
-                installBody = R.string.overdrive_install_body,
-                installedBody = R.string.overdrive_installed_body,
-                caveatsTitle = R.string.overdrive_caveats_title,
-                caveats = R.string.overdrive_caveats,
-                openButtonText = R.string.overdrive_open_button,
-                openFailed = R.string.overdrive_open_failed,
-            ),
-            CompanionPanel(
                 root = root.findViewById(R.id.strikePanel),
                 installer = CompanionApps.strike,
                 fallbackIcon = R.drawable.ic_strike,

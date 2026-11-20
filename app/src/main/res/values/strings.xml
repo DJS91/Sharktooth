@@ -354,7 +354,7 @@
   <string name="sentry_title">Sentry</string>
   <string name="companion_details">Details</string>
   <string name="sentry_home_subtitle">360° sentry recording</string>
-  <string name="sentry_subtitle">Choose a 360° recording app</string>
+  <string name="sentry_subtitle">360° recording with Strike</string>
   <string name="sentry_install_idle">Ready to download.</string>
   <string name="sentry_installed_status">Installed and ready.</string>
   <string name="companion_installed_status">Installed (v%1$s).</string>
@@ -380,7 +380,7 @@
   <string name="strike_badge">Experimental</string>
   <string name="strike_install_title">Install Strike</string>
   <string name="strike_install_body"
-    >A lightweight, experimental alternative. If Overdrive doesn\'t work out for you, give Strike a try. It\'s smaller and simpler, and offers over-the-air updates with an in-app prompt.</string
+    >A lightweight, experimental 360° recording app that offers over-the-air updates with an in-app prompt.</string
   >
   <string name="strike_installed_body"
     >Strike is installed. It will prompt you when an over-the-air update is available. Only reinstall from here if an update fails.</string

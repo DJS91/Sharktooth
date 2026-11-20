@@ -258,6 +258,10 @@ class CampModeTest {
                 val options = activity.findViewById<View>(R.id.campModeOptions)
                 assertTrue("The cards should have equal widths, allowing for pixel rounding",
                     kotlin.math.abs(overview.width - options.width) <= 1)
+                val checklist = activity.findViewById<ViewGroup>(R.id.campModeChecklist)
+                val checklistParent = checklist.parent as ViewGroup
+                val actionsHeading = checklistParent.getChildAt(checklistParent.indexOfChild(checklist) - 1)
+                assertEquals("Leave 10 pixels between Actions and the columns", 10, checklist.top - actionsHeading.bottom)
                 val windowSafety = activity.findViewById<TextView>(R.id.campModeWindowSafety)
                 for (textView in listOf(note, windowSafety)) {
                     assertEquals(Gravity.CENTER_HORIZONTAL, textView.gravity and Gravity.HORIZONTAL_GRAVITY_MASK)
@@ -320,6 +324,31 @@ class CampModeTest {
         try {
             instrumentation.waitForIdleSync()
             instrumentation.runOnMainSync {
+                activity.renderChecklist(CampModeSession.State(
+                    active = false, busy = false, report = "", completedSteps = emptySet(),
+                ))
+                val uncheckedList = activity.findViewById<ViewGroup>(R.id.campModeChecklist)
+                for (i in 0 until uncheckedList.childCount) {
+                    val row = uncheckedList.getChildAt(i) as ViewGroup
+                    for (j in 0 until row.childCount) {
+                        val box = row.getChildAt(j) as CheckBox
+                        val drawable = checkNotNull(androidx.core.widget.CompoundButtonCompat.getButtonDrawable(box))
+                        val image = Bitmap.createBitmap(
+                            drawable.intrinsicWidth, drawable.intrinsicHeight, Bitmap.Config.ARGB_8888,
+                        )
+                        try {
+                            drawable.setBounds(0, 0, image.width, image.height)
+                            drawable.draw(Canvas(image))
+                            val tickPixel = image.getPixel(image.height * 10 / 24, image.height * 15 / 24)
+                            assertEquals("Unchecked circle should contain a grey tick",
+                                Color.parseColor("#FF8E8E99"), tickPixel)
+                            assertFalse(box.isChecked)
+                            assertFalse(box.isClickable)
+                        } finally {
+                            image.recycle()
+                        }
+                    }
+                }
                 activity.renderChecklist(CampModeSession.State(
                     active = true, busy = false, report = "", completedSteps = CampStep.entries.toSet(),
                 ))

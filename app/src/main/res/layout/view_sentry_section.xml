@@ -31,19 +31,10 @@
         android:orientation="horizontal">
 
         <include
-            android:id="@+id/overdrivePanel"
-            layout="@layout/view_companion_panel"
-            android:layout_width="0dp"
-            android:layout_height="wrap_content"
-            android:layout_marginEnd="8dp"
-            android:layout_weight="1" />
-
-        <include
             android:id="@+id/strikePanel"
             layout="@layout/view_companion_panel"
             android:layout_width="0dp"
             android:layout_height="wrap_content"
-            android:layout_marginStart="8dp"
             android:layout_weight="1" />
     </LinearLayout>
 </LinearLayout>

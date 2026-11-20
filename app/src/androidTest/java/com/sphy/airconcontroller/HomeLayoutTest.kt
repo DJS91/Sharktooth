@@ -680,15 +680,14 @@ class HomeLayoutTest {
                 assertSame(updates, sections.getChildAt(0))
                 assertSame(sentry, sections.getChildAt(sections.childCount - 1))
                 val panels = listOf(
-                    page.findViewById<ViewGroup>(R.id.overdrivePanel),
                     page.findViewById<ViewGroup>(R.id.strikePanel),
                 )
+                assertEquals("Sentry should offer only Strike", 1, (panels.single().parent as ViewGroup).childCount)
                 for ((panel, titles) in panels.zip(listOf(
-                    R.string.overdrive_title to R.string.overdrive_open_button,
                     R.string.strike_title to R.string.strike_open_button,
                 ))) {
                     panel.findViewById<TextView>(R.id.companionHeadline).setText(titles.first)
-                    panel.findViewById<TextView>(R.id.companionBadge).setText(R.string.overdrive_badge)
+                    panel.findViewById<TextView>(R.id.companionBadge).setText(R.string.strike_badge)
                     panel.findViewById<TextView>(R.id.companionStatus).text =
                         context.getString(R.string.companion_installed_status, "2026.11.18-1605")
                     panel.findViewById<Button>(R.id.companionOpenButton).apply {
@@ -705,7 +704,8 @@ class HomeLayoutTest {
                     page.layout(0, 0, page.measuredWidth, page.measuredHeight)
                     assertTrue("Sentry should be a compact section, not another full page",
                         sentry.height < 360 * density)
-                    assertTrue(panels[0].right <= panels[1].left)
+                    assertEquals("Strike should use the available panel width",
+                        (panels.single().parent as ViewGroup).width, panels.single().width)
                     for (panel in panels) {
                         for (id in listOf(R.id.companionDetailsButton, R.id.companionOpenButton, R.id.companionInstallButton)) {
                             val button = panel.findViewById<Button>(id)
@@ -728,8 +728,6 @@ class HomeLayoutTest {
         try {
             onView(withId(R.id.settingsCheckUpdateButton)).check(matches(isDisplayed()))
             for ((panelId, installer, descriptions) in listOf(
-                Triple(R.id.overdrivePanel, CompanionApps.overdrive,
-                    R.string.overdrive_install_body to R.string.overdrive_installed_body),
                 Triple(R.id.strikePanel, CompanionApps.strike,
                     R.string.strike_install_body to R.string.strike_installed_body),
             )) {
@@ -747,10 +745,7 @@ class HomeLayoutTest {
                     if (error != null) throw error
                     val text = (view as TextView).text.toString()
                     assertTrue(text.contains(page.getString(if (installed) descriptions.second else descriptions.first)))
-                    if (panelId == R.id.overdrivePanel) {
-                        assertTrue(text.contains(page.getString(R.string.overdrive_caveats_title)))
-                        assertTrue(text.contains(page.getString(R.string.overdrive_caveats)))
-                    }
+                    assertFalse("Strike details should not refer to another option", text.contains("Overdrive"))
                 }
                 onView(withText(android.R.string.ok)).inRoot(isDialog()).perform(click())
             }

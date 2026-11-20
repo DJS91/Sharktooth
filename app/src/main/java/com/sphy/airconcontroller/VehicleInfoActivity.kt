@@ -42,6 +42,7 @@ import com.sphy.airconcontroller.ui.DashboardCard
 import com.sphy.airconcontroller.ui.DashboardGrid
 import com.sphy.airconcontroller.ui.DashboardLayout
 import com.sphy.airconcontroller.ui.DashboardSamples
+import com.sphy.airconcontroller.ui.DashboardTitleView
 import com.sphy.airconcontroller.ui.TripUsageTracker
 import com.sphy.airconcontroller.ui.DashboardSwipeHost
 import com.sphy.airconcontroller.ui.PercentBar
@@ -491,6 +492,7 @@ open class VehicleInfoActivity : HomeActivity() {
         fridgeCard = FridgeTile(this, fridgeView, if (showDashboardSamples) DashboardSamples.fridge else null)
         val powerFlowBlock = inflater.inflate(R.layout.view_dashboard_power_flow, blockHost, false) as FrameLayout
         powerFlowBlock.setDashboardTitle(R.string.dashboard_power_flow, R.drawable.ic_card_engine)
+        powerFlowBlock.findViewById<DashboardTitleView>(R.id.infoBlockTitle).enableSolidHalo()
         powerFlowPower = powerFlowBlock.findViewById(R.id.infoBlockHero)
         powerFlowPower.includeFontPadding = false
         val powerFlowHeroLabel = powerFlowBlock.findViewById<TextView>(R.id.infoBlockHeroLabel).apply {

@@ -40,6 +40,7 @@ import com.sphy.airconcontroller.fridge.FridgeControlsFragment
 import com.sphy.airconcontroller.fridge.formatFridgeUpdateAge
 import com.sphy.airconcontroller.ui.DashboardCard
 import com.sphy.airconcontroller.ui.DashboardGrid
+import com.sphy.airconcontroller.ui.DashboardTitleView
 import com.sphy.airconcontroller.ui.AttitudeHorizonView
 import com.sphy.airconcontroller.ui.PercentBar
 import com.sphy.airconcontroller.ui.PedalGauge
@@ -295,7 +296,7 @@ class DashboardActivityTest {
                     val card = slot.tag as? DashboardCard ?: continue
                     if (card == DashboardCard.EVAKOOL_FRIDGE) continue
                     val title = slot.findViewById<TextView>(R.id.infoBlockTitle)
-                    assertEquals(page.getColor(R.color.dashboard_title_shadow), title.shadowColor)
+                    assertEquals(page.getColor(R.color.surface), title.shadowColor)
                     if (Color.alpha(title.shadowColor) > 0) assertTrue(title.shadowRadius > 0f)
                     val hero = slot.findViewById<TextView>(R.id.infoBlockHero)
                     val caption = slot.findViewById<TextView>(R.id.infoBlockHeroLabel)
@@ -528,20 +529,148 @@ class DashboardActivityTest {
         }
     }
 
-    @Test fun dashboardTitleGlowIsOnlyVisibleInDarkMode() {
+    @Test fun dashboardTitleGlowMatchesCardBackgroundAndExtendsOverGraphicsInBothModes() {
+        instrumentation.runOnMainSync {
+            for (mode in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
+                val configured = context.createConfigurationContext(Configuration().apply { uiMode = mode })
+                for (theme in listOf(R.style.Theme_OpenDiKey, R.style.Theme_OpenDiKey_Modern)) {
+                    val themed = android.view.ContextThemeWrapper(configured, theme)
+                    val inflater = android.view.LayoutInflater.from(themed)
+                    for (layout in listOf(R.layout.view_info_block, R.layout.view_dashboard_power_flow,
+                        R.layout.view_attitude_block)) {
+                        val card = inflater.inflate(layout, null)
+                        val title = card.findViewById<TextView>(R.id.infoBlockTitle)
+                        assertEquals(themed.getColor(R.color.surface), title.shadowColor)
+                        assertEquals(255, Color.alpha(title.shadowColor))
+                        assertTrue("Titles need a larger glow", title.shadowRadius >= 16f)
+                        assertEquals(0f, title.shadowDx, 0f)
+                        assertEquals(0f, title.shadowDy, 0f)
+                        if (mode == Configuration.UI_MODE_NIGHT_NO) {
+                            assertEquals(Color.WHITE, title.shadowColor)
+                        }
+                        val cardBackground = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888)
+                        try {
+                            checkNotNull(card.background).apply {
+                                setBounds(0, 0, 32, 32)
+                                draw(Canvas(cardBackground))
+                            }
+                            assertEquals("Glow must match the rendered card fill",
+                                cardBackground.getPixel(16, 16), title.shadowColor)
+                        } finally {
+                            cardBackground.recycle()
+                        }
+                        title.text = "Power Flow"
+                        // A background-coloured halo shows over contrasting graphics, not over the same solid fill.
+                        val background = if (mode == Configuration.UI_MODE_NIGHT_NO) Color.DKGRAY
+                            else Color.LTGRAY
+                        card.setBackgroundColor(background)
+                        if (layout == R.layout.view_dashboard_power_flow) {
+                            card.findViewById<View>(R.id.infoBlockRows).apply {
+                                layoutParams.height = ViewGroup.LayoutParams.MATCH_PARENT
+                                setBackgroundColor(background)
+                            }
+                        }
+                        card.measure(
+                            View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY),
+                            View.MeasureSpec.makeMeasureSpec(144, View.MeasureSpec.EXACTLY),
+                        )
+                        card.layout(0, 0, card.measuredWidth, card.measuredHeight)
+                        val titleBounds = android.graphics.Rect()
+                        title.getDrawingRect(titleBounds)
+                        (card as ViewGroup).offsetDescendantRectToMyCoords(title, titleBounds)
+                        val glow = Bitmap.createBitmap(320, 144, Bitmap.Config.ARGB_8888)
+                        val plain = Bitmap.createBitmap(320, 144, Bitmap.Config.ARGB_8888)
+                        try {
+                            card.draw(Canvas(glow))
+                            title.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
+                            card.draw(Canvas(plain))
+                            var visibleGlowPixels = 0
+                            var verticalHaloPixels = 0
+                            for (y in 0 until glow.height) {
+                                for (x in 0 until glow.width) {
+                                    val pixel = glow.getPixel(x, y)
+                                    if (plain.getPixel(x, y) == background &&
+                                        kotlin.math.abs(Color.red(pixel) - Color.red(background)) >= 12 &&
+                                        kotlin.math.abs(Color.green(pixel) - Color.green(background)) >= 12 &&
+                                        kotlin.math.abs(Color.blue(pixel) - Color.blue(background)) >= 12) visibleGlowPixels++
+                                    if ((y < titleBounds.top || y >= titleBounds.bottom) &&
+                                        plain.getPixel(x, y) == background &&
+                                        kotlin.math.abs(Color.red(pixel) - Color.red(background)) >= 4 &&
+                                        kotlin.math.abs(Color.green(pixel) - Color.green(background)) >= 4 &&
+                                        kotlin.math.abs(Color.blue(pixel) - Color.blue(background)) >= 4) verticalHaloPixels++
+                                }
+                            }
+                            assertTrue("Background-coloured glow must extend over the card graphic",
+                                visibleGlowPixels >= 8)
+                            assertTrue("Halo must not be clipped to the title's height", verticalHaloPixels >= 8)
+                        } finally {
+                            glow.recycle()
+                            plain.recycle()
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test fun powerFlowTitleHaloMasksTheActualRoofWithoutChangingCardSize() {
         instrumentation.runOnMainSync {
             for (mode in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
                 val configured = context.createConfigurationContext(Configuration().apply { uiMode = mode })
                 val themed = android.view.ContextThemeWrapper(configured, R.style.Theme_OpenDiKey)
-                val inflater = android.view.LayoutInflater.from(themed)
-                for (layout in listOf(R.layout.view_dashboard_card_header, R.layout.view_attitude_block)) {
-                    val title = inflater.inflate(layout, null).findViewById<TextView>(R.id.infoBlockTitle)
-                    if (mode == Configuration.UI_MODE_NIGHT_NO) {
-                        assertEquals(0, Color.alpha(title.shadowColor))
-                    } else {
-                        assertEquals(Color.parseColor("#AA808080"), title.shadowColor)
-                        assertTrue(title.shadowRadius > 0f)
+                val card = android.view.LayoutInflater.from(themed)
+                    .inflate(R.layout.view_dashboard_power_flow, null) as FrameLayout
+                val title = card.findViewById<DashboardTitleView>(R.id.infoBlockTitle)
+                title.text = "Power Flow"
+                title.enableSolidHalo()
+                card.addView(PowerFlowView(themed).apply { bind(76.0, 0.0, 0.0, 0.0) }, 0,
+                    FrameLayout.LayoutParams(ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT))
+                card.measure(
+                    View.MeasureSpec.makeMeasureSpec(400, View.MeasureSpec.EXACTLY),
+                    View.MeasureSpec.makeMeasureSpec(320, View.MeasureSpec.EXACTLY),
+                )
+                card.layout(0, 0, card.measuredWidth, card.measuredHeight)
+                val width = card.width
+                val height = card.height
+                val colour = title.shadowColor
+                val radius = title.shadowRadius
+                val photo = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                val plain = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                val halo = Bitmap.createBitmap(width, height, Bitmap.Config.ARGB_8888)
+                try {
+                    title.visibility = View.INVISIBLE
+                    card.draw(Canvas(photo))
+                    title.visibility = View.VISIBLE
+                    title.setShadowLayer(0f, 0f, 0f, Color.TRANSPARENT)
+                    card.draw(Canvas(plain))
+                    title.setShadowLayer(radius, 0f, 0f, colour)
+                    card.draw(Canvas(halo))
+                    val bounds = android.graphics.Rect()
+                    title.getDrawingRect(bounds)
+                    card.offsetDescendantRectToMyCoords(title, bounds)
+                    fun distance(pixel: Int): Int = maxOf(
+                        kotlin.math.abs(Color.red(pixel) - Color.red(colour)),
+                        kotlin.math.abs(Color.green(pixel) - Color.green(colour)),
+                        kotlin.math.abs(Color.blue(pixel) - Color.blue(colour)),
+                    )
+                    var maskedRoofPixels = 0
+                    for (y in bounds.top until minOf(bounds.bottom + 8, height)) {
+                        for (x in bounds.left until bounds.right) {
+                            val original = photo.getPixel(x, y)
+                            val difference = distance(original)
+                            if (plain.getPixel(x, y) == original && difference >= 24 &&
+                                distance(halo.getPixel(x, y)) <= difference / 3) maskedRoofPixels++
+                        }
                     }
+                    assertTrue("Background-coloured halo must mask the roof outside the text: $maskedRoofPixels",
+                        maskedRoofPixels >= 6)
+                    assertEquals(colour, themed.getColor(R.color.surface))
+                    assertEquals(width, card.width)
+                    assertEquals(height, card.height)
+                } finally {
+                    photo.recycle()
+                    plain.recycle()
+                    halo.recycle()
                 }
             }
         }

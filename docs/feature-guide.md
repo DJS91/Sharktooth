@@ -10,6 +10,9 @@ Under **Settings → Appearance**, choose **Classic** for a cabin-photo backgrou
 
 ## Customizable Dashboard
 
+Card titles have a large glow matching the card background in Light and Dark modes to help them stand out over card graphics.
+The Power Flow title has a stronger halo so the car illustration does not obscure its lettering.
+
 Open **Dashboard** (gauge icon) for live vehicle and head-unit readings. The first page starts with nine cards; the other four start blank. Cards fill a three-column grid that scrolls vertically.
 
 1. **Switch pages:** Swipe left or right, or tap one of the five dots above the cards. The largest dot marks the current page.
@@ -131,6 +134,8 @@ The fridge normally connects through the ESP32 USB bridge. In the fridge page's 
 Open Sharktooth once after powering on the head unit. The background listener keeps the DiKey connection active while the app is in the background. See the [autostart guide](../autostart.md) for head-unit settings and limitations.
 
 To update, open **Settings → Updates → Check for updates**. If an update is available, choose **Download & install** and follow Android's installer prompts. You can also download the APK from [GitHub Releases](https://github.com/DJS91/Sharktooth/releases).
+
+Under **Settings → Sentry**, use **Download & install** to install Strike for 360° recording. **Details** provides app and update information; **Open Strike** appears when it is installed.
 
 ## Debug tools
 

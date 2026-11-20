@@ -4,9 +4,9 @@
     android:layout_height="wrap_content"
     android:layout_marginBottom="10dp"
     android:background="@drawable/bg_info_block"
+    android:clipChildren="false"
+    android:clipToPadding="false"
     android:padding="14dp">
-
-    <include layout="@layout/view_dashboard_card_header" />
 
     <LinearLayout
         android:id="@+id/infoBlockRows"
@@ -14,4 +14,6 @@
         android:layout_height="wrap_content"
         android:layout_gravity="bottom"
         android:orientation="vertical" />
+
+    <include layout="@layout/view_dashboard_card_header" />
 </FrameLayout>
