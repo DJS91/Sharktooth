@@ -304,7 +304,6 @@ class BydVehicleInfoController(context: Context) {
         val speedKmh: Double?,
         val accelPedalPct: Double?,
         val brakePedalPct: Double?,
-        val enginePowerKw: Double? = null,
     )
 
     data class ReadyState(
@@ -332,17 +331,21 @@ class BydVehicleInfoController(context: Context) {
         )
     }
 
-    /** Lightweight speed, pedal and power read for a faster UI refresh loop. */
+    /** Lightweight speed and pedal read for a faster UI refresh loop. */
     fun readDriveLive(): DriveLive {
         if (devices.isEmpty()) bind()
         val speed = devices["Speed"]
-        val engine = devices["Engine"]
         return DriveLive(
             speedKmh = speed?.let { num(it, "getCurrentSpeed") },
             accelPedalPct = speed?.let { num(it, "getAccelerateDeepness") },
             brakePedalPct = speed?.let { num(it, "getBrakeDeepness") },
-            enginePowerKw = engine?.let { num(it, "getEnginePower") },
         )
+    }
+
+    /** Independent power probe without reading the other Dashboard values. */
+    fun readEnginePowerKw(): Double? {
+        if (devices.isEmpty()) bind()
+        return devices["Engine"]?.let { num(it, "getEnginePower") }
     }
 
     /** Both gearbox getters, read independently so a caller can tell which one tracks the shifter. */

@@ -102,6 +102,9 @@ open class VehicleInfoActivity : HomeActivity() {
     private lateinit var powerFlowRegen: TextView
     private var powerFlowSoc: Double? = null
     private var powerFlowEngineRpm: Double? = null
+    private var powerFlowPowerKw: Double? = null
+    private var powerFlowSpeedKmh: Double? = null
+    private var hasLivePower = false
     private var latestDriveLive: BydVehicleInfoController.DriveLive? = null
     private val regenSampler = RegenEnergySampler()
     private val regenFormat = NumberFormat.getNumberInstance().apply {
@@ -188,6 +191,16 @@ open class VehicleInfoActivity : HomeActivity() {
                     val drive = withContext(Dispatchers.IO) { info.readDriveLive() }
                     bindDriveLive(drive)
                     delay(DRIVE_POLL_INTERVAL_MS)
+                }
+            }
+        }
+
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    val power = withContext(Dispatchers.IO) { info.readEnginePowerKw() }
+                    bindPowerLive(power)
+                    delay(POWER_POLL_INTERVAL_MS)
                 }
             }
         }
@@ -555,7 +568,7 @@ open class VehicleInfoActivity : HomeActivity() {
             if (swipeHost.measuredHeight > 0 && card.isAttachedToWindow) {
                 val surroundingHeight = card.measuredHeight - graphic.measuredHeight
                 val fullHeight = minOf(graphic.naturalHeight + surroundingHeight, swipeHost.measuredHeight / 2)
-                graphic.maxHeight = ((fullHeight * 0.95f).roundToInt() - surroundingHeight).coerceAtLeast(0)
+                graphic.maxHeight = ((fullHeight * 0.9025f).roundToInt() - surroundingHeight).coerceAtLeast(0)
             }
         }
         swipeHost.addOnLayoutChangeListener(update)
@@ -673,7 +686,7 @@ open class VehicleInfoActivity : HomeActivity() {
         val live = latestDriveLive
         bindPowerFlow(
             b.socPct,
-            if (live != null) live.enginePowerKw else snap.dynamics.enginePowerKw,
+            if (hasLivePower) powerFlowPowerKw else snap.dynamics.enginePowerKw,
             snap.dynamics.engineRpm,
             if (live != null) live.speedKmh else snap.dynamics.speedKmh,
         )
@@ -896,6 +909,8 @@ open class VehicleInfoActivity : HomeActivity() {
     internal fun bindPowerFlow(soc: Double?, power: Double?, rpm: Double?, speedKmh: Double?) {
         powerFlowSoc = soc
         powerFlowEngineRpm = rpm
+        powerFlowPowerKw = power
+        powerFlowSpeedKmh = speedKmh
         powerFlowView.bind(soc, power, rpm, speedKmh)
         val powerText = powerFlowView.powerText()
         val rpmText = powerFlowView.rpmText()
@@ -912,7 +927,13 @@ open class VehicleInfoActivity : HomeActivity() {
         bindPedalPeaks(settings.recordPedalPeaks(
             LocalDate.now().toEpochDay(), drive.accelPedalPct, drive.brakePedalPct,
         ))
-        bindPowerFlow(powerFlowSoc, drive.enginePowerKw, powerFlowEngineRpm, drive.speedKmh)
+        bindPowerFlow(powerFlowSoc, powerFlowPowerKw, powerFlowEngineRpm, drive.speedKmh)
+    }
+
+    internal fun bindPowerLive(power: Double?) {
+        hasLivePower = true
+        if (!dashboardReady) return
+        bindPowerFlow(powerFlowSoc, power, powerFlowEngineRpm, powerFlowSpeedKmh)
     }
 
     private fun showDailyRegen(kwh: Double) {
@@ -979,5 +1000,6 @@ open class VehicleInfoActivity : HomeActivity() {
         private val rpmHistory = EngineRpmHistory()
         private const val POLL_INTERVAL_MS = 2_000L
         private const val DRIVE_POLL_INTERVAL_MS = 200L
+        private const val POWER_POLL_INTERVAL_MS = 20L
     }
 }

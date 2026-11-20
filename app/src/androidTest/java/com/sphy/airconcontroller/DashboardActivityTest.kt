@@ -505,7 +505,7 @@ class DashboardActivityTest {
         }
     }
 
-    @Test fun liveDriveReadsUpdatePowerWithoutReplacingChargeOrRpm() {
+    @Test fun livePowerReadsUpdatePowerWithoutReplacingChargeOrRpm() {
         AppSettings(context).dashboardCards = listOf(DashboardCard.POWER_FLOW)
         val page = open(samples = true)
         instrumentation.runOnMainSync {
@@ -515,12 +515,15 @@ class DashboardActivityTest {
             page.bindPowerFlow(76.0, 35.0, 1650.0, 48.0)
             val originalRpm = rpm.text.toString()
             for ((reading, expected) in listOf(12.5 to "+12.5 kW", -18.0 to "-18 kW", 0.0 to "0 kW")) {
-                page.bindDriveLive(BydVehicleInfoController.DriveLive(48.0, null, null, reading))
+                page.bindPowerLive(reading)
                 assertEquals(expected, power.text.toString())
                 assertEquals(originalRpm, rpm.text.toString())
                 assertTrue(diagram.contentDescription.contains("Battery 76%"))
+                page.bindDriveLive(BydVehicleInfoController.DriveLive(48.0, null, null))
+                assertEquals("Drive updates must not overwrite the newer power value", expected, power.text.toString())
             }
-            page.bindDriveLive(BydVehicleInfoController.DriveLive(0.0, null, null, null))
+            page.bindPowerLive(null)
+            page.bindDriveLive(BydVehicleInfoController.DriveLive(0.0, null, null))
             assertEquals("—", power.text.toString())
             assertEquals(originalRpm, rpm.text.toString())
         }
@@ -779,7 +782,7 @@ class DashboardActivityTest {
         assertEquals(AppSettings.PedalPeaks(null, 10f), settings.recordPedalPeaks(day + 1, null, 10.0))
     }
 
-    @Test fun smallerDriveGaugeReducesTheWholeTopRowByFivePercent() {
+    @Test fun smallerDriveGaugeCompactsTheWholeTopRow() {
         AppSettings(context).dashboardCards = listOf(
             DashboardCard.BATTERY, DashboardCard.DRIVE, DashboardCard.TYRES, DashboardCard.ENGINE,
         )
@@ -795,8 +798,8 @@ class DashboardActivityTest {
             val surroundingHeight = card.height - gauge.height
             val viewport = page.findViewById<View>(R.id.dashboardSwipeHost)
             val originalHeight = minOf(gauge.naturalHeight + surroundingHeight, viewport.height / 2)
-            val expectedHeight = kotlin.math.round(originalHeight * 0.95f).toInt()
-            assertEquals("The Drive card should be 5% shorter, not just its gauge", expectedHeight, slot.height)
+            val expectedHeight = kotlin.math.round(originalHeight * 0.95f * 0.95f).toInt()
+            assertEquals("The entire Drive card should receive both 5% reductions", expectedHeight, slot.height)
             assertEquals("The Drive card should set the reduced top-row height", expectedHeight, topRow.height)
             assertEquals(expectedHeight + (10 * page.resources.displayMetrics.density).toInt(), nextRow.top)
             assertTrue(gauge.height < gauge.naturalHeight)
