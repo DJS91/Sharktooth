@@ -1,5 +1,12 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="camp_mode_preview_start">Start Camping Mode</string>
+    <string name="camp_mode_preview_park" translatable="false">P</string>
+    <string name="camp_mode_debug_preview">Debug preview: no vehicle actions are performed.</string>
+    <string name="camp_mode_headlight_note"><annotation role="highlight">Headlights must be turned off manually</annotation> as this is a ADR requirement.</string>
+    <string name="camp_mode_safety_gear_exit">Vehicle left Park. Ending Camping Mode and restoring saved settings.</string>
+    <string name="camp_mode_safety_restart_exit">Vehicle restarted after being switched off. Ending Camping Mode and restoring saved settings.</string>
+    <string name="camp_mode_safety_recovered_exit">Recovering Camping Mode after a restart or suspension. Restoring saved settings for safety.</string>
     <string name="camp_mode_off">Camp Mode is off</string>
     <string name="camp_mode_on">Camp is active</string>
     <string name="camp_mode_busy">Camp is updating</string>
@@ -42,4 +49,8 @@
     <string name="camp_mode_step_media">Mute media audio</string>
     <string name="camp_mode_step_screen">Turn screen off</string>
     <string name="camp_mode_step_running">%1$s (applying...)</string>
+    <string name="camp_mode_step_restoring">%1$s (restoring...)</string>
+    <string name="camp_mode_action_error">%1$s: %2$s</string>
+    <string name="camp_mode_manual_action_item">- %1$s</string>
+    <string name="camp_mode_manual_actions">Also perform these failed recovery actions manually before driving:\n%1$s</string>
 </resources>

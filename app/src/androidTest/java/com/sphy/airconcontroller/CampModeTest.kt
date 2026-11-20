@@ -1,9 +1,15 @@
 package com.sphy.airconcontroller
 
 import android.content.Intent
+import android.graphics.Bitmap
+import android.graphics.Canvas
+import android.graphics.Color
 import android.bluetooth.BluetoothManager
 import android.media.AudioManager
 import android.os.Build
+import android.os.PowerManager
+import android.os.SystemClock
+import android.view.MotionEvent
 import android.view.Gravity
 import android.widget.CheckBox
 import android.widget.Button
@@ -15,6 +21,7 @@ import androidx.test.platform.app.InstrumentationRegistry
 import com.sphy.airconcontroller.byd.BydAcController
 import com.sphy.airconcontroller.byd.Dilink5SdkInjector
 import com.sphy.airconcontroller.camp.CampCarPlay
+import com.sphy.airconcontroller.camp.CampActionError
 import com.sphy.airconcontroller.camp.CampMediaAudio
 import com.sphy.airconcontroller.camp.CampHeadunitBluetooth
 import com.sphy.airconcontroller.camp.CampModeController
@@ -84,7 +91,9 @@ class CampModeTest {
     @Test fun checklistChecksOnlyConfirmedActionsAndFinishesWithScreenOff() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         val activity = instrumentation.startActivitySync(
-            Intent(context, CampModeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+            Intent(context, CampModeActivity::class.java)
+                .putExtra(CampModeActivity.EXTRA_LIVE_CAMP_MODE, true)
+                .addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         ) as CampModeActivity
         try {
             instrumentation.waitForIdleSync()
@@ -116,18 +125,20 @@ class CampModeTest {
                 val stop = activity.findViewById<Button>(R.id.campModeStopWindows)
                 assertEquals(View.GONE, stop.visibility)
                 assertEquals(stop.javaClass, enable.javaClass)
-                assertEquals(stop.backgroundTintList?.defaultColor, enable.backgroundTintList?.defaultColor)
+                assertEquals(activity.getColor(R.color.dashboard_accent_blue), enable.backgroundTintList?.defaultColor)
                 assertEquals(stop.textSize, enable.textSize, 0f)
                 val list = activity.findViewById<ViewGroup>(R.id.campModeChecklist)
-                val rows = (0 until list.childCount).flatMap {
-                    val row = list.getChildAt(it) as ViewGroup
-                    (0 until row.childCount).map { column -> row.getChildAt(column) as CheckBox }
+                val rows = (0 until 2).flatMap { column ->
+                    (0 until list.childCount).map { index ->
+                        (list.getChildAt(index) as ViewGroup).getChildAt(column) as CheckBox
+                    }
                 }
                 assertTrue(rows.all {
                     (it.gravity and Gravity.HORIZONTAL_GRAVITY_MASK) == Gravity.LEFT
                 })
-                val ids = listOf(R.id.campStepDikey, R.id.campStepCarPlay, R.id.campStepBluetooth, R.id.campStepClimate, R.id.campStepWindows,
-                    R.id.campStepDrls, R.id.campStepCluster, R.id.campStepHud, R.id.campStepMedia, R.id.campStepScreen)
+                val ids = listOf(R.id.campStepDikey, R.id.campStepBluetooth, R.id.campStepWindows,
+                    R.id.campStepCluster, R.id.campStepMedia, R.id.campStepCarPlay, R.id.campStepClimate,
+                    R.id.campStepDrls, R.id.campStepHud, R.id.campStepScreen)
                 assertEquals(ids, rows.map { it.id })
                 for ((index, step) in CampStep.entries.withIndex()) {
                     val completed = CampStep.entries.take(index).toSet()
@@ -146,7 +157,7 @@ class CampModeTest {
                 activity.renderChecklist(CampModeSession.State(false, false, ""))
                 assertTrue(rows.none { it.isChecked })
                 assertEquals("Turn Controls Bar Lights off", rows[0].text.toString())
-                assertEquals("Disconnect Phone", rows[1].text.toString())
+                assertEquals("Disconnect Phone", rows[5].text.toString())
                 val idle = CampModeSession.State(false, false, "")
                 val windowSafety = activity.findViewById<View>(R.id.campModeWindowSafety)
                 activity.renderControls(idle, false, 80.0, 10)
@@ -190,6 +201,225 @@ class CampModeTest {
             }
         } finally {
             instrumentation.runOnMainSync { activity.finish() }
+        }
+    }
+
+    @Test fun debugPreviewShowsParkAndBatteryAndSimulatesWithoutChangingDeviceOrLiveSession() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, CampModeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        ) as CampModeActivity
+        val live = CampModeController.get(context)
+        val liveState = live.state.value
+        val prefs = context.getSharedPreferences("camp-mode", android.content.Context.MODE_PRIVATE)
+        val originalPrefs = prefs.all
+        val audio = context.getSystemService(AudioManager::class.java)
+        val volume = audio.getStreamVolume(AudioManager.STREAM_MUSIC)
+        val adapter = context.getSystemService(BluetoothManager::class.java)?.adapter
+        val bluetoothEnabled = adapter?.isEnabled
+        val ids = listOf(
+            R.id.campStepDikey, R.id.campStepCarPlay, R.id.campStepBluetooth, R.id.campStepClimate,
+            R.id.campStepWindows, R.id.campStepDrls, R.id.campStepCluster, R.id.campStepHud,
+            R.id.campStepMedia, R.id.campStepScreen,
+        )
+        fun waitForUi(condition: () -> Boolean) {
+            val deadline = SystemClock.elapsedRealtime() + 15_000
+            var ready = false
+            while (!ready && SystemClock.elapsedRealtime() < deadline) {
+                instrumentation.runOnMainSync { ready = condition() }
+                if (!ready) SystemClock.sleep(50)
+            }
+            assertTrue("Preview did not reach the expected state", ready)
+        }
+        try {
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync {
+                assertEquals(View.VISIBLE, activity.findViewById<View>(R.id.campModePreviewNotice).visibility)
+                assertEquals("P", activity.findViewById<TextView>(R.id.campModeGear).text.toString())
+                assertEquals("76%", activity.findViewById<TextView>(R.id.campModeSoc).text.toString())
+                val start = activity.findViewById<Button>(R.id.campModeEnable)
+                assertEquals("Start Camping Mode", start.text.toString())
+                assertTrue(start.isEnabled)
+                val blueButtons = listOf(start,
+                    activity.findViewById<Button>(R.id.campModeCutoffDecrease),
+                    activity.findViewById<Button>(R.id.campModeCutoffIncrease))
+                for (button in blueButtons) {
+                    assertEquals(Color.BLACK, button.currentTextColor)
+                    val buttonBitmap = Bitmap.createBitmap(button.width, button.height, Bitmap.Config.ARGB_8888)
+                    button.draw(Canvas(buttonBitmap))
+                    assertEquals("Start and cutoff buttons should have an opaque blue fill",
+                        Color.rgb(0, 144, 255), buttonBitmap.getPixel(button.width / 8, button.height / 2))
+                    buttonBitmap.recycle()
+                }
+                val note = activity.findViewById<TextView>(R.id.campModeHeadlightNote)
+                assertEquals("Headlights must be turned off manually as this is a ADR requirement.", note.text.toString())
+                assertTrue("The note belongs below Start", note.top >= start.bottom)
+                val overview = activity.findViewById<View>(R.id.campModeOverview)
+                val options = activity.findViewById<View>(R.id.campModeOptions)
+                assertTrue("The cards should have equal widths, allowing for pixel rounding",
+                    kotlin.math.abs(overview.width - options.width) <= 1)
+                val windowSafety = activity.findViewById<TextView>(R.id.campModeWindowSafety)
+                for (textView in listOf(note, windowSafety)) {
+                    assertEquals(Gravity.CENTER_HORIZONTAL, textView.gravity and Gravity.HORIZONTAL_GRAVITY_MASK)
+                    assertEquals("Both notes should share the Start button's horizontal centre",
+                        start.left + start.right, textView.left + textView.right)
+                }
+                val text = note.text as android.text.Spanned
+                val bold = text.getSpans(0, text.length, android.text.style.StyleSpan::class.java).single()
+                val orange = text.getSpans(0, text.length, android.text.style.ForegroundColorSpan::class.java).single()
+                assertEquals(android.graphics.Typeface.BOLD, bold.style)
+                assertEquals(activity.getColor(R.color.status_warning), orange.foregroundColor)
+                for (span in listOf(bold, orange)) {
+                    assertEquals("Headlights must be turned off manually",
+                        text.subSequence(text.getSpanStart(span), text.getSpanEnd(span)).toString())
+                }
+                assertFalse(activity.findViewById<View>(R.id.campSaveSocSwitch).isEnabled)
+                start.performClick()
+            }
+            waitForUi { activity.findViewById<View>(R.id.campModeStopWindows).visibility == View.VISIBLE }
+            waitForUi {
+                ids.all { activity.findViewById<CheckBox>(it).isChecked } &&
+                    activity.findViewById<TextView>(R.id.campModeHeading).text ==
+                    activity.getString(R.string.camp_mode_on)
+            }
+            instrumentation.runOnMainSync {
+                assertEquals(View.GONE, activity.findViewById<View>(R.id.campModeStopWindows).visibility)
+                assertTrue(context.getSystemService(PowerManager::class.java).isInteractive)
+                val now = SystemClock.uptimeMillis()
+                for (action in listOf(MotionEvent.ACTION_DOWN, MotionEvent.ACTION_UP)) {
+                    val event = MotionEvent.obtain(now, now, action, 1f, 1f, 0)
+                    try { assertTrue(activity.dispatchTouchEvent(event)) } finally { event.recycle() }
+                }
+            }
+            waitForUi {
+                activity.headlightReminderDialog?.isShowing == true &&
+                    ids.none { activity.findViewById<CheckBox>(it).isChecked }
+            }
+            assertEquals(liveState, live.state.value)
+            assertEquals(originalPrefs, prefs.all)
+            assertEquals(volume, audio.getStreamVolume(AudioManager.STREAM_MUSIC))
+            assertEquals(bluetoothEnabled, adapter?.isEnabled)
+            instrumentation.runOnMainSync {
+                assertTrue(activity.findViewById<Button>(R.id.campModeEnable).isEnabled)
+                activity.headlightReminderDialog?.getButton(android.content.DialogInterface.BUTTON_POSITIVE)?.performClick()
+            }
+            assertEquals(originalPrefs, prefs.all)
+        } finally {
+            instrumentation.runOnMainSync {
+                activity.headlightReminderDialog?.dismiss()
+                activity.finish()
+            }
+        }
+    }
+
+    @Test fun completedChecklistCirclesContainWhiteTicks() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, CampModeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        ) as CampModeActivity
+        try {
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync {
+                activity.renderChecklist(CampModeSession.State(
+                    active = true, busy = false, report = "", completedSteps = CampStep.entries.toSet(),
+                ))
+                val checklist = activity.findViewById<ViewGroup>(R.id.campModeChecklist)
+                for (i in 0 until checklist.childCount) {
+                    val row = checklist.getChildAt(i) as ViewGroup
+                    for (j in 0 until row.childCount) {
+                        val box = row.getChildAt(j) as CheckBox
+                        val drawable = checkNotNull(androidx.core.widget.CompoundButtonCompat.getButtonDrawable(box))
+                        val image = Bitmap.createBitmap(
+                            drawable.intrinsicWidth, drawable.intrinsicHeight, Bitmap.Config.ARGB_8888,
+                        )
+                        try {
+                            drawable.setBounds(0, 0, image.width, image.height)
+                            drawable.draw(Canvas(image))
+                            val pixels = IntArray(image.width * image.height)
+                            image.getPixels(pixels, 0, image.width, 0, 0, image.width, image.height)
+                            assertTrue("Completed circle must retain its green fill", Color.parseColor("#FF3DDC84") in pixels)
+                            assertTrue("Completed circle must show a white tick", Color.WHITE in pixels)
+                            assertFalse(box.isClickable)
+                        } finally {
+                            image.recycle()
+                        }
+                    }
+                }
+            }
+        } finally {
+            instrumentation.runOnMainSync { activity.finish() }
+        }
+    }
+
+    @Test fun failuresAreRedBelowTheLeftCardAndListedInTheReminderUntilRecovery() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        val activity = instrumentation.startActivitySync(
+            Intent(context, CampModeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
+        ) as CampModeActivity
+        val failed = CampModeSession.State(
+            active = true, busy = false, report = "", completedSteps = setOf(CampStep.HUD),
+            remindHeadlights = true, failedSteps = mapOf(
+                CampStep.HUD to CampActionError("Restore HUD", "HUD read-back failed", true),
+                CampStep.WINDOWS to CampActionError("Close windows", "Window command timed out"),
+            ),
+        )
+        try {
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync {
+                activity.renderChecklist(failed)
+                activity.renderControls(failed, true, 76.0, 10)
+                val errors = activity.findViewById<TextView>(R.id.campModeErrors)
+                assertEquals(View.VISIBLE, errors.visibility)
+                assertTrue(errors.text.contains("HUD read-back failed"))
+                assertTrue(errors.text.contains("Window command timed out"))
+                val hud = activity.findViewById<CheckBox>(R.id.campStepHud)
+                assertTrue(hud.isActivated)
+                assertFalse(hud.isChecked)
+                val drawable = checkNotNull(androidx.core.widget.CompoundButtonCompat.getButtonDrawable(hud))
+                val image = Bitmap.createBitmap(drawable.intrinsicWidth, drawable.intrinsicHeight, Bitmap.Config.ARGB_8888)
+                try {
+                    drawable.setBounds(0, 0, image.width, image.height)
+                    drawable.draw(Canvas(image))
+                    val pixels = IntArray(image.width * image.height)
+                    image.getPixels(pixels, 0, image.width, 0, 0, image.width, image.height)
+                    assertTrue(activity.getColor(R.color.tyre_fault) in pixels)
+                    assertTrue(Color.WHITE in pixels)
+                    assertFalse(Color.parseColor("#FF3DDC84") in pixels)
+                } finally {
+                    image.recycle()
+                }
+                val reminder = checkNotNull(activity.headlightReminderDialog)
+                assertTrue(reminder.isShowing)
+                val message = checkNotNull(reminder.findViewById<TextView>(android.R.id.message)).text.toString()
+                assertTrue(message.contains(activity.getString(R.string.camp_mode_headlight_reminder)))
+                assertTrue(message.contains("perform these failed recovery actions manually"))
+                assertTrue(message.contains("Restore HUD"))
+                assertTrue(message.contains("Check that all windows are closed"))
+            }
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync {
+                val overview = activity.findViewById<View>(R.id.campModeOverview)
+                val errors = activity.findViewById<TextView>(R.id.campModeErrors)
+                assertSame(overview.parent, errors.parent)
+                assertTrue("Errors should sit below the left card", errors.top >= overview.bottom)
+                activity.renderControls(failed.copy(busy = true, restoring = true), true, 76.0, 10)
+                val resolved = failed.copy(active = false, completedSteps = emptySet(), failedSteps = emptyMap())
+                activity.renderChecklist(resolved)
+                activity.renderControls(resolved, true, 76.0, 10)
+                assertEquals(View.GONE, errors.visibility)
+                val hud = activity.findViewById<CheckBox>(R.id.campStepHud)
+                assertFalse(hud.isActivated)
+                assertFalse(hud.isChecked)
+                val reminder = checkNotNull(activity.headlightReminderDialog)
+                assertTrue(reminder.isShowing)
+                assertFalse(checkNotNull(reminder.findViewById<TextView>(android.R.id.message)).text
+                    .toString().contains("Restore HUD"))
+            }
+        } finally {
+            instrumentation.runOnMainSync {
+                activity.headlightReminderDialog?.dismiss()
+                activity.finish()
+            }
         }
     }
 
@@ -240,5 +470,10 @@ class CampModeTest {
         assertEquals(saved.copy(dikeyLighting = null, manageHeadunitBluetooth = false,
             clusterBrightness = null, hudState = null, mediaUsesCarMute = false),
             CampModeController.decodeSaved(legacy))
+        val errors = mapOf(
+            CampStep.HUD to CampActionError("Restore HUD", "Not confirmed", true),
+            CampStep.WINDOWS to CampActionError("Close windows", "Timed out"),
+        )
+        assertEquals(errors, CampModeController.decodeErrors(CampModeController.encodeErrors(errors)))
     }
 }

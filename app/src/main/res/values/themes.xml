@@ -123,7 +123,7 @@
         <item name="strokeColor">@color/camp_start_stroke</item>
     </style>
 
-    <style name="CampCutoffButton" parent="Widget.OpenDiKey.Button">
+    <style name="CampCutoffButton" parent="Widget.OpenDiKey.CampStartButton">
         <item name="android:layout_width">48dp</item>
         <item name="android:layout_height">48dp</item>
         <item name="android:paddingStart">0dp</item>
@@ -147,6 +147,8 @@
         <item name="android:focusable">false</item>
         <item name="android:button">@drawable/camp_step_checkbox_spaced</item>
         <item name="android:buttonTint">@null</item>
+        <item name="buttonTint">@null</item>
+        <item name="useMaterialThemeColors">false</item>
         <item name="android:minHeight">28dp</item>
         <item name="android:paddingEnd">8dp</item>
         <item name="android:textColor">?attr/dkTextMuted</item>

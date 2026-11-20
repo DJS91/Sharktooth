@@ -36,8 +36,10 @@ open class OpenDiKeyActivity : AppCompatActivity() {
         if (AppSettings(this).themeStyle != appliedStyle) recreate()
     }
 
+    protected open fun wakeCampSession(): Boolean = CampModeController.get(this).onScreenWake()
+
     protected fun consumeCampWakeTouch(event: MotionEvent): Boolean {
-        if (event.actionMasked == MotionEvent.ACTION_DOWN && CampModeController.get(this).onScreenWake()) {
+        if (event.actionMasked == MotionEvent.ACTION_DOWN && wakeCampSession()) {
             swallowingCampWakeTouch = true
         }
         if (!swallowingCampWakeTouch) return false

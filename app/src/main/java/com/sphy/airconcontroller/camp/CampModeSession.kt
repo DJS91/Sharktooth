@@ -21,21 +21,22 @@ internal data class CampSavedState(
 )
 
 internal data class CampResult(val success: Boolean, val detail: String)
+internal data class CampActionError(val action: String, val detail: String, val duringRestoration: Boolean = false)
 
 internal fun batteryAtCutoff(soc: Double?, cutoff: Int): Boolean =
     soc != null && soc in 0.0..cutoff.toDouble()
 
-internal enum class CampStep(val reportLabel: String) {
-    DIKEY("DiKey lights OFF"),
-    CARPLAY("Disconnect CarPlay"),
-    BLUETOOTH("Head-unit Bluetooth OFF"),
-    CLIMATE("Climate OFF"),
-    WINDOWS("Close windows"),
-    DRLS("DRLs OFF"),
-    CLUSTER("Dim instrument cluster"),
-    HUD("HUD OFF"),
-    MEDIA("Mute media"),
-    SCREEN("Screen OFF");
+internal enum class CampStep(val reportLabel: String, val recoveryLabel: String) {
+    DIKEY("DiKey lights OFF", "Enable DiKey lights"),
+    BLUETOOTH("Head-unit Bluetooth OFF", "Enable head-unit Bluetooth"),
+    WINDOWS("Close windows", "Check that all windows are closed"),
+    CLUSTER("Dim instrument cluster", "Restore instrument cluster"),
+    MEDIA("Mute media", "Restore media"),
+    CARPLAY("Disconnect CarPlay", "Reconnect your phone if needed"),
+    CLIMATE("Climate OFF", "Leave climate OFF"),
+    DRLS("DRLs OFF", "Restore DRLs"),
+    HUD("HUD OFF", "Restore HUD"),
+    SCREEN("Screen OFF", "Wake the centre screen");
 
     companion object {
         fun decodeSaved(names: Set<String>): Set<CampStep> =
@@ -63,7 +64,10 @@ internal interface CampActions {
     suspend fun restoreHud(saved: CampSavedState): CampResult
     suspend fun enableHeadunitBluetooth(saved: CampSavedState): CampResult
     suspend fun enableDikeyLights(saved: CampSavedState): CampResult
-    suspend fun persist(saved: CampSavedState?, report: String, completedSteps: Set<CampStep>, remindHeadlights: Boolean)
+    suspend fun persist(
+        saved: CampSavedState?, report: String, completedSteps: Set<CampStep>, remindHeadlights: Boolean,
+        failedSteps: Map<CampStep, CampActionError>, sessionError: String?,
+    )
 }
 
 /** One-shot sequence: no periodic enforcement or automatic re-entry after a process restart. */
@@ -73,6 +77,8 @@ internal class CampModeSession(
     report: String = "",
     completedSteps: Set<CampStep> = emptySet(),
     remindHeadlights: Boolean = false,
+    failedSteps: Map<CampStep, CampActionError> = emptyMap(),
+    sessionError: String? = null,
 ) {
     data class State(
         val active: Boolean,
@@ -83,50 +89,56 @@ internal class CampModeSession(
         val awaitingWake: Boolean = false,
         val screenOffStartedAtMillis: Long = 0,
         val remindHeadlights: Boolean = false,
+        val failedSteps: Map<CampStep, CampActionError> = emptyMap(),
+        val restoring: Boolean = false,
+        val sessionError: String? = null,
     )
     private var saved = saved
     private var stopping = false
     private var restoreAfterEntry = false
+    private var entryNeedsRollback = false
     private val mutableState = MutableStateFlow(State(saved != null, false, report,
         if (saved != null) completedSteps else emptySet(),
         awaitingWake = saved != null && CampStep.SCREEN in completedSteps,
-        screenOffStartedAtMillis = System.currentTimeMillis(), remindHeadlights = remindHeadlights))
+        screenOffStartedAtMillis = System.currentTimeMillis(), remindHeadlights = remindHeadlights,
+        failedSteps = failedSteps, sessionError = sessionError))
     val state = mutableState.asStateFlow()
 
     suspend fun enter() {
         if (state.value.busy || saved != null) return
         stopping = false
         restoreAfterEntry = false
+        entryNeedsRollback = false
         mutableState.value = State(false, true, "", remindHeadlights = state.value.remindHeadlights)
         try {
             val original = actions.save()
             saved = original
             // Durably save restoration data before the very first write to the car.
-            actions.persist(saved, "", emptySet(), false)
-            mutableState.value = State(true, true, "")
+            actions.persist(saved, state.value.report, emptySet(), false, emptyMap(), null)
+            mutableState.value = State(true, true, state.value.report)
             val steps: List<Pair<CampStep, suspend () -> CampResult>> = listOf(
                 CampStep.DIKEY to { actions.dikeyLightsOff(original) },
-                CampStep.CARPLAY to { actions.disconnectCarPlay() },
                 CampStep.BLUETOOTH to { actions.headunitBluetoothOff() },
-                CampStep.CLIMATE to { actions.climateOff() },
                 CampStep.WINDOWS to { actions.closeWindows() },
-                CampStep.DRLS to { actions.drlOff() },
                 CampStep.CLUSTER to { actions.dimCluster() },
-                CampStep.HUD to { actions.hudOff() },
                 CampStep.MEDIA to { actions.muteMedia() },
+                CampStep.CARPLAY to { actions.disconnectCarPlay() },
+                CampStep.CLIMATE to { actions.climateOff() },
+                CampStep.DRLS to { actions.drlOff() },
+                CampStep.HUD to { actions.hudOff() },
                 CampStep.SCREEN to { actions.screenOff() },
             )
             for ((step, run) in steps) {
                 if (state.value.completedSteps.isNotEmpty()) delay(500)
                 if (stopping) {
-                    record("Entry stopped. Use Retry restoring settings to restore the saved settings.")
+                    record(entryStoppedMessage())
                     return
                 }
                 mutableState.value = state.value.copy(currentStep = step)
                 val label = step.reportLabel
                 record("$label: starting")
                 if (stopping) {
-                    record("Entry stopped. Use Retry restoring settings to restore the saved settings.")
+                    record(entryStoppedMessage())
                     return
                 }
                 // Arm before the shortcut: a wake event can arrive before its command returns.
@@ -134,16 +146,22 @@ internal class CampModeSession(
                     mutableState.value = state.value.copy(awaitingWake = true,
                         screenOffStartedAtMillis = System.currentTimeMillis())
                 }
-                val result = run()
+                val result = attempt(run)
                 if (step == CampStep.SCREEN && !result.success) {
                     mutableState.value = state.value.copy(awaitingWake = false)
                 }
                 if (result.success) {
                     mutableState.value = state.value.copy(completedSteps = state.value.completedSteps + step)
+                } else {
+                    entryNeedsRollback = true
+                    restoreAfterEntry = true
+                    mutableState.value = state.value.copy(
+                        failedSteps = state.value.failedSteps + (step to CampActionError(label, result.detail)),
+                    )
                 }
                 record("$label: ${if (result.success) "OK" else "NOT CONFIRMED"} - ${result.detail}")
                 if (!result.success) {
-                    record("Entry incomplete. Use Retry restoring settings to restore the saved settings.")
+                    record("Entry incomplete. Automatically restoring settings changed during entry.")
                     return
                 }
             }
@@ -151,18 +169,24 @@ internal class CampModeSession(
                 record("Camp Mode active. Touch the screen to wake it and automatically restore saved settings.")
             }
         } catch (e: IOException) {
+            entryNeedsRollback = true
+            restoreAfterEntry = saved != null
             failure("Entry failed", e)
         } catch (e: SecurityException) {
+            entryNeedsRollback = true
+            restoreAfterEntry = saved != null
             failure("Entry failed", e)
         } catch (e: IllegalStateException) {
             if (e is CancellationException) throw e
+            entryNeedsRollback = true
+            restoreAfterEntry = saved != null
             failure("Entry failed", e)
         } finally {
             mutableState.value = state.value.copy(active = saved != null, busy = false, currentStep = null,
                 awaitingWake = state.value.awaitingWake && CampStep.SCREEN in state.value.completedSteps)
             if (restoreAfterEntry) {
                 restoreAfterEntry = false
-                exit()
+                exit(if (entryNeedsRollback) state.value.completedSteps + state.value.failedSteps.keys else null)
             }
         }
     }
@@ -173,6 +197,24 @@ internal class CampModeSession(
         if (state.value.busy) restoreAfterEntry = true else exit()
     }
 
+    suspend fun endForSafety(reason: String) {
+        if (state.value.restoring || (saved == null && !state.value.busy)) return
+        mutableState.value = state.value.copy(report = (state.value.report + "\n" + reason).trimStart())
+        if (state.value.busy) {
+            stopping = true
+            entryNeedsRollback = true
+            restoreAfterEntry = true
+        } else {
+            exit()
+        }
+    }
+
+    private fun entryStoppedMessage(): String = if (restoreAfterEntry) {
+        "Entry interrupted. Automatically restoring saved settings."
+    } else {
+        "Entry stopped. Use Retry restoring settings to restore the saved settings."
+    }
+
     suspend fun checkBatteryCutoff(soc: Double?, cutoff: Int) {
         if (state.value.awaitingWake && !state.value.busy && batteryAtCutoff(soc, cutoff)) exit()
     }
@@ -180,36 +222,47 @@ internal class CampModeSession(
     suspend fun acknowledgeHeadlightReminder() {
         val current = state.value
         if (!current.remindHeadlights) return
-        actions.persist(saved, current.report, current.completedSteps, false)
+        actions.persist(saved, current.report, current.completedSteps, false, current.failedSteps, current.sessionError)
         mutableState.value = current.copy(remindHeadlights = false)
     }
 
-    suspend fun exit() {
+    suspend fun exit(stepsToRestore: Set<CampStep>? = null) {
         val original = saved ?: return
         if (state.value.busy) return
-        mutableState.value = state.value.copy(busy = true, awaitingWake = false, remindHeadlights = true)
+        mutableState.value = state.value.copy(
+            busy = true, restoring = true, awaitingWake = false, remindHeadlights = true,
+            sessionError = if (stepsToRestore == null) null else state.value.sessionError,
+            // These are not reversed: the screen is awake, windows stay closed and CarPlay stays disconnected.
+            completedSteps = state.value.completedSteps - setOf(CampStep.SCREEN, CampStep.WINDOWS, CampStep.CARPLAY),
+        )
         try {
             record("Exiting Camp Mode. Turn the headlights back on and verify normal lighting before driving.")
             var restored = true
-            val steps: List<Pair<String, suspend () -> CampResult>> = listOf(
-                "Restore instrument cluster" to { actions.restoreCluster(original) },
-                "Restore HUD" to { actions.restoreHud(original) },
-                "Enable head-unit Bluetooth" to { actions.enableHeadunitBluetooth(original) },
-                "Enable DiKey lights" to { actions.enableDikeyLights(original) },
-                "Restore media" to { actions.restoreMedia(original) },
-                "Restore DRLs" to { actions.restoreDrl(original) },
-                "Leave climate OFF" to { actions.restoreClimate(original) },
+            val steps: List<Pair<CampStep, suspend () -> CampResult>> = listOf(
+                CampStep.CLUSTER to { actions.restoreCluster(original) },
+                CampStep.HUD to { actions.restoreHud(original) },
+                CampStep.BLUETOOTH to { actions.enableHeadunitBluetooth(original) },
+                CampStep.DIKEY to { actions.enableDikeyLights(original) },
+                CampStep.MEDIA to { actions.restoreMedia(original) },
+                CampStep.DRLS to { actions.restoreDrl(original) },
+                CampStep.CLIMATE to { actions.restoreClimate(original) },
             )
-            for ((label, run) in steps) {
-                val result = try {
-                    run()
-                } catch (e: IOException) {
-                    CampResult(false, "${e.javaClass.simpleName}: ${e.message}")
-                } catch (e: SecurityException) {
-                    CampResult(false, "${e.javaClass.simpleName}: ${e.message}")
-                } catch (e: IllegalStateException) {
-                    if (e is CancellationException) throw e
-                    CampResult(false, "${e.javaClass.simpleName}: ${e.message}")
+            for ((step, run) in steps) {
+                if (stepsToRestore != null && step !in stepsToRestore) continue
+                val label = step.recoveryLabel
+                mutableState.value = state.value.copy(currentStep = step)
+                val result = attempt(run)
+                mutableState.value = if (result.success) {
+                    state.value.copy(
+                        completedSteps = state.value.completedSteps - step,
+                        failedSteps = if (state.value.failedSteps[step]?.duringRestoration == false) {
+                            state.value.failedSteps
+                        } else state.value.failedSteps - step,
+                    )
+                } else {
+                    state.value.copy(
+                        failedSteps = state.value.failedSteps + (step to CampActionError(label, result.detail, true)),
+                    )
                 }
                 record("$label: ${if (result.success) "OK" else "FAILED"} - ${result.detail}")
                 restored = restored && result.success
@@ -217,7 +270,8 @@ internal class CampModeSession(
             if (restored) {
                 val report = state.value.report + "\nCamp Mode disabled. Windows remain closed; climate remains OFF."
                 saved = null
-                actions.persist(null, report, emptySet(), state.value.remindHeadlights)
+                actions.persist(null, report, emptySet(), state.value.remindHeadlights,
+                    state.value.failedSteps, state.value.sessionError)
                 mutableState.value = state.value.copy(active = false, report = report, completedSteps = emptySet())
             } else {
                 record("Restoration incomplete. Saved settings retained; use Retry restoring settings.")
@@ -233,14 +287,20 @@ internal class CampModeSession(
             saved = original
             failure("Restoration failed", e)
         } finally {
-            mutableState.value = state.value.copy(active = saved != null, busy = false)
+            mutableState.value = state.value.copy(active = saved != null, busy = false, restoring = false, currentStep = null)
         }
     }
 
     suspend fun stopWindows() {
         stopping = true
         try {
-            val result = actions.stopWindows()
+            val result = attempt { actions.stopWindows() }
+            if (!result.success) {
+                mutableState.value = state.value.copy(
+                    failedSteps = state.value.failedSteps +
+                        (CampStep.WINDOWS to CampActionError("Stop windows", result.detail)),
+                )
+            }
             record("STOP WINDOWS: ${if (result.success) "sent" else "FAILED"} - ${result.detail}")
         } catch (e: IOException) {
             failure("STOP WINDOWS failed", e)
@@ -255,16 +315,57 @@ internal class CampModeSession(
     private suspend fun record(line: String) {
         val report = (state.value.report + "\n" + line).trimStart()
         mutableState.value = state.value.copy(report = report)
-        actions.persist(saved, report, state.value.completedSteps, state.value.remindHeadlights)
+        if (!state.value.restoring) {
+            persistState()
+            return
+        }
+        try {
+            persistState()
+        } catch (e: IOException) {
+            recordPersistenceError(e)
+        } catch (e: SecurityException) {
+            recordPersistenceError(e)
+        } catch (e: IllegalStateException) {
+            if (e is CancellationException) throw e
+            recordPersistenceError(e)
+        }
+    }
+
+    private suspend fun attempt(run: suspend () -> CampResult): CampResult = try {
+        run()
+    } catch (e: IOException) {
+        CampResult(false, "${e.javaClass.simpleName}: ${e.message}")
+    } catch (e: SecurityException) {
+        CampResult(false, "${e.javaClass.simpleName}: ${e.message}")
+    } catch (e: IllegalStateException) {
+        if (e is CancellationException) throw e
+        CampResult(false, "${e.javaClass.simpleName}: ${e.message}")
+    }
+
+    private suspend fun persistState() {
+        val current = state.value
+        actions.persist(saved, current.report, current.completedSteps, current.remindHeadlights,
+            current.failedSteps, current.sessionError)
+    }
+
+    private fun recordPersistenceError(e: Exception) {
+        val message = "Could not save restoration progress: ${e.javaClass.simpleName}: ${e.message}"
+        mutableState.value = state.value.copy(sessionError = message, report = state.value.report + "\n$message")
     }
 
     private suspend fun failure(label: String, e: Exception) {
         // Even a persistence error must remain visible; never disguise it as a completed step.
-        mutableState.value = state.value.copy(report = state.value.report + "\n$label: ${e.javaClass.simpleName}: ${e.message}")
+        val message = "$label: ${e.javaClass.simpleName}: ${e.message}"
+        mutableState.value = state.value.copy(report = state.value.report + "\n$message", sessionError = message)
         try {
-            actions.persist(saved, state.value.report, state.value.completedSteps, state.value.remindHeadlights)
+            persistState()
         } catch (saveError: IOException) {
-            mutableState.value = state.value.copy(report = state.value.report + "\nCould not save report: ${saveError.message}")
+            recordPersistenceError(saveError)
+        } catch (saveError: SecurityException) {
+            recordPersistenceError(saveError)
+        } catch (saveError: IllegalStateException) {
+            if (saveError is CancellationException) throw saveError
+            recordPersistenceError(saveError)
         }
     }
 }

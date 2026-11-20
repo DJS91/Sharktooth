@@ -53,19 +53,21 @@ The debug app opens Dashboard with example readings, not live vehicle data. The 
 
 Open **Modes** (tent icon) → **Camp Mode**. Use it only with the vehicle safely parked. It does not keep the vehicle powered, maintain cabin climate or monitor occupants. Headlights remain under your manual control.
 
+In the debug app, Camp Mode opens a labelled preview showing **P** and **76%** battery. **Start Camping Mode** runs a simulated checklist without changing vehicle settings, Bluetooth, media volume or the screen. Touch the screen after completion to simulate restoration and see the headlight reminder. Preview cutoff changes and session progress are not saved; Save SoC is unavailable in the preview.
+
 ### Start a session
 
-1. Put the vehicle in **P** and leave it switched **on**. The start button is disabled until Sharktooth confirms Park and can read a battery charge above the cutoff.
+1. Put the vehicle in **P** and leave it switched **on**. The start button is disabled until Sharktooth confirms Park and can read a battery charge above the cutoff. Turn the headlights off manually; the note below the start button highlights this reminder.
 2. Set **Battery cutoff** with **−** and **+** before starting. The default is **10%**. The setting is saved and cannot be changed during a session.
 3. Keep hands and objects clear of all windows, then tap **Enable Camping Mode**. The process starts without a confirmation popup. Use **STOP WINDOWS** if you need to halt window movement while the steps are running.
 
-The read-only **Actions** checklist marks each completed step. Sharktooth turns off connected DiKey strip and button lights, disconnects active CarPlay, turns off head-unit Bluetooth and climate, closes the windows, turns off daytime running lights (DRLs), dims the instrument cluster, turns off the head-up display (HUD), mutes media and turns off the centre screen. A failed step stops entry. The DiKey lighting step is skipped if no bar is connected; it does not switch off the dial displays. Checklist progress is kept across app restarts and clears after successful restoration.
+The read-only **Actions** checklist runs down the left column first, then down the right column. Each completed step shows a white tick inside a green circle. Sharktooth turns off connected DiKey strip and button lights, turns off head-unit Bluetooth, closes the windows, dims the instrument cluster and mutes media. It then disconnects active CarPlay, turns off climate and daytime running lights (DRLs), turns off the head-up display (HUD) and finally turns off the centre screen. A failed step turns red and shows its error below the left card. Entry stops immediately and Sharktooth automatically restores the steps already attempted; it does not run the remaining entry steps. The DiKey lighting step is skipped if no bar is connected; it does not switch off the dial displays. Progress and errors are kept across app restarts.
 
 ### End a session
 
-1. Touch the centre screen to wake it and start restoration. Reaching the battery cutoff also starts restoration automatically while Sharktooth is running, even if the Camp Mode page is closed. A missing battery reading does not trigger restoration, and the cutoff does **not** switch the vehicle off.
-2. Stay in **P** while Sharktooth restores the cluster brightness, HUD, media and DRLs and re-enables head-unit Bluetooth and connected DiKey lighting. If restoration is incomplete, open **Camp Mode** and tap **Retry restoring settings**.
-3. When the **Headlight reminder** appears, turn the headlights back on and visually check that lighting is normal before driving. The windows remain closed, climate stays off, and CarPlay does not restart automatically. Turn climate back on and reconnect your phone normally if needed.
+1. Touch the centre screen to wake it and start restoration. Leaving **P** also ends Camping Mode automatically. If the vehicle is switched off during a session, restoration starts when it next confirms **READY**. A saved session recovered after the app restarts or the head unit resumes from suspension is also restored once READY is confirmed, rather than silently continuing Camping Mode. These safeguards work while Sharktooth is running, even if the Camp Mode page is closed. Reaching the battery cutoff also starts restoration; a missing battery reading does not trigger it, and the cutoff does **not** switch the vehicle off.
+2. Stay in **P** while Sharktooth restores the cluster brightness, HUD, media and DRLs and re-enables head-unit Bluetooth and connected DiKey lighting. Each resolved step unticks. A failed recovery stays red with its error below the left card, but the remaining recovery actions continue. If restoration is incomplete, tap **Retry restoring settings**; saved settings remain available for retry.
+3. When the **Headlight reminder** appears, turn the headlights back on and visually check that lighting is normal before driving. If anything failed, the popup also lists the recovery actions to perform manually. The windows remain closed, climate stays off, and CarPlay does not restart automatically. Turn climate back on and reconnect your phone normally if needed.
 
 ### Save SoC
 

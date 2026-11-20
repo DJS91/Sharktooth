@@ -10,6 +10,15 @@
         android:layout_gravity="center_horizontal"
         android:layout_marginTop="4dp" />
 
+    <TextView
+        android:id="@+id/campModePreviewNotice"
+        android:layout_width="match_parent"
+        android:layout_height="wrap_content"
+        android:gravity="center"
+        android:text="@string/camp_mode_debug_preview"
+        android:textColor="@color/text_muted"
+        android:visibility="gone" />
+
     <ScrollView
         android:layout_width="match_parent"
         android:layout_height="0dp"
@@ -28,13 +37,18 @@
                 android:baselineAligned="false"
                 android:orientation="horizontal">
 
-                <com.google.android.material.card.MaterialCardView
-                    android:id="@+id/campModeOverview"
-                    style="@style/Widget.OpenDiKey.CampCard"
+                <LinearLayout
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
                     android:layout_marginEnd="12dp"
-                    android:layout_weight="2">
+                    android:layout_weight="1"
+                    android:orientation="vertical">
+
+                <com.google.android.material.card.MaterialCardView
+                    android:id="@+id/campModeOverview"
+                    style="@style/Widget.OpenDiKey.CampCard"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content">
 
                     <LinearLayout
                         android:layout_width="match_parent"
@@ -107,8 +121,17 @@
                             android:text="@string/camp_mode_waiting_for_park" />
 
                         <TextView
+                            android:id="@+id/campModeHeadlightNote"
+                            style="@style/CampMetricLabel"
+                            android:layout_width="match_parent"
+                            android:layout_marginTop="8dp"
+                            android:gravity="center"
+                            android:text="@string/camp_mode_headlight_note" />
+
+                        <TextView
                             android:id="@+id/campModeWindowSafety"
                             style="@style/CampMetricLabel"
+                            android:layout_width="match_parent"
                             android:layout_gravity="center_horizontal"
                             android:gravity="center"
                             android:text="@string/camp_mode_window_safety"
@@ -122,12 +145,23 @@
                     </LinearLayout>
                 </com.google.android.material.card.MaterialCardView>
 
+                <TextView
+                    android:id="@+id/campModeErrors"
+                    android:layout_width="match_parent"
+                    android:layout_height="wrap_content"
+                    android:layout_marginTop="8dp"
+                    android:accessibilityLiveRegion="polite"
+                    android:textAppearance="@style/TextAppearance.MaterialComponents.Body2"
+                    android:textColor="@color/tyre_fault"
+                    android:visibility="gone" />
+                </LinearLayout>
+
                 <com.google.android.material.card.MaterialCardView
                     android:id="@+id/campModeOptions"
                     style="@style/Widget.OpenDiKey.CampCard"
                     android:layout_width="0dp"
                     android:layout_height="wrap_content"
-                    android:layout_weight="3">
+                    android:layout_weight="1">
 
                     <LinearLayout
                         android:layout_width="match_parent"

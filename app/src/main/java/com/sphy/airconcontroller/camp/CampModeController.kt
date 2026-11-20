@@ -47,8 +47,11 @@ internal class CampModeController private constructor(context: Context) {
     private val saved = prefs.getString("saved", null)?.let { decodeSaved(JSONObject(it)) }
     private val session = CampModeSession(actions, saved, prefs.getString("report", "").orEmpty(),
         CampStep.decodeSaved(prefs.getStringSet("completedSteps", emptySet()).orEmpty()),
-        prefs.getBoolean("remindHeadlights", false))
+        prefs.getBoolean("remindHeadlights", false),
+        prefs.getString("failedSteps", null)?.let { decodeErrors(JSONObject(it)) }.orEmpty(),
+        prefs.getString("sessionError", null))
     val state = session.state
+    private val safety = CampModeSafety(recoveredSession = saved != null)
     private val telemetry = BydVehicleInfoController(app)
     private val telemetryLock = Mutex()
     private val selectedCutoff = MutableStateFlow(prefs.getInt("batteryCutoff", 10).coerceIn(1, 99))
@@ -146,9 +149,37 @@ internal class CampModeController private constructor(context: Context) {
         }
     }
 
-    fun enter() { scope.launch { session.enter() } }
+    fun enter() {
+        scope.launch {
+            if (!state.value.active && !state.value.busy) safety.reset()
+            session.enter()
+        }
+    }
     fun exit() { scope.launch { session.exit() } }
     fun stopWindows() { scope.launch { session.stopWindows() } }
+
+    fun onVehicleSafetySample(
+        gear: BydVehicleInfoController.GearReads?,
+        power: BydVehicleInfoController.PowerReads,
+        resumedAfterSleep: Boolean,
+    ) {
+        scope.launch {
+            val current = state.value
+            val reason = safety.sample(
+                sessionActive = current.active || current.busy,
+                gear = gear,
+                ready = power.energyMode?.takeIf { it >= 0 }?.let { it > 0 },
+                resumedAfterSleep = resumedAfterSleep,
+            ) ?: return@launch
+            val message = app.getString(when (reason) {
+                CampModeSafety.ExitReason.LEFT_PARK -> R.string.camp_mode_safety_gear_exit
+                CampModeSafety.ExitReason.VEHICLE_RESTARTED -> R.string.camp_mode_safety_restart_exit
+                CampModeSafety.ExitReason.SESSION_RECOVERED -> R.string.camp_mode_safety_recovered_exit
+            })
+            Log.i("CampModeController", message)
+            session.endForSafety(message)
+        }
+    }
     fun acknowledgeHeadlightReminder() {
         scope.launch {
             try {
@@ -367,12 +398,15 @@ internal class CampModeController private constructor(context: Context) {
 
         override suspend fun persist(
             saved: CampSavedState?, report: String, completedSteps: Set<CampStep>, remindHeadlights: Boolean,
+            failedSteps: Map<CampStep, CampActionError>, sessionError: String?,
         ) {
             persistence.withLock {
                 io {
                     val editor = prefs.edit().putString("report", report)
                         .putStringSet("completedSteps", completedSteps.map { it.name }.toSet())
                         .putBoolean("remindHeadlights", remindHeadlights)
+                        .putString("failedSteps", encodeErrors(failedSteps).toString())
+                        .putString("sessionError", sessionError)
                         .putBoolean("lightingSuppressed", dikey.controller.lightingSuppressed)
                     if (saved == null) editor.remove("saved") else editor.putString("saved", encodeSaved(saved).toString())
                     if (!editor.commit()) throw IOException("Cannot save Camp Mode restoration data.")
@@ -382,6 +416,20 @@ internal class CampModeController private constructor(context: Context) {
     }
 
     companion object {
+        internal fun encodeErrors(errors: Map<CampStep, CampActionError>): JSONObject = JSONObject().apply {
+            errors.forEach { (step, error) ->
+                put(step.name, JSONObject().put("action", error.action).put("detail", error.detail)
+                    .put("duringRestoration", error.duringRestoration))
+            }
+        }
+
+        internal fun decodeErrors(json: JSONObject): Map<CampStep, CampActionError> =
+            json.keys().asSequence().associate { key ->
+                val error = json.getJSONObject(key)
+                CampStep.valueOf(key) to CampActionError(error.getString("action"), error.getString("detail"),
+                    error.optBoolean("duringRestoration", false))
+            }
+
         private fun wakeLogCommand(sinceMillis: Long): String {
             val timestamp = "${sinceMillis / 1000}.${(sinceMillis % 1000).toString().padStart(3, '0')}"
             return "logcat -d -v epoch -b main,system -T '$timestamp' -s TsCarPower:W '*:S'"

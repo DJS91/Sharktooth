@@ -4,6 +4,7 @@ import android.content.Context
 import android.os.SystemClock
 import android.util.Log
 import com.sphy.airconcontroller.byd.BydVehicleInfoController
+import com.sphy.airconcontroller.camp.CampModeController
 import com.sphy.airconcontroller.storage.AppSettings
 import com.sphy.airconcontroller.ui.TripUsageTracker
 import kotlinx.coroutines.CoroutineScope
@@ -80,9 +81,10 @@ object VehicleStateWatcher {
         private var lastPowerTriggerAt = 0L
 
         fun tick() {
-            checkSleepGap()
+            val resumedAfterSleep = checkSleepGap()
             val gear = checkGear()
             val power = checkPower()
+            CampModeController.get(app).onVehicleSafetySample(gear, power, resumedAfterSleep)
             val previousTrip = tripUsage.state
             val knownGears = listOfNotNull(gear?.gear, gear?.autoMode).filter { it in 1..6 }.distinct()
             val enteredDriveFromPark = tripUsage.state.lastGear == 1 && knownGears.singleOrNull() == 4
@@ -99,7 +101,7 @@ object VehicleStateWatcher {
             AdasAutoApplyCoordinator.periodicCheck(app)
         }
 
-        private fun checkSleepGap() {
+        private fun checkSleepGap(): Boolean {
             val now = SystemClock.elapsedRealtime()
             val gapMs = now - lastTickAt
             lastTickAt = now
@@ -107,6 +109,7 @@ object VehicleStateWatcher {
                 record("sleep gap: loop stalled for ${gapMs / 1000}s (device likely suspended)")
                 recheck("sleep-gap")
             }
+            return gapMs > SLEEP_GAP_MS
         }
 
         private fun checkGear(): BydVehicleInfoController.GearReads? {
