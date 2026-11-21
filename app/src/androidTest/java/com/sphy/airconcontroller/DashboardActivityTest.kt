@@ -520,9 +520,16 @@ class DashboardActivityTest {
                 R.string.vehicle_info_row_combined to "788 km",
             )
             expected.forEachIndexed { index, (label, value) ->
-                val range = ranges.getChildAt(index * 2)
-                assertEquals(page.getString(label), range.findViewById<TextView>(R.id.infoRowLabel).text.toString())
-                assertEquals(value, range.findViewById<TextView>(R.id.infoRowValue).text.toString())
+                val range = ranges.getChildAt(index * 2) as LinearLayout
+                val labelView = range.findViewById<TextView>(R.id.infoRowLabel)
+                val valueView = range.findViewById<TextView>(R.id.infoRowValue)
+                assertEquals(page.getString(label), labelView.text.toString())
+                assertEquals(value, valueView.text.toString())
+                assertEquals(LinearLayout.VERTICAL, range.orientation)
+                assertTrue(labelView.textSize < valueView.textSize)
+                assertEquals(1, labelView.lineCount)
+                assertEquals("The complete range label should fit", 0, labelView.layout.getEllipsisCount(0))
+                assertTrue(labelView.bottom <= valueView.top)
                 if (index > 0) {
                     val separator = ranges.getChildAt(index * 2 - 1)
                     assertTrue(separator.width > 0)
@@ -678,6 +685,24 @@ class DashboardActivityTest {
                 trip = trip, nowMs = 1_081_000L,
             )
             assertEquals("Trip Started: 18 minutes ago\nTraveled: 13.5 km", details.text.toString())
+            for ((minutes, expected) in listOf(
+                0 to "0 minutes",
+                1 to "1 minute",
+                59 to "59 minutes",
+                60 to "1 hour 0 minutes",
+                61 to "1 hour 1 minute",
+                125 to "2 hours 5 minutes",
+                1_439 to "23 hours 59 minutes",
+                1_440 to "1 day 0 hours 0 minutes",
+                1_501 to "1 day 1 hour 1 minute",
+                3_005 to "2 days 2 hours 5 minutes",
+            )) {
+                page.bindDashboardBattery(
+                    BydVehicleInfoController.BatteryInfo(bound = true, odoKm = 12_481.5),
+                    trip = trip, nowMs = 1_000L + minutes * 60_000L,
+                )
+                assertEquals("Trip Started: $expected ago\nTraveled: 13.5 km", details.text.toString())
+            }
             page.bindDashboardBattery(BydVehicleInfoController.BatteryInfo(bound = false))
             assertEquals("Trip Started: —\nTraveled: — km", details.text.toString())
         }

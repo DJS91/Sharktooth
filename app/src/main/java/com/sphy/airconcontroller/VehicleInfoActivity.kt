@@ -685,8 +685,18 @@ open class VehicleInfoActivity : HomeActivity() {
         }
         val started = if (elapsedMinutes == null) {
             getString(R.string.dashboard_trip_started_unknown)
-        } else {
+        } else if (elapsedMinutes < 60) {
             resources.getQuantityString(R.plurals.dashboard_trip_started_minutes, elapsedMinutes, elapsedMinutes)
+        } else {
+            val days = elapsedMinutes / (24 * 60)
+            val hours = (elapsedMinutes / 60) % 24
+            val minutes = elapsedMinutes % 60
+            val duration = buildList {
+                if (days > 0) add(resources.getQuantityString(R.plurals.dashboard_trip_days, days, days))
+                add(resources.getQuantityString(R.plurals.dashboard_trip_hours, hours, hours))
+                add(resources.getQuantityString(R.plurals.dashboard_trip_minutes, minutes, minutes))
+            }.joinToString(" ")
+            getString(R.string.dashboard_trip_started_elapsed, duration)
         }
         val distance = trip?.distanceKm(b.odoKm)?.let { trimNum(it) }
             ?: getString(R.string.dashboard_value_unavailable)
@@ -704,6 +714,7 @@ open class VehicleInfoActivity : HomeActivity() {
                 getString(R.string.vehicle_info_row_fuel_range) to fmt(b.fuelRangeKm, " km"),
                 getString(R.string.vehicle_info_row_combined) to fmt(b.combinedRangeKm, " km"),
             ),
+            stackedLabels = true,
         )
     }
 
@@ -891,7 +902,11 @@ open class VehicleInfoActivity : HomeActivity() {
         }
     }
 
-    private fun appendTextColumns(host: LinearLayout, rows: List<Pair<String, String>>) {
+    private fun appendTextColumns(
+        host: LinearLayout,
+        rows: List<Pair<String, String>>,
+        stackedLabels: Boolean = false,
+    ) {
         val columns = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.CENTER_VERTICAL
@@ -910,7 +925,7 @@ open class VehicleInfoActivity : HomeActivity() {
                 }
                 setBackgroundColor(ContextCompat.getColor(this@VehicleInfoActivity, R.color.divider_soft))
             })
-            columns.addView(inflateInfoRow(LayoutInflater.from(this), columns, row).also {
+            columns.addView(inflateInfoRow(LayoutInflater.from(this), columns, row, stackedLabels).also {
                 it.layoutParams = LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f)
             })
         }
@@ -925,10 +940,23 @@ open class VehicleInfoActivity : HomeActivity() {
         inflater: LayoutInflater,
         parent: LinearLayout,
         row: Pair<String, String>,
+        stackedLabels: Boolean = false,
     ): View {
-        val view = inflater.inflate(R.layout.view_info_row, parent, false)
-        view.findViewById<TextView>(R.id.infoRowLabel).text = row.first
-        view.findViewById<TextView>(R.id.infoRowValue).text = row.second
+        val view = inflater.inflate(R.layout.view_info_row, parent, false) as LinearLayout
+        val label = view.findViewById<TextView>(R.id.infoRowLabel)
+        val value = view.findViewById<TextView>(R.id.infoRowValue)
+        label.text = row.first
+        value.text = row.second
+        if (stackedLabels) {
+            view.orientation = LinearLayout.VERTICAL
+            label.layoutParams = LinearLayout.LayoutParams(
+                LinearLayout.LayoutParams.MATCH_PARENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+            )
+            label.setTextAppearance(com.google.android.material.R.style.TextAppearance_MaterialComponents_Caption)
+            label.maxLines = 1
+            label.ellipsize = TextUtils.TruncateAt.END
+            value.gravity = Gravity.START
+        }
         return view
     }
 

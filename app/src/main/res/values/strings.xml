@@ -25,6 +25,19 @@
       <item quantity="one">Trip Started: %d minute ago</item>
       <item quantity="other">Trip Started: %d minutes ago</item>
     </plurals>
+    <string name="dashboard_trip_started_elapsed">Trip Started: %1$s ago</string>
+    <plurals name="dashboard_trip_days">
+      <item quantity="one">%d day</item>
+      <item quantity="other">%d days</item>
+    </plurals>
+    <plurals name="dashboard_trip_hours">
+      <item quantity="one">%d hour</item>
+      <item quantity="other">%d hours</item>
+    </plurals>
+    <plurals name="dashboard_trip_minutes">
+      <item quantity="one">%d minute</item>
+      <item quantity="other">%d minutes</item>
+    </plurals>
     <string name="dashboard_pedals">Pedals</string>
     <item type="id" name="dashboardPedalPeaks" />
     <item type="id" name="dashboardPowerFlowDiagram" />
