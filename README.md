@@ -31,7 +31,7 @@ For detailed setup, privacy, troubleshooting and safety information, see the [fe
 3. Accept **Allow USB debugging** and the hidden-API exemption; the app may restart.
 4. Allow Sharktooth in the DiLink **auto-start / run in background** settings if available.
 
-The APK keeps its Android package ID for update compatibility. Replacing an installed build also requires a compatible signing key and version. Releases include identical copies under the old `open-dikey.apk` and `dikey-usb-bridge-c3.bin` filenames so existing app updaters and download links continue to work. New apps prefer `Sharktooth.apk` but can still update from older releases.
+The APK keeps its Android package ID for update compatibility. Replacing an installed build also requires a compatible signing key and version. New releases publish only `Sharktooth.apk`; apps that still require `open-dikey.apk` must sideload the renamed APK once. New apps can still read older releases using the old APK name. Stable releases retain an identical `dikey-usb-bridge-c3.bin` firmware compatibility copy.
 
 
 ### (Optional) Physical Control buttons bar

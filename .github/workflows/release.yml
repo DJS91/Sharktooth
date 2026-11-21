@@ -117,7 +117,6 @@ jobs:
             exit 1
           fi
           mv "$APK" dist/Sharktooth.apk
-          cp dist/Sharktooth.apk dist/open-dikey.apk
 
       - name: Install PlatformIO
         if: steps.firmware.outputs.build == 'true'
@@ -146,10 +145,7 @@ jobs:
             Install `Sharktooth.apk` once to opt into dev updates, then use Settings → Updates → Check for updates.
             Signed with the public release key; keeps the same package and app data.
             Public release builds do not offer these prereleases.
-            `open-dikey.apk` is an identical compatibility copy for older app updaters.
-          files: |
-            dist/Sharktooth.apk
-            dist/open-dikey.apk
+          files: dist/Sharktooth.apk
           fail_on_unmatched_files: true
           draft: false
           prerelease: true
@@ -168,14 +164,13 @@ jobs:
             1. Flash `Sharktooth-usb-bridge-c3.bin` onto an ESP32-C3 Super Mini
             2. Install `Sharktooth.apk` on the DiLink 5 head unit
 
-            The old filenames are identical compatibility copies for existing users.
+            `dikey-usb-bridge-c3.bin` is an identical firmware compatibility copy.
 
             See the [README](https://github.com/DJS91/Sharktooth#app-installation) for details.
 
             **Version:** `${{ steps.version.outputs.name }}` (code `${{ steps.version.outputs.code }}`)
           files: |
             dist/Sharktooth.apk
-            dist/open-dikey.apk
             dist/Sharktooth-usb-bridge-c3.bin
             dist/dikey-usb-bridge-c3.bin
           draft: false
