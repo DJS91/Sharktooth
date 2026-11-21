@@ -22,7 +22,7 @@ internal class PedalGauge(context: Context) : View(context) {
         context.getColor(R.color.dashboard_accent_blue),
         context.getColor(R.color.dashboard_brake),
     )
-    private val track = context.getColor(R.color.surface_stroke)
+    private val track = context.getColor(R.color.dashboard_pedal_track)
     private val labels = arrayOf(
         context.getString(R.string.dashboard_pedal_accelerate),
         context.getString(R.string.vehicle_info_row_brake),

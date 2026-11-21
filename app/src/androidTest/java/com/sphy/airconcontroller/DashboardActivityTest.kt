@@ -4,8 +4,11 @@ import android.content.Context
 import android.content.Intent
 import android.content.res.Configuration
 import android.graphics.Bitmap
+import android.graphics.BitmapFactory
 import android.graphics.Canvas
 import android.graphics.Color
+import android.graphics.Rect
+import android.graphics.drawable.BitmapDrawable
 import android.os.SystemClock
 import android.view.Gravity
 import android.view.MotionEvent
@@ -13,6 +16,7 @@ import android.view.InputDevice
 import android.view.View
 import android.view.ViewGroup
 import android.view.ViewConfiguration
+import android.view.WindowManager
 import android.widget.ScrollView
 import android.widget.FrameLayout
 import android.widget.ImageView
@@ -25,6 +29,7 @@ import androidx.test.espresso.action.ViewActions.scrollTo
 import androidx.test.espresso.action.ViewActions.swipeLeft
 import androidx.test.espresso.action.ViewActions.swipeRight
 import androidx.test.espresso.assertion.ViewAssertions.matches
+import androidx.test.espresso.assertion.ViewAssertions.doesNotExist
 import androidx.test.espresso.matcher.ViewMatchers.isDisplayed
 import androidx.test.espresso.matcher.ViewMatchers.withText
 import androidx.test.espresso.matcher.ViewMatchers.withContentDescription
@@ -35,7 +40,10 @@ import androidx.test.platform.app.InstrumentationRegistry
 import androidx.core.content.ContextCompat
 import androidx.core.graphics.ColorUtils
 import com.sphy.airconcontroller.storage.AppSettings
+import com.sphy.airconcontroller.storage.SidebarSide
+import com.sphy.airconcontroller.storage.DashboardHistoryStorage
 import com.sphy.airconcontroller.byd.BydVehicleInfoController
+import com.sphy.airconcontroller.byd.BydTyreController
 import com.sphy.airconcontroller.fridge.FridgeControlsFragment
 import com.sphy.airconcontroller.fridge.formatFridgeUpdateAge
 import com.sphy.airconcontroller.ui.DashboardCard
@@ -46,6 +54,9 @@ import com.sphy.airconcontroller.ui.PercentBar
 import com.sphy.airconcontroller.ui.PedalGauge
 import com.sphy.airconcontroller.ui.PowerFlowView
 import com.sphy.airconcontroller.ui.TripUsageTracker
+import com.sphy.airconcontroller.ui.DashboardHistory
+import com.sphy.airconcontroller.ui.DashboardHistoryGraph
+import com.sphy.airconcontroller.ui.FittedCardPreview
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -60,8 +71,11 @@ class DashboardActivityTest {
     private val pageKeys = listOf("dashboard_cards") + (1..4).map { "dashboard_cards_page_$it" }
     private var previousCards = emptyMap<String, String?>()
     private var activity: VehicleInfoActivity? = null
+    private var previousSidebarSide = SidebarSide.LEFT
 
     @Before fun preserveLayout() {
+        previousSidebarSide = AppSettings(context).sidebarSide
+        AppSettings(context).sidebarSide = SidebarSide.LEFT
         previousCards = pageKeys.associateWith { prefs.getString(it, null) }
         prefs.edit().apply { pageKeys.forEach { remove(it) } }.commit()
     }
@@ -70,6 +84,315 @@ class DashboardActivityTest {
         activity?.let { page -> instrumentation.runOnMainSync { page.finish() } }
         instrumentation.waitForIdleSync()
         prefs.edit().apply { previousCards.forEach { (key, value) -> putString(key, value) } }.commit()
+        AppSettings(context).sidebarSide = previousSidebarSide
+    }
+
+    @Test fun everyNewDetailsCardOpensLiveContentAndDailyGraphsThenRestoresItsCard() {
+        val cards = DashboardCard.entries.filterNot {
+            it == DashboardCard.ENGINE || it == DashboardCard.EVAKOOL_FRIDGE
+        }
+        AppSettings(context).sidebarSide = SidebarSide.LEFT
+        for (card in cards) {
+            AppSettings(context).dashboardCards = listOf(card)
+            val page = open(samples = true)
+            lateinit var original: View
+            lateinit var slot: ViewGroup
+            instrumentation.runOnMainSync {
+                val grid = page.findViewById<ViewGroup>(R.id.dashboardGrid)
+                slot = (grid.getChildAt(0) as ViewGroup).getChildAt(0) as ViewGroup
+                original = slot.getChildAt(0)
+                assertTrue("Whole $card slot should open details", slot.performClick())
+            }
+            instrumentation.waitForIdleSync()
+            onView(withId(R.id.dashboardDetailsColumns)).inRoot(isDialog()).check { root, error ->
+                if (error != null) throw error
+                val details = root.findViewById<View>(R.id.dashboardDetailsControls)
+                val graphs = root.findViewById<View>(R.id.dashboardDetailsGraphs)
+                assertTrue("$card details must be on the sidebar side", details.left < graphs.left)
+                val cardHost = root.findViewById<ViewGroup>(R.id.dashboardDetailsCard)
+                assertSame("Expanded card must keep its live bindings", original, cardHost.getChildAt(0))
+                fun graphCount(view: View): Int = if (view is DashboardHistoryGraph) 1
+                    else if (view is ViewGroup) (0 until view.childCount).sumOf { graphCount(view.getChildAt(it)) } else 0
+                assertTrue("$card needs historical graphs", graphCount(graphs) > 0)
+                if (card == DashboardCard.POWER_FLOW) {
+                    assertTrue(cardHost is FittedCardPreview)
+                    assertFalse(cardHost.canScrollVertically(1))
+                    assertNotNull(root.findViewById<View>(R.id.dashboardRegenLarger))
+                }
+            }
+            onView(withId(R.id.dashboardDetailsClose)).inRoot(isDialog()).perform(click())
+            instrumentation.waitForIdleSync()
+            instrumentation.runOnMainSync {
+                assertSame(slot, original.parent)
+                assertTrue("Card should still open after closing details", original.isClickable)
+                page.finish()
+            }
+            instrumentation.waitForIdleSync()
+        }
+    }
+
+    @Test fun powerFlowAndExistingPopupsMirrorControlsToEitherSidebarSide() {
+        for (side in SidebarSide.entries) {
+            AppSettings(context).sidebarSide = side
+            AppSettings(context).dashboardCards = listOf(
+                DashboardCard.POWER_FLOW, DashboardCard.ENGINE, DashboardCard.EVAKOOL_FRIDGE,
+            )
+            val page = open(samples = true)
+            val dbFile = context.getDatabasePath("dashboard_history.db")
+            val dbModified = dbFile.lastModified()
+            for (card in listOf(DashboardCard.POWER_FLOW, DashboardCard.ENGINE)) {
+                instrumentation.runOnMainSync {
+                    val grid = page.findViewById<ViewGroup>(R.id.dashboardGrid)
+                    val row = grid.getChildAt(0) as ViewGroup
+                    val slot = (0 until row.childCount).map { row.getChildAt(it) }.first { it.tag == card }
+                    assertTrue(slot.performClick())
+                }
+                instrumentation.waitForIdleSync()
+                onView(withId(R.id.dashboardDetailsColumns)).inRoot(isDialog()).check { root, error ->
+                    if (error != null) throw error
+                    val controls = root.findViewById<View>(R.id.dashboardDetailsControls)
+                    val graphs = root.findViewById<View>(R.id.dashboardDetailsGraphs)
+                    assertEquals(side == SidebarSide.LEFT, controls.left < graphs.left)
+                    if (card == DashboardCard.POWER_FLOW) {
+                        val before = context.getSharedPreferences("aircon_settings", Context.MODE_PRIVATE).all.toMap()
+                        root.findViewById<View>(R.id.dashboardRegenLarger).performClick()
+                        assertTrue(root.findViewById<View>(R.id.dashboardRegenStandard).isEnabled)
+                        assertFalse(root.findViewById<View>(R.id.dashboardRegenLarger).isEnabled)
+                        assertEquals(before, context.getSharedPreferences("aircon_settings", Context.MODE_PRIVATE).all)
+                    }
+                }
+                onView(withId(R.id.dashboardDetailsClose)).inRoot(isDialog()).perform(click())
+            }
+            instrumentation.runOnMainSync {
+                assertEquals("Debug history must not modify real history", dbModified, dbFile.lastModified())
+                assertTrue((page.findViewById<View>(R.id.dashboardFridgeCard).parent as View).performClick())
+            }
+            instrumentation.waitForIdleSync()
+            onView(withId(R.id.fridgeDetailsColumns)).inRoot(isDialog()).check { root, error ->
+                if (error != null) throw error
+                val controls = root.findViewById<View>(R.id.fridgeControlsPanel)
+                val graphs = root.findViewById<View>(R.id.fridgeGraphPanel)
+                assertEquals(side == SidebarSide.LEFT, controls.left < graphs.left)
+                val range = root.findViewById<View>(R.id.fridgeRange)
+                assertTrue("Range selector must also be in the control column", range.parent ===
+                    (controls as ScrollView).getChildAt(0))
+            }
+            onView(withId(if (side == SidebarSide.LEFT) R.id.fridgeBack else R.id.backButtonEnd))
+                .inRoot(isDialog()).perform(click())
+            instrumentation.runOnMainSync { page.finish() }
+            instrumentation.waitForIdleSync()
+        }
+    }
+
+    @Test fun powerFlowPreviewFitsWithoutWrappingAtDifferentPopupSizesAndDismissesOutside() {
+        for (side in SidebarSide.entries) {
+            AppSettings(context).sidebarSide = side
+            AppSettings(context).dashboardCards = listOf(DashboardCard.POWER_FLOW)
+            val page = open(samples = true)
+            lateinit var card: View
+            lateinit var slot: ViewGroup
+            instrumentation.runOnMainSync {
+                card = page.findViewById<View>(R.id.dashboardPowerFlowDiagram).parent as View
+                slot = card.parent as ViewGroup
+                assertTrue(slot.performClick())
+            }
+            instrumentation.waitForIdleSync()
+            lateinit var popup: View
+            for ((widthDp, heightDp) in listOf(640 to 360, 1120 to 640)) {
+                onView(withId(R.id.dashboardDetailsColumns)).inRoot(isDialog()).check { root, error ->
+                    if (error != null) throw error
+                    popup = root
+                    val decor = root.rootView
+                    val params = decor.layoutParams as WindowManager.LayoutParams
+                    val density = page.resources.displayMetrics.density
+                    params.width = (widthDp * density).toInt()
+                    params.height = (heightDp * density).toInt()
+                    page.getSystemService(WindowManager::class.java).updateViewLayout(decor, params)
+                    root.findViewById<TextView>(R.id.infoBlockHero).text = "99999.999 kWh"
+                    page.bindPowerFlow(100.0, 12345.6, 1650.0, 48.0)
+                }
+                instrumentation.waitForIdleSync()
+                onView(withId(R.id.dashboardDetailsCard)).inRoot(isDialog()).check { view, error ->
+                    if (error != null) throw error
+                    val host = view as FittedCardPreview
+                    assertSame(card, host.getChildAt(0))
+                    assertFalse(host.parent is ScrollView)
+                    assertFalse(host.canScrollVertically(1))
+                    val hostBounds = Rect()
+                    val cardBounds = Rect()
+                    assertTrue(host.getGlobalVisibleRect(hostBounds))
+                    assertTrue(card.getGlobalVisibleRect(cardBounds))
+                    assertTrue("Entire preview must fit at ${widthDp}x$heightDp on $side",
+                        hostBounds.contains(cardBounds))
+                    assertTrue("Preview width must not be clipped", cardBounds.width() + 2 >= card.width * card.scaleX)
+                    assertTrue("Preview height must not be clipped", cardBounds.height() + 2 >= card.height * card.scaleY)
+                    fun assertSingleLines(child: View) {
+                        if (child is TextView && child.visibility == View.VISIBLE) {
+                            assertEquals("Preview text must not wrap: ${child.text}", 1, child.layout.lineCount)
+                        }
+                        if (child is ViewGroup) for (index in 0 until child.childCount) assertSingleLines(child.getChildAt(index))
+                    }
+                    assertSingleLines(card)
+                    val controls = popup.findViewById<View>(R.id.dashboardDetailsControls)
+                    val graphs = popup.findViewById<View>(R.id.dashboardDetailsGraphs)
+                    assertEquals(side == SidebarSide.LEFT, controls.left < graphs.left)
+                    for (id in listOf(R.id.dashboardRegenStandard, R.id.dashboardRegenLarger, R.id.dashboardDetailsClose)) {
+                        val button = popup.findViewById<View>(id)
+                        val bounds = Rect()
+                        assertTrue("Controls must remain visible", button.getGlobalVisibleRect(bounds))
+                        assertEquals(button.height, bounds.height())
+                    }
+                }
+            }
+            tapOutsideDetails(popup)
+            onView(withId(R.id.dashboardDetailsColumns)).check(doesNotExist())
+            instrumentation.runOnMainSync {
+                assertSame("Outside tap must restore the dashboard card", slot, card.parent)
+                assertEquals(1f, card.scaleX, 0f)
+                assertEquals(1f, card.scaleY, 0f)
+                assertEquals(0f, card.translationX, 0f)
+                assertEquals(0f, card.translationY, 0f)
+                page.finish()
+            }
+            instrumentation.waitForIdleSync()
+        }
+    }
+
+    @Test fun outsideTapsAlsoDismissOtherDetailsAndFridgeControls() {
+        for (card in listOf(DashboardCard.BATTERY, DashboardCard.ENGINE, DashboardCard.EVAKOOL_FRIDGE)) {
+            AppSettings(context).dashboardCards = listOf(card)
+            val page = open(samples = true)
+            instrumentation.runOnMainSync {
+                val grid = page.findViewById<ViewGroup>(R.id.dashboardGrid)
+                assertTrue(((grid.getChildAt(0) as ViewGroup).getChildAt(0)).performClick())
+            }
+            val id = if (card == DashboardCard.EVAKOOL_FRIDGE) R.id.fridgeDetailsColumns else R.id.dashboardDetailsColumns
+            lateinit var popup: View
+            onView(withId(id)).inRoot(isDialog()).check { root, error ->
+                if (error != null) throw error
+                popup = root
+            }
+            tapOutsideDetails(popup)
+            onView(withId(id)).check(doesNotExist())
+            instrumentation.runOnMainSync { page.finish() }
+            instrumentation.waitForIdleSync()
+        }
+    }
+
+    private fun tapOutsideDetails(popup: View) {
+        val location = IntArray(2)
+        var y = 0f
+        instrumentation.runOnMainSync {
+            popup.rootView.getLocationOnScreen(location)
+            y = location[1] + popup.rootView.height / 2f
+        }
+        val x = location[0] / 2f
+        assertTrue("Popup must leave an outside tap area", x > 0)
+        val down = SystemClock.uptimeMillis()
+        injectTouch(down, MotionEvent.ACTION_DOWN, x, y)
+        injectTouch(down, MotionEvent.ACTION_UP, x, y)
+        instrumentation.waitForIdleSync()
+    }
+
+    @Test fun dailyHistoryDatabasePersistsUnknownReadingsAndPrunesPreviousDays() {
+        val name = "dashboard_details_instrumentation_test.db"
+        context.deleteDatabase(name)
+        val now = System.currentTimeMillis()
+        try {
+            DashboardHistoryStorage(context, name).use { storage ->
+                val history = DashboardHistory(storage)
+                history.record(now - 86_400_000L, mapOf("regen" to 2.0))
+                history.record(now, mapOf("regen" to 0.8, "speed" to null))
+            }
+            DashboardHistoryStorage(context, name).use { storage ->
+                val samples = DashboardHistory(storage).samples(now)
+                assertEquals(1, samples.size)
+                assertEquals(0.8, samples.single().values["regen"])
+                assertNull(samples.single().values["speed"])
+                storage.readableDatabase.rawQuery("SELECT COUNT(*) FROM samples", null).use {
+                    assertTrue(it.moveToFirst())
+                    assertEquals(1, it.getInt(0))
+                }
+            }
+        } finally {
+            context.deleteDatabase(name)
+        }
+    }
+
+    @Test fun tyrePhotosTrackEachCornerPressureAndContinueUpdatingInsideDetails() {
+        AppSettings(context).dashboardCards = listOf(DashboardCard.TYRES)
+        val page = open(samples = true)
+        var snapshot = BydTyreController.TyreSnapshot(
+            true, true, null, BydTyreController.Corner.entries.mapIndexed { index, corner ->
+                val psi = listOf(5f, 10f, 20f, 30f)[index]
+                BydTyreController.CornerReading(corner, corner.area, null, psi * 10, 60,
+                    if (psi < 30) "under" else "ok", "ok", "ok")
+            }, "ok", "ok", "ok",
+        )
+        lateinit var row: ViewGroup
+        fun tyreSlot(index: Int): View = (0 until row.childCount).map { row.getChildAt(it) }
+            .filter { it.findViewById<View>(R.id.tyreIcon) != null }[index]
+        fun assertImage(index: Int, resource: Int) {
+            val icon = tyreSlot(index).findViewById<ImageView>(R.id.tyreIcon)
+            assertEquals(View.VISIBLE, icon.visibility)
+            assertNull("Photographs must not be monochrome-tinted", icon.imageTintList)
+            assertNull(icon.colorFilter)
+            val expected = BitmapFactory.decodeResource(page.resources, resource)
+            try {
+                assertTrue("Corner $index must use its own PSI image", (icon.drawable as BitmapDrawable).bitmap.sameAs(expected))
+            } finally { expected.recycle() }
+        }
+        instrumentation.runOnMainSync {
+            page.bindDashboardTyres(snapshot)
+            row = page.findViewById(R.id.tyreSlotsRow)
+            for ((index, resource) in listOf(R.drawable.tyre_flat, R.drawable.tyre_10_psi,
+                R.drawable.tyre_20_psi, R.drawable.tyre_30_psi).withIndex()) assertImage(index, resource)
+            assertEquals(page.getColor(R.color.tyre_under),
+                tyreSlot(0).findViewById<View>(R.id.tyreStatusIndicator).backgroundTintList!!.defaultColor)
+            assertTrue(((row.parent as View).parent as View).performClick())
+        }
+        instrumentation.waitForIdleSync()
+        onView(withId(R.id.dashboardDetailsCard)).inRoot(isDialog()).check { root, error ->
+            if (error != null) throw error
+            assertSame(row, root.findViewById(R.id.tyreSlotsRow))
+            snapshot = snapshot.copy(corners = snapshot.corners.mapIndexed { index, reading ->
+                if (index == 0) reading.copy(pressureByType = 400f, pressureState = "ok") else reading
+            })
+            page.bindDashboardTyres(snapshot)
+            assertImage(0, R.drawable.tyre_40_psi)
+            assertImage(1, R.drawable.tyre_10_psi)
+            snapshot = snapshot.copy(corners = snapshot.corners.mapIndexed { index, reading ->
+                if (index == 0) reading.copy(pressureByType = null) else reading
+            })
+            page.bindDashboardTyres(snapshot)
+            val missing = tyreSlot(0).findViewById<ImageView>(R.id.tyreIcon)
+            assertEquals(View.INVISIBLE, missing.visibility)
+            assertNull("Unavailable pressure must not leave a stale inflation image", missing.drawable)
+            assertEquals("—", tyreSlot(0).findViewById<TextView>(R.id.tyrePsiText).text.toString())
+            assertImage(1, R.drawable.tyre_10_psi)
+        }
+        onView(withId(R.id.dashboardDetailsClose)).inRoot(isDialog()).perform(click())
+    }
+
+    @Test fun tyreAssetsShowProgressiveInflationAndKeepTransparentBackgrounds() {
+        var previousHeight = 0
+        for (resource in listOf(R.drawable.tyre_flat, R.drawable.tyre_10_psi, R.drawable.tyre_20_psi,
+            R.drawable.tyre_30_psi, R.drawable.tyre_40_psi)) {
+            val image = BitmapFactory.decodeResource(context.resources, resource)
+            try {
+                assertEquals(0, Color.alpha(image.getPixel(0, 0)))
+                val pixels = IntArray(image.width * image.height)
+                image.getPixels(pixels, 0, image.width, 0, 0, image.width, image.height)
+                val rows = (0 until image.height).filter { y ->
+                    (0 until image.width).any { x -> Color.alpha(pixels[y * image.width + x]) > 100 }
+                }
+                val bodyHeight = rows.last() - rows.first() + 1
+                assertTrue("Each pressure image must have visibly more inflated sidewalls", bodyHeight > previousHeight)
+                previousHeight = bodyHeight
+                assertTrue("Original rim colours should remain visible",
+                    pixels.any { Color.alpha(it) > 200 && Color.blue(it) - Color.red(it) > 80 })
+            } finally { image.recycle() }
+        }
     }
 
     @Test fun mileageReadingsStayAtTheBottomBesideATallerCard() {
@@ -116,16 +439,16 @@ class DashboardActivityTest {
             assertEquals("—", value.text.toString())
 
             listOf(
-                Triple(R.string.vehicle_info_row_soc, "#33FF00", rows.getChildAt(0)),
-                Triple(R.string.vehicle_info_row_fuel, "#0090FF", rows.getChildAt(1)),
-            ).forEach { (labelId, color, row) ->
+                Triple(R.string.vehicle_info_row_soc, R.color.dashboard_battery_charge, rows.getChildAt(0)),
+                Triple(R.string.vehicle_info_row_fuel, R.color.dashboard_accent_blue, rows.getChildAt(1)),
+            ).forEach { (labelId, colorId, row) ->
                 assertEquals(page.getString(labelId), row.findViewById<TextView>(R.id.percentRowLabel).text.toString())
                 val bar = row.findViewById<PercentBar>(R.id.percentRowBar)
                 bar.setPercent(100.0, animate = false)
                 val image = Bitmap.createBitmap(bar.width, bar.height, Bitmap.Config.ARGB_8888)
                 try {
                     bar.draw(Canvas(image))
-                    assertEquals(Color.parseColor(color), image.getPixel(bar.width / 2, bar.height / 2))
+                    assertEquals(page.getColor(colorId), image.getPixel(bar.width / 2, bar.height / 2))
                 } finally {
                     image.recycle()
                 }
@@ -187,6 +510,10 @@ class DashboardActivityTest {
                 val themed = android.view.ContextThemeWrapper(configured, R.style.Theme_OpenDiKey)
                 for (colorId in listOf(R.color.dashboard_battery_charge, R.color.dashboard_accent_blue)) {
                     val color = themed.getColor(colorId)
+                    if (colorId == R.color.dashboard_battery_charge) {
+                        assertEquals(Color.parseColor(if (mode == Configuration.UI_MODE_NIGHT_NO)
+                            "#00C45C" else "#33FF00"), color)
+                    }
                     val bar = PercentBar(themed).apply {
                         setFillColor(color)
                         setPercent(40.0, animate = false)
@@ -250,7 +577,8 @@ class DashboardActivityTest {
             val fuelRow = rows.getChildAt(1)
             val chargeBar = chargeRow.findViewById<View>(R.id.percentRowBar)
             val fuelLabel = fuelRow.findViewById<TextView>(R.id.percentRowLabel)
-            assertTrue("Trip details should be larger than the bar labels", details.textSize > fuelLabel.textSize)
+            assertEquals("Trip details should match the fuel label", fuelLabel.textSize, details.textSize, 0f)
+            assertEquals(chargeRow.findViewById<TextView>(R.id.percentRowLabel).textSize, details.textSize, 0f)
             val gap = fuelRow.top + fuelLabel.top - (chargeRow.top + chargeBar.bottom)
             assertTrue("Charge and fuel rows should have less than 8 dp between them",
                 gap < 8 * page.resources.displayMetrics.density)
@@ -276,7 +604,7 @@ class DashboardActivityTest {
                 DashboardCard.TYRES to "OK", DashboardCard.CONSUMPTION to "9.1 L/100km",
                 DashboardCard.MILEAGE to "EV 7200 km\nHEV 5280 km", DashboardCard.TABLET to "24%",
                 DashboardCard.ENGINE to "1650 rpm", DashboardCard.CHASSIS to "23°C",
-                DashboardCard.POWER_FLOW to "+35 kW",
+                DashboardCard.POWER_FLOW to "1.275 kWh",
             )
             val captions = mapOf(
                 DashboardCard.BATTERY to "State of health",
@@ -287,7 +615,7 @@ class DashboardActivityTest {
                 DashboardCard.TABLET to "CPU",
                 DashboardCard.ENGINE to "RPM",
                 DashboardCard.CHASSIS to "Outside temperature",
-                DashboardCard.POWER_FLOW to "Power",
+                DashboardCard.POWER_FLOW to "Regen today",
             )
             for (i in 0 until grid.childCount) {
                 val row = grid.getChildAt(i) as ViewGroup
@@ -296,7 +624,7 @@ class DashboardActivityTest {
                     val card = slot.tag as? DashboardCard ?: continue
                     if (card == DashboardCard.EVAKOOL_FRIDGE) continue
                     val title = slot.findViewById<TextView>(R.id.infoBlockTitle)
-                    assertEquals(page.getColor(R.color.surface), title.shadowColor)
+                    assertEquals(page.getColor(R.color.dashboard_card_background), title.shadowColor)
                     if (Color.alpha(title.shadowColor) > 0) assertTrue(title.shadowRadius > 0f)
                     val hero = slot.findViewById<TextView>(R.id.infoBlockHero)
                     val caption = slot.findViewById<TextView>(R.id.infoBlockHeroLabel)
@@ -327,14 +655,15 @@ class DashboardActivityTest {
             val rows = page.findViewById<LinearLayout>(R.id.infoBlockRows)
             assertEquals("-6%", rows.getChildAt(0).findViewById<TextView>(R.id.percentRowTripUsage).text.toString())
             assertEquals("-4%", rows.getChildAt(1).findViewById<TextView>(R.id.percentRowTripUsage).text.toString())
-            listOf("76%" to "#33FF00", "61%" to "#0090FF").forEachIndexed { index, (text, color) ->
+            listOf("76%" to R.color.dashboard_battery_charge, "61%" to R.color.dashboard_accent_blue)
+                .forEachIndexed { index, (text, colorId) ->
                 val row = rows.getChildAt(index)
                 assertEquals(text, row.findViewById<TextView>(R.id.percentRowValue).text.toString())
                 val bar = row.findViewById<PercentBar>(R.id.percentRowBar)
                 val image = Bitmap.createBitmap(bar.width, bar.height, Bitmap.Config.ARGB_8888)
                 try {
                     bar.draw(Canvas(image))
-                    assertEquals(Color.parseColor(color), image.getPixel(bar.width / 2, bar.height / 2))
+                    assertEquals(page.getColor(colorId), image.getPixel(bar.width / 2, bar.height / 2))
                     val glowY = bar.paddingTop - 1
                     assertTrue("Filled portion should cast a visible glow above the track",
                         Color.alpha(image.getPixel(bar.width / 4, glowY)) > 20)
@@ -382,15 +711,19 @@ class DashboardActivityTest {
             val blue = Color.parseColor("#1687DB")
             val green = Color.parseColor("#19C76A")
             val amber = Color.parseColor("#FFB45C")
-            val regen = page.findViewById<TextView>(R.id.dashboardRegenEnergy)
+            val regen = hero
+            val power = page.findViewById<TextView>(R.id.dashboardFlowPower)
             val rpm = page.findViewById<TextView>(R.id.dashboardPowerFlowRpm)
             assertEquals("1.275 kWh", regen.text.toString())
-            val powerLabel = page.findViewById<TextView>(R.id.infoBlockHeroLabel)
+            val powerColumn = power.parent as LinearLayout
+            val powerLabel = powerColumn.getChildAt(1) as TextView
+            assertEquals(page.getString(R.string.vehicle_info_row_power), powerLabel.text.toString())
+            assertSame(powerColumn, rpm.parent)
             assertTrue(rpm.top >= powerLabel.bottom)
             assertEquals(page.getString(R.string.dashboard_flow_rpm,
                 java.text.NumberFormat.getNumberInstance().format(1650)), rpm.text.toString())
             assertTrue(rpm.textSize < hero.textSize)
-            assertEquals(powerLabel.right, rpm.right)
+            assertEquals(power.left, rpm.left)
             val image = Bitmap.createBitmap(diagram.width, diagram.height, Bitmap.Config.ARGB_8888)
             val pixels = IntArray(image.width * image.height)
             fun assertActiveRoutes(vararg expected: Int) {
@@ -427,14 +760,16 @@ class DashboardActivityTest {
                 310 to 304, 407 to 235, 345 to 293)
             val batteryPoints = arrayOf(177 to 144, 317 to 239, 329 to 247)
             try {
-                assertEquals("+35 kW", hero.text.toString())
+                assertEquals("+35 kW", power.text.toString())
                 assertTrue(diagram.contentDescription.contains("Battery 76%"))
                 assertActiveRoutes(blue, amber)
-                assertFlowAt(blue, *axlePoints, *batteryPoints)
-                assertFlowAt(amber, 384 to 284, 403 to 297)
+                assertFlowAt(blue, *axlePoints)
+                assertFlowAt(blue, 320 to 241)
+                assertFlowAt(amber, 340 to 241, 318 to 226, 420 to 302)
+                assertFlowAt(amber, 404 to 284, 423 to 297)
 
                 page.bindPowerFlow(23.0, -18.0, 0.0, 48.0)
-                assertEquals("-18 kW", hero.text.toString())
+                assertEquals("-18 kW", power.text.toString())
                 assertTrue(diagram.contentDescription.contains("Battery 23%. Regenerating"))
                 assertActiveRoutes(green)
                 assertFlowAt(green, *axlePoints, *batteryPoints)
@@ -458,7 +793,7 @@ class DashboardActivityTest {
 
                 page.bindPowerFlow(23.0, -18.0, 1100.0, 0.0)
                 assertActiveRoutes()
-                assertEquals("-18 kW", hero.text.toString())
+                assertEquals("-18 kW", power.text.toString())
                 assertEquals(page.getString(R.string.dashboard_flow_rpm,
                     java.text.NumberFormat.getNumberInstance().format(1100)), rpm.text.toString())
                 assertTrue(batteryGreenAt(297, 220))
@@ -482,7 +817,7 @@ class DashboardActivityTest {
                 assertActiveRoutes(amber)
 
                 page.bindPowerFlow(null, Double.NaN, null, 48.0)
-                assertEquals("—", hero.text.toString())
+                assertEquals("—", power.text.toString())
                 assertTrue(diagram.contentDescription.contains("Flow unavailable"))
                 assertActiveRoutes()
                 fun alphaAt(x: Int, y: Int) =
@@ -505,11 +840,59 @@ class DashboardActivityTest {
         }
     }
 
+    @Test fun engineFlowIsVisibleToTheRightOfBatteryFlowAtCardAndPopupSizesInBothThemes() {
+        instrumentation.runOnMainSync {
+            for (night in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
+                val config = Configuration(context.resources.configuration).apply {
+                    uiMode = (uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or night
+                }
+                val themed = android.view.ContextThemeWrapper(
+                    context.createConfigurationContext(config), R.style.Theme_OpenDiKey,
+                )
+                for (width in listOf(500, 1000)) {
+                    val diagram = PowerFlowView(themed)
+                    diagram.measure(
+                        View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED),
+                    )
+                    diagram.layout(0, 0, width, diagram.measuredHeight)
+                    val image = Bitmap.createBitmap(width, diagram.height, Bitmap.Config.ARGB_8888)
+                    try {
+                        val scale = minOf(width / 500f * 0.9f, diagram.height / 378f)
+                        val left = (width - 500 * scale) / 2f
+                        val top = (diagram.height - 378 * scale) / 2f
+                        fun colorAt(x: Float, y: Float) = image.getPixel(
+                            (left + x * scale).toInt(), (top + y * scale).toInt(),
+                        )
+                        for (power in listOf(35.0, -18.0)) {
+                            diagram.bind(76.0, power, 1650.0, 48.0)
+                            image.eraseColor(Color.TRANSPARENT)
+                            diagram.draw(Canvas(image))
+                            val battery = colorAt(320f, 241f)
+                            val engine = colorAt(340f, 241f)
+                            if (power > 0) {
+                                assertTrue("Blue battery path must remain visible at width=$width, night=$night",
+                                    Color.blue(battery) - Color.red(battery) > 40)
+                            } else {
+                                assertTrue("Green regen path must remain visible at width=$width, night=$night",
+                                    Color.green(battery) - maxOf(Color.red(battery), Color.blue(battery)) > 40)
+                            }
+                            assertTrue("Orange engine path must be separately visible to the right at width=$width, night=$night",
+                                Color.red(engine) - Color.blue(engine) > 50)
+                        }
+                    } finally {
+                        image.recycle()
+                    }
+                }
+            }
+        }
+    }
+
     @Test fun livePowerReadsUpdatePowerWithoutReplacingChargeOrRpm() {
         AppSettings(context).dashboardCards = listOf(DashboardCard.POWER_FLOW)
         val page = open(samples = true)
         instrumentation.runOnMainSync {
-            val power = page.findViewById<TextView>(R.id.infoBlockHero)
+            val power = page.findViewById<TextView>(R.id.dashboardFlowPower)
             val rpm = page.findViewById<TextView>(R.id.dashboardPowerFlowRpm)
             val diagram = page.findViewById<View>(R.id.dashboardPowerFlowDiagram)
             page.bindPowerFlow(76.0, 35.0, 1650.0, 48.0)
@@ -529,6 +912,157 @@ class DashboardActivityTest {
         }
     }
 
+    @Test fun dashboardPageAndCardColorsMatchRequestedPalettes() {
+        instrumentation.runOnMainSync {
+            for (mode in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
+                val configured = context.createConfigurationContext(Configuration().apply { uiMode = mode })
+                for (theme in listOf(R.style.Theme_OpenDiKey, R.style.Theme_OpenDiKey_Modern)) {
+                    val themed = android.view.ContextThemeWrapper(configured, theme)
+                    val inflater = android.view.LayoutInflater.from(themed)
+                    val expectedCard = Color.parseColor(if (mode == Configuration.UI_MODE_NIGHT_NO)
+                        "#E9E9E9" else "#272E37")
+                    for (layout in listOf(R.layout.view_info_block, R.layout.view_dashboard_drive,
+                        R.layout.view_dashboard_power_flow, R.layout.view_attitude_block, R.layout.view_tyres_block)) {
+                        val card = inflater.inflate(layout, null)
+                        val image = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888)
+                        try {
+                            card.background.setBounds(0, 0, 32, 32)
+                            card.background.draw(Canvas(image))
+                            assertEquals(expectedCard, image.getPixel(16, 16))
+                        } finally {
+                            image.recycle()
+                        }
+                    }
+                    val page = inflater.inflate(R.layout.activity_vehicle_info, null)
+                    val sidebar = checkNotNull(themed.getDrawable(R.drawable.bg_frosted_sidebar))
+                    val panel = checkNotNull(themed.getDrawable(R.drawable.bg_floating_panel))
+                    val sidebarImage = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888)
+                    val pageImage = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888)
+                    try {
+                        sidebar.setBounds(0, 0, 32, 32)
+                        sidebar.draw(Canvas(sidebarImage))
+                        panel.setBounds(0, 0, 32, 32)
+                        panel.draw(Canvas(pageImage))
+                        page.background.setBounds(0, 0, 32, 32)
+                        page.background.draw(Canvas(pageImage))
+                        val sidebarColor = sidebarImage.getPixel(16, 16)
+                        assertEquals("Dashboard must show the same single frosted layer as the sidebar",
+                            sidebarColor, pageImage.getPixel(16, 16))
+                        if (mode == Configuration.UI_MODE_NIGHT_NO) {
+                            assertEquals(255, Color.red(sidebarColor))
+                            assertEquals(255, Color.green(sidebarColor))
+                            assertEquals(255, Color.blue(sidebarColor))
+                            assertTrue(Color.alpha(sidebarColor) in 127..128)
+                        } else {
+                            assertTrue(Color.alpha(sidebarColor) in 190..192)
+                        }
+                    } finally {
+                        sidebarImage.recycle()
+                        pageImage.recycle()
+                    }
+                }
+            }
+        }
+    }
+
+    @Test fun dashboardCardsCastShadowsIntoTheGap() {
+        AppSettings(context).dashboardCards = listOf(
+            DashboardCard.MILEAGE, DashboardCard.CHASSIS, DashboardCard.CONSUMPTION,
+        )
+        val page = open(samples = true)
+        val slots = mutableListOf<View>()
+        val firstPosition = IntArray(2)
+        val secondPosition = IntArray(2)
+        val lastPosition = IntArray(2)
+        instrumentation.runOnMainSync {
+            val row = page.findViewById<DashboardGrid>(R.id.dashboardGrid).getChildAt(0) as ViewGroup
+            slots.add(row.getChildAt(0))
+            slots.add(row.getChildAt(1))
+            slots.add(row.getChildAt(2))
+            slots[0].getLocationOnScreen(firstPosition)
+            slots[1].getLocationOnScreen(secondPosition)
+            slots[2].getLocationOnScreen(lastPosition)
+            assertEquals(6f * page.resources.displayMetrics.density, slots[0].elevation, 0.01f)
+            assertEquals(slots[0].elevation, slots[1].elevation, 0.01f)
+        }
+        SystemClock.sleep(200)
+        val withShadows = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+        try {
+            instrumentation.runOnMainSync { slots.forEach { it.elevation = 0f } }
+            instrumentation.waitForIdleSync()
+            SystemClock.sleep(200)
+            val withoutShadows = checkNotNull(instrumentation.uiAutomation.takeScreenshot())
+            try {
+                val left = firstPosition[0] + slots[0].width
+                val right = secondPosition[0]
+                val centerY = firstPosition[1] + slots[0].height / 2
+                var darkerPixels = 0
+                for (y in centerY - 5..centerY + 5) {
+                    for (x in left until right) {
+                        if (Color.red(withShadows.getPixel(x, y)) < Color.red(withoutShadows.getPixel(x, y))) {
+                            darkerPixels++
+                        }
+                    }
+                }
+                assertTrue("Card shadows should visibly darken the space between cards", darkerPixels > 10)
+                val extent = (8 * page.resources.displayMetrics.density).toInt()
+                val centerX = firstPosition[0] + slots[0].width / 2
+                fun darkerPixelsIn(xs: IntRange, ys: IntRange): Int {
+                    var count = 0
+                    for (y in ys) for (x in xs) {
+                        if (Color.red(withShadows.getPixel(x, y)) < Color.red(withoutShadows.getPixel(x, y))) count++
+                    }
+                    return count
+                }
+                assertTrue("Left edge shadow should not be clipped", darkerPixelsIn(
+                    firstPosition[0] - extent until firstPosition[0], centerY - 5..centerY + 5) > 10)
+                assertTrue("Right edge shadow should not be clipped", darkerPixelsIn(
+                    lastPosition[0] + slots[2].width until lastPosition[0] + slots[2].width + extent,
+                    centerY - 5..centerY + 5) > 10)
+                assertTrue("Top edge shadow should not be clipped", darkerPixelsIn(
+                    centerX - 5..centerX + 5, firstPosition[1] - extent until firstPosition[1]) > 10)
+                assertTrue("Bottom edge shadow should not be clipped", darkerPixelsIn(
+                    centerX - 5..centerX + 5,
+                    firstPosition[1] + slots[0].height until firstPosition[1] + slots[0].height + extent) > 10)
+            } finally {
+                withoutShadows.recycle()
+            }
+        } finally {
+            withShadows.recycle()
+        }
+    }
+
+    @Test fun driveGaugeTracksAreVisibleAgainstTheDarkCardAndKeepTheirLightColors() {
+        instrumentation.runOnMainSync {
+            for (mode in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
+                val configured = context.createConfigurationContext(Configuration().apply { uiMode = mode })
+                for (theme in listOf(R.style.Theme_OpenDiKey, R.style.Theme_OpenDiKey_Modern)) {
+                    val themed = android.view.ContextThemeWrapper(configured, theme)
+                    val track = themed.getColor(R.color.dashboard_pedal_track)
+                    if (mode == Configuration.UI_MODE_NIGHT_NO) {
+                        assertEquals(themed.getColor(R.color.surface_stroke), track)
+                    } else {
+                        assertEquals(Color.parseColor("#616161"), track)
+                    }
+                    val gauge = PedalGauge(themed)
+                    val width = (256 * themed.resources.displayMetrics.density).toInt()
+                    gauge.measure(View.MeasureSpec.makeMeasureSpec(width, View.MeasureSpec.EXACTLY),
+                        View.MeasureSpec.makeMeasureSpec(0, View.MeasureSpec.UNSPECIFIED))
+                    gauge.layout(0, 0, gauge.measuredWidth, gauge.measuredHeight)
+                    val bitmap = Bitmap.createBitmap(gauge.width, gauge.height, Bitmap.Config.ARGB_8888)
+                    try {
+                        gauge.draw(Canvas(bitmap))
+                        val stroke = 9 * themed.resources.displayMetrics.density
+                        assertEquals(track, bitmap.getPixel(width / 2, stroke.toInt()))
+                        assertEquals(track, bitmap.getPixel(width / 2, (stroke * 2.5f).toInt()))
+                    } finally {
+                        bitmap.recycle()
+                    }
+                }
+            }
+        }
+    }
+
     @Test fun dashboardTitleGlowMatchesCardBackgroundAndExtendsOverGraphicsInBothModes() {
         instrumentation.runOnMainSync {
             for (mode in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
@@ -540,13 +1074,15 @@ class DashboardActivityTest {
                         R.layout.view_attitude_block)) {
                         val card = inflater.inflate(layout, null)
                         val title = card.findViewById<TextView>(R.id.infoBlockTitle)
-                        assertEquals(themed.getColor(R.color.surface), title.shadowColor)
+                        assertEquals(themed.getColor(R.color.dashboard_card_background), title.shadowColor)
                         assertEquals(255, Color.alpha(title.shadowColor))
                         assertTrue("Titles need a larger glow", title.shadowRadius >= 16f)
                         assertEquals(0f, title.shadowDx, 0f)
                         assertEquals(0f, title.shadowDy, 0f)
                         if (mode == Configuration.UI_MODE_NIGHT_NO) {
-                            assertEquals(Color.WHITE, title.shadowColor)
+                            assertEquals(Color.parseColor("#E9E9E9"), title.shadowColor)
+                        } else {
+                            assertEquals(Color.parseColor("#272E37"), title.shadowColor)
                         }
                         val cardBackground = Bitmap.createBitmap(32, 32, Bitmap.Config.ARGB_8888)
                         try {
@@ -664,7 +1200,7 @@ class DashboardActivityTest {
                     }
                     assertTrue("Background-coloured halo must mask the roof outside the text: $maskedRoofPixels",
                         maskedRoofPixels >= 6)
-                    assertEquals(colour, themed.getColor(R.color.surface))
+                    assertEquals(colour, themed.getColor(R.color.dashboard_card_background))
                     assertEquals(width, card.width)
                     assertEquals(height, card.height)
                 } finally {
@@ -754,7 +1290,7 @@ class DashboardActivityTest {
         val page = open(samples = true)
         instrumentation.runOnMainSync {
             val graph = page.findViewById<View>(R.id.dashboardRpmGraph)
-            assertEquals(page.getString(R.string.dashboard_rpm_last_hour), graph.contentDescription)
+            assertEquals(page.getString(R.string.dashboard_rpm_last_ten_seconds), graph.contentDescription)
             val density = page.resources.displayMetrics.density
             assertTrue("The chart needs room for the plot and axis labels", graph.height >= 100 * density)
             val chart = Bitmap.createBitmap(graph.width, graph.height, Bitmap.Config.ARGB_8888)
@@ -775,11 +1311,23 @@ class DashboardActivityTest {
             } finally {
                 chart.recycle()
             }
+
             val engine = (graph.parent as View).parent as View
             assertEquals("1650 rpm", engine.findViewById<TextView>(R.id.infoBlockHero).text.toString())
             val displacement = ArrayList<View>()
             engine.findViewsWithText(displacement, page.getString(R.string.vehicle_info_row_disp), View.FIND_VIEWS_WITH_TEXT)
             assertTrue(displacement.isEmpty())
+            val power = ArrayList<View>()
+            engine.findViewsWithText(power, page.getString(R.string.vehicle_info_row_power), View.FIND_VIEWS_WITH_TEXT)
+            assertTrue("The Engine card should no longer show power", power.isEmpty())
+            val oil = ArrayList<View>()
+            engine.findViewsWithText(oil, page.getString(R.string.vehicle_info_row_oil), View.FIND_VIEWS_WITH_TEXT)
+            assertTrue("The existing oil reading should remain", oil.isNotEmpty())
+            val oilLabel = oil.single() as TextView
+            val oilRow = oilLabel.parent as ViewGroup
+            val oilValue = oilRow.findViewById<TextView>(R.id.infoRowValue)
+            assertEquals("85", oilValue.text.toString())
+            assertEquals((8 * density).toInt(), oilValue.left - oilLabel.right)
 
             val gauge = page.findViewById<PedalGauge>(R.id.dashboardPedalGauge)
             val driveRows = gauge.parent as ViewGroup
@@ -898,6 +1446,54 @@ class DashboardActivityTest {
         }
     }
 
+    @Test fun engineCardOpensThreeLiveHistoryGraphsInRequestedOrder() {
+        AppSettings(context).dashboardCards = listOf(DashboardCard.ENGINE, DashboardCard.POWER_FLOW)
+        val page = open(samples = true)
+        instrumentation.runOnMainSync {
+            val graph = page.findViewById<View>(R.id.dashboardRpmGraph)
+            val engine = (graph.parent as View).parent as View
+            assertTrue((engine.parent as View).performClick())
+        }
+        SystemClock.sleep(500)
+        val positions = mutableListOf<Int>()
+        for ((id, description) in listOf(
+            R.id.dashboardRpmTenSecondsGraph to R.string.dashboard_rpm_last_ten_seconds,
+            R.id.dashboardRpmFiveMinutesGraph to R.string.dashboard_rpm_last_five_minutes,
+            R.id.dashboardRpmThirtyMinutesGraph to R.string.dashboard_rpm_last_thirty_minutes,
+        )) {
+            onView(withId(id)).inRoot(isDialog()).check { view, error ->
+                if (error != null) throw error
+                assertEquals(page.getString(description), view.contentDescription)
+                assertTrue("Graph must have a usable height", view.height > 0)
+                val location = IntArray(2)
+                view.getLocationOnScreen(location)
+                positions.add(location[1])
+            }
+        }
+        assertTrue(positions[0] < positions[1] && positions[1] < positions[2])
+        lateinit var engineDetails: View
+        onView(withId(R.id.dashboardDetailsCard)).inRoot(isDialog()).check { view, error ->
+            if (error != null) throw error
+            engineDetails = view
+        }
+        instrumentation.runOnMainSync {
+            page.bindRpmLive(2300.0)
+            assertEquals("2300 rpm", engineDetails.findViewById<TextView>(R.id.infoBlockHero).text.toString())
+            assertEquals(page.getString(R.string.dashboard_flow_rpm,
+                java.text.NumberFormat.getNumberInstance().format(2300)),
+                page.findViewById<TextView>(R.id.dashboardPowerFlowRpm).text.toString())
+        }
+        onView(withId(R.id.dashboardDetailsClose)).inRoot(isDialog()).check { view, error ->
+            if (error != null) throw error
+            val location = IntArray(2)
+            view.getLocationOnScreen(location)
+            val visible = android.graphics.Rect()
+            view.getGlobalVisibleRect(visible)
+            assertEquals("Close button must be fully visible at ${location.toList()} rect=$visible",
+                view.height, visible.height())
+        }.perform(click())
+    }
+
     @Test fun dailyPedalPeaksSurviveReopeningAndResetOnTheNextDay() {
         val testContext = instrumentation.context
         val settings = AppSettings(testContext)
@@ -998,11 +1594,12 @@ class DashboardActivityTest {
         instrumentation.runOnMainSync {
             assertEquals("A short viewport must not shrink the truck", initialHeight, diagram.height)
             assertTrue("Power Flow must be allowed to exceed half the viewport", slot.height > viewport.height / 2)
-            val regen = card.findViewById<TextView>(R.id.dashboardRegenEnergy)
+            val power = card.findViewById<TextView>(R.id.dashboardFlowPower)
             val rpm = card.findViewById<TextView>(R.id.dashboardPowerFlowRpm)
-            val footer = (regen.parent as View).parent as View
-            assertTrue("Engine RPM should appear under the Power label in the card header",
-                rpm.top >= card.findViewById<TextView>(R.id.infoBlockHeroLabel).bottom)
+            val footer = (power.parent as View).parent as View
+            assertSame(power.parent, rpm.parent)
+            assertTrue("Engine RPM should appear beneath the Power value in the footer", rpm.top >= power.bottom)
+            assertEquals(power.left, rpm.left)
             val footerTop = footer.top + (footer.parent as View).top
             assertTrue("The footer should overlap the image instead of sitting below it",
                 footerTop < diagram.bottom)
@@ -1341,8 +1938,28 @@ class DashboardActivityTest {
     }
 
     @Test fun fridgeCardTapsOpenControlsButHoldingOnlyEntersEditMode() {
-        AppSettings(context).dashboardCards = listOf(DashboardCard.EVAKOOL_FRIDGE)
+        AppSettings(context).dashboardCards = listOf(DashboardCard.EVAKOOL_FRIDGE, DashboardCard.POWER_FLOW)
         val page = open()
+        val outerPoint = IntArray(2)
+        instrumentation.runOnMainSync {
+            val card = page.findViewById<View>(R.id.dashboardFridgeCard)
+            val slot = card.parent as View
+            assertTrue(card.top > 8 * page.resources.displayMetrics.density)
+            slot.getLocationOnScreen(outerPoint)
+            outerPoint[0] += slot.width / 2
+            outerPoint[1] += (4 * page.resources.displayMetrics.density).toInt()
+        }
+        val outerDown = SystemClock.uptimeMillis()
+        injectTouch(outerDown, MotionEvent.ACTION_DOWN, outerPoint[0].toFloat(), outerPoint[1].toFloat())
+        injectTouch(outerDown, MotionEvent.ACTION_UP, outerPoint[0].toFloat(), outerPoint[1].toFloat())
+        onView(withId(R.id.fridgeGraph)).inRoot(isDialog()).check(matches(isDisplayed()))
+        instrumentation.runOnMainSync {
+            val live = page.supportFragmentManager.fragments.filterIsInstance<FridgeControlsFragment>().single()
+            assertNotEquals(page.getString(R.string.fridge_preview_notice),
+                live.requireView().findViewById<TextView>(R.id.fridgeSubtitle).text.toString())
+            assertEquals(View.VISIBLE, live.requireView().findViewById<View>(R.id.fridgeMore).visibility)
+        }
+        onView(withId(R.id.fridgeBack)).inRoot(isDialog()).perform(click())
         onView(withId(R.id.dashboardFridgeCard)).perform(click())
         onView(withId(R.id.fridgeGraph)).inRoot(isDialog()).check(matches(isDisplayed()))
         onView(withId(R.id.fridgeBack)).inRoot(isDialog()).perform(click())
@@ -1358,6 +1975,58 @@ class DashboardActivityTest {
             assertTrue(page.findViewById<DashboardGrid>(R.id.dashboardGrid).editing)
             assertTrue("Holding a card must cancel its normal action",
                 page.supportFragmentManager.fragments.none { it is FridgeControlsFragment })
+        }
+    }
+
+    @Test fun debugFridgeCardOpensIsolatedInteractivePreviewFromItsOuterArea() {
+        AppSettings(context).dashboardCards = listOf(DashboardCard.EVAKOOL_FRIDGE, DashboardCard.POWER_FLOW)
+        val fridgePrefs = context.getSharedPreferences("evakool", Context.MODE_PRIVATE)
+        val beforePrefs = fridgePrefs.all.toMap()
+        val controller = OpenDiKeyApp.from(context).fridge
+        val beforeStatus = controller.status
+        val beforeHistory = controller.history.samples.toList()
+        val beforePending = Triple(controller.pendingOn, controller.pendingMax, controller.pendingCompartment)
+        val page = open(samples = true)
+        val point = IntArray(2)
+        instrumentation.runOnMainSync {
+            val card = page.findViewById<View>(R.id.dashboardFridgeCard)
+            val slot = card.parent as View
+            assertTrue("The slot must have a tappable area above the centred fridge content",
+                card.top > 8 * page.resources.displayMetrics.density)
+            slot.getLocationOnScreen(point)
+            point[0] += slot.width / 2
+            point[1] += (4 * page.resources.displayMetrics.density).toInt()
+        }
+        val down = SystemClock.uptimeMillis()
+        injectTouch(down, MotionEvent.ACTION_DOWN, point[0].toFloat(), point[1].toFloat())
+        injectTouch(down, MotionEvent.ACTION_UP, point[0].toFloat(), point[1].toFloat())
+        onView(withId(R.id.fridgeGraph)).inRoot(isDialog()).check(matches(isDisplayed()))
+        instrumentation.runOnMainSync {
+            val preview = page.supportFragmentManager.fragments.filterIsInstance<FridgeControlsFragment>().single()
+            val view = preview.requireView()
+            assertEquals(page.getString(R.string.fridge_preview_notice),
+                view.findViewById<TextView>(R.id.fridgeSubtitle).text.toString())
+            val left = view.findViewById<View>(R.id.fridgeLeftCard)
+            val target = left.findViewById<TextView>(R.id.compartmentTarget)
+            assertEquals("3°C", target.text.toString())
+            left.findViewById<View>(R.id.compartmentUp).performClick()
+            assertEquals("4°C", target.text.toString())
+            val power = view.findViewById<android.widget.CompoundButton>(R.id.fridgePower)
+            assertTrue(power.isChecked)
+            power.performClick()
+            assertFalse(power.isChecked)
+            view.findViewById<View>(R.id.fridgeModeMax).performClick()
+            assertEquals(R.id.fridgeModeMax,
+                view.findViewById<com.google.android.material.button.MaterialButtonToggleGroup>(R.id.fridgeMode)
+                    .checkedButtonId)
+            view.findViewById<View>(R.id.fridgeRangeWeek).performClick()
+            assertEquals(View.GONE, view.findViewById<View>(R.id.fridgeReconnect).visibility)
+            assertEquals(View.GONE, view.findViewById<View>(R.id.fridgeMore).visibility)
+            assertEquals(beforeStatus, controller.status)
+            assertEquals(beforePending, Triple(controller.pendingOn, controller.pendingMax, controller.pendingCompartment))
+            assertEquals(beforeHistory, controller.history.samples)
+            assertEquals(beforePrefs, fridgePrefs.all)
+            preview.dismiss()
         }
     }
 

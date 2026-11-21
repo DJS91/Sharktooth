@@ -3,7 +3,7 @@
     android:layout_width="match_parent"
     android:layout_height="wrap_content"
     android:layout_marginBottom="10dp"
-    android:background="@drawable/bg_info_block"
+    android:background="@drawable/bg_dashboard_card"
     android:clipChildren="false"
     android:clipToPadding="false"
     android:orientation="vertical"
@@ -11,7 +11,7 @@
 
     <TextView
         android:id="@id/infoBlockTitle"
-        android:shadowColor="?attr/dkSurface"
+        android:shadowColor="@color/dashboard_card_background"
         android:shadowDx="0"
         android:shadowDy="0"
         android:shadowRadius="16"

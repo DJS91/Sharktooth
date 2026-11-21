@@ -14,20 +14,24 @@ internal class EngineRpmHistory {
 
     private val readings = ArrayDeque<Sample>()
 
-    fun record(timeMs: Long, rpm: Double?): List<Sample> {
-        while (readings.firstOrNull()?.let { it.timeMs < timeMs - HOUR_MS } == true) {
+    fun record(timeMs: Long, rpm: Double?) {
+        while (readings.firstOrNull()?.let { it.timeMs < timeMs - MAX_HISTORY_MS } == true) {
             readings.removeFirst()
         }
         readings.addLast(Sample(timeMs, rpm?.takeIf { it.isFinite() && it >= 0 }))
-        return readings.toList()
     }
 
+    fun since(timeMs: Long, rangeMs: Long): List<Sample> =
+        readings.asReversed().takeWhile { it.timeMs >= timeMs - rangeMs }.asReversed()
+
     companion object {
-        const val HOUR_MS = 3_600_000L
+        const val TEN_SECONDS_MS = 10_000L
+        const val FIVE_MINUTES_MS = 300_000L
+        const val MAX_HISTORY_MS = 1_800_000L
     }
 }
 
-internal class EngineRpmGraph(context: Context) : View(context) {
+internal class EngineRpmGraph(context: Context, private val rangeMs: Long = EngineRpmHistory.TEN_SECONDS_MS) : View(context) {
     private val density = resources.displayMetrics.density
     private val paint = Paint(Paint.ANTI_ALIAS_FLAG).apply {
         strokeWidth = 2 * density
@@ -43,9 +47,14 @@ internal class EngineRpmGraph(context: Context) : View(context) {
         strokeWidth = density
     }
     private val numberFormat = NumberFormat.getIntegerInstance(resources.configuration.locales[0])
-    private val timeLabels = listOf(
-        context.getString(R.string.dashboard_rpm_minutes_ago, 60),
-        context.getString(R.string.dashboard_rpm_minutes_ago, 30),
+    private val timeLabels = if (rangeMs == EngineRpmHistory.TEN_SECONDS_MS) listOf(
+        context.getString(R.string.dashboard_rpm_seconds_ago, 10),
+        context.getString(R.string.dashboard_rpm_seconds_ago, 5),
+        context.getString(R.string.dashboard_rpm_now),
+    ) else listOf(
+        context.getString(R.string.dashboard_rpm_minutes_ago, (rangeMs / 60_000).toInt()),
+        context.getString(R.string.dashboard_rpm_minutes_fraction_ago,
+            NumberFormat.getNumberInstance(resources.configuration.locales[0]).format(rangeMs / 120_000.0)),
         context.getString(R.string.dashboard_rpm_now),
     )
     private val path = Path()
@@ -62,14 +71,18 @@ internal class EngineRpmGraph(context: Context) : View(context) {
         this.now = now
         this.maxGapMs = maxGapMs
         contentDescription = context.getString(
-            if (samples.any { it.rpm != null }) R.string.dashboard_rpm_last_hour else R.string.dashboard_rpm_no_history,
+            if (samples.any { it.rpm != null }) when (rangeMs) {
+                EngineRpmHistory.TEN_SECONDS_MS -> R.string.dashboard_rpm_last_ten_seconds
+                EngineRpmHistory.FIVE_MINUTES_MS -> R.string.dashboard_rpm_last_five_minutes
+                else -> R.string.dashboard_rpm_last_thirty_minutes
+            } else R.string.dashboard_rpm_no_history,
         )
         invalidate()
     }
 
     override fun onDraw(canvas: Canvas) {
-        val start = now - EngineRpmHistory.HOUR_MS
-        val peak = samples.maxOfOrNull { it.rpm ?: 0.0 } ?: 0.0
+        val start = now - rangeMs
+        val peak = samples.asSequence().filter { it.timeMs in start..now }.maxOfOrNull { it.rpm ?: 0.0 } ?: 0.0
         val step = (ceil(peak / 2_000) * 500).coerceAtLeast(500.0)
         val scale = step * 4
         val gap = 6 * density
@@ -108,7 +121,7 @@ internal class EngineRpmGraph(context: Context) : View(context) {
                 previous = null
                 continue
             }
-            val x = left + (right - left) * (sample.timeMs - start) / EngineRpmHistory.HOUR_MS
+            val x = left + (right - left) * (sample.timeMs - start) / rangeMs
             val y = bottom - (bottom - top) * (rpm / scale).toFloat()
             val last = previous
             if (last == null || sample.timeMs - last > maxGapMs) {

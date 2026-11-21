@@ -86,6 +86,7 @@
 
                                 <TextView
                                     style="@style/CampMetricLabel"
+                                    android:textColor="@color/camp_metric_text"
                                     android:text="@string/camp_mode_gear_label" />
 
                                 <TextView
@@ -102,6 +103,7 @@
 
                                 <TextView
                                     style="@style/CampMetricLabel"
+                                    android:textColor="@color/camp_metric_text"
                                     android:text="@string/camp_mode_battery" />
 
                                 <TextView

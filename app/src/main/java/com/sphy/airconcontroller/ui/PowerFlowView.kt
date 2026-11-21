@@ -63,7 +63,24 @@ internal class PowerFlowView(context: Context) : View(context) {
             close()
         },
     )
-    private val engineRoute = Route(pointOnLine(rearMotor, frontMotor, 410f), frontMotor)
+    private val engineFeed = PointF(frontMotor.x + 20f, frontMotor.y)
+    private val engineRoute = Route(
+        pointOnLine(rearMotor, frontMotor, 410f).apply { offset(20f, 0f) }, engineFeed,
+    )
+    private val engineBatteryRoute = Route(
+        engineFeed, pointOnLine(rearMotor, frontMotor, 298f).apply { offset(20f, 0f) },
+    )
+    private val engine = Path().apply {
+        moveTo(397f, 280f)
+        lineTo(414f, 268f)
+        lineTo(448f, 282f)
+        lineTo(460f, 296f)
+        lineTo(454f, 318f)
+        lineTo(430f, 335f)
+        lineTo(400f, 321f)
+        lineTo(389f, 305f)
+        close()
+    }
     private val engineColor = context.getColor(R.color.dashboard_engine)
     private val batteryCell = BitmapFactory.decodeResource(resources, R.drawable.power_flow_battery_cell)
     private val cellPaint = Paint(Paint.ANTI_ALIAS_FLAG or Paint.FILTER_BITMAP_FLAG)
@@ -169,7 +186,17 @@ internal class PowerFlowView(context: Context) : View(context) {
                 drawAxle(canvas, rear, drivetrainColor, phase, reverse = powerKw < 0.0)
                 drawAxle(canvas, front, drivetrainColor, phase, reverse = powerKw < 0.0)
             }
-            if (showEngineRoute) drawRoute(canvas, engineRoute, engineColor, phase)
+            if (showEngineRoute) {
+                paint.style = Paint.Style.FILL
+                paint.color = (engineColor and 0x00FFFFFF) or 0xB8000000.toInt()
+                canvas.drawPath(engine, paint)
+                paint.style = Paint.Style.STROKE
+                paint.strokeWidth = 2f
+                paint.color = engineColor
+                canvas.drawPath(engine, paint)
+                drawRoute(canvas, engineRoute, engineColor, phase)
+                drawRoute(canvas, engineBatteryRoute, engineColor, phase)
+            }
         }
         canvas.restore()
 

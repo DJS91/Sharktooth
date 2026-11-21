@@ -3,6 +3,7 @@
     xmlns:tools="http://schemas.android.com/tools"
     android:layout_width="match_parent"
     android:layout_height="match_parent"
+    android:background="@color/dashboard_page_background"
     android:orientation="vertical"
     android:paddingHorizontal="8dp"
     android:paddingTop="2dp"
@@ -57,6 +58,9 @@
                 android:id="@+id/dashboardScroll"
                 android:layout_width="match_parent"
                 android:layout_height="match_parent"
+                android:clipChildren="false"
+                android:clipToPadding="false"
+                android:padding="8dp"
                 android:overScrollMode="ifContentScrolls">
 
                 <com.sphy.airconcontroller.ui.DashboardGrid

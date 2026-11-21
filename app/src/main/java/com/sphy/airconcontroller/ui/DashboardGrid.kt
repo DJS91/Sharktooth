@@ -144,7 +144,7 @@ class DashboardGrid @JvmOverloads constructor(
                             text = "+"
                             textSize = 48f
                             contentDescription = context.getString(R.string.dashboard_add_card)
-                            setBackgroundResource(R.drawable.bg_info_block)
+                            setBackgroundResource(R.drawable.bg_dashboard_card)
                             setOnClickListener { showLibrary() }
                         }, FrameLayout.LayoutParams(LayoutParams.MATCH_PARENT, LayoutParams.MATCH_PARENT))
                     }
@@ -177,14 +177,20 @@ class DashboardGrid @JvmOverloads constructor(
     private fun bindSlot(slot: FrameLayout, card: DashboardCard) {
         val content = cardViews.getValue(card)
         slot.tag = card
-        slot.setBackgroundResource(R.drawable.bg_info_block)
+        slot.setBackgroundResource(R.drawable.bg_dashboard_card)
+        slot.elevation = dp(6f)
         content.background = null
         slot.addView(content, FrameLayout.LayoutParams(
             LayoutParams.MATCH_PARENT,
             if (card == DashboardCard.MILEAGE) LayoutParams.MATCH_PARENT else LayoutParams.WRAP_CONTENT,
             if (card == DashboardCard.EVAKOOL_FRIDGE) Gravity.CENTER_VERTICAL else Gravity.TOP,
         ))
-        if (!editing) return
+        if (!editing) {
+            if (content.hasOnClickListeners()) {
+                slot.setOnClickListener { content.performClick() }
+            }
+            return
+        }
         // Cover interactive card contents only while editing so a hold anywhere can start a drag.
         slot.addView(View(context).apply {
             contentDescription = context.getString(R.string.dashboard_move_card, context.getString(card.title))
@@ -327,7 +333,7 @@ class DashboardGrid @JvmOverloads constructor(
             .create()
         val previews = available.map { card ->
             FrameLayout(context).apply {
-                setBackgroundResource(R.drawable.bg_info_block)
+                setBackgroundResource(R.drawable.bg_dashboard_card)
                 val content = cardViews.getValue(card)
                 content.background = null
                 addView(content, FrameLayout.LayoutParams(

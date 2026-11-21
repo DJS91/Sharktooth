@@ -4,8 +4,16 @@
     <string name="dashboard_page_number">Dashboard %1$d of %2$d</string>
     <item type="id" name="dashboardPedalGauge" />
     <item type="id" name="dashboardRpmGraph" />
-    <string name="dashboard_rpm_last_hour">RPM · Last hour</string>
+    <item type="id" name="dashboardRpmTenSecondsGraph" />
+    <item type="id" name="dashboardRpmFiveMinutesGraph" />
+    <item type="id" name="dashboardRpmThirtyMinutesGraph" />
+    <string name="dashboard_rpm_last_ten_seconds">RPM · Last 10 seconds</string>
+    <string name="dashboard_rpm_last_five_minutes">RPM · Last 5 minutes</string>
+    <string name="dashboard_rpm_last_thirty_minutes">RPM · Last 30 minutes</string>
+    <string name="dashboard_rpm_history_title">Engine RPM history</string>
+    <string name="dashboard_rpm_seconds_ago">−%1$d sec</string>
     <string name="dashboard_rpm_minutes_ago">−%1$d min</string>
+    <string name="dashboard_rpm_minutes_fraction_ago">−%1$s min</string>
     <string name="dashboard_rpm_now">Now</string>
     <string name="dashboard_rpm_no_history">No RPM history available</string>
     <string name="dashboard_pedal_accelerate">Accelerate</string>
@@ -21,10 +29,11 @@
     <item type="id" name="dashboardPedalPeaks" />
     <item type="id" name="dashboardPowerFlowDiagram" />
     <item type="id" name="dashboardPowerFlowRpm" />
-    <item type="id" name="dashboardRegenEnergy" />
+    <item type="id" name="dashboardFlowPower" />
     <string name="dashboard_power_flow">Power Flow</string>
     <string name="dashboard_flow_kw">%1$s kW</string>
     <string name="dashboard_flow_rpm">%1$s rpm</string>
+    <string name="fridge_preview_notice">Preview only — changes do not control a fridge.</string>
     <string name="dashboard_flow_regen_today">Regen today</string>
     <string name="dashboard_flow_kwh">%1$s kWh</string>
     <string name="dashboard_flow_description">Battery %1$s. %2$s. Power: %3$s. Engine: %4$s.</string>

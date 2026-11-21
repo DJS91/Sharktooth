@@ -82,6 +82,9 @@ class DiagnosticsRunner(
                     it.first in setOf("Bodywork", "Setting", "Instrument", "Light", "Sensor")
                 }))
             },
+            Step("Save SoC API inventory") {
+                line(campModeApiInventory(app.classLoader, DEVICE_CLASSES, SAVE_SOC_API_PATTERN))
+            },
             Step("Climate controller") { climate() },
             Step("AC service probe") { acServiceProbe() },
             Step("Vehicle info") { vehicleInfo() },

@@ -25,15 +25,23 @@ Open **Dashboard** (gauge icon) for live vehicle and head-unit readings. The fir
 
 | Card | Readings and controls |
 | --- | --- |
-| **Battery & Fuel** | Battery health, charge, fuel level, and electric, fuel and combined range estimates. Beneath the title, **Trip Started** shows how many minutes ago you shifted into Drive and **Traveled** shows the distance since that shift. The bright green (`#33FF00`) bar shows charge; the blue bar shows fuel. |
+| **Battery & Fuel** | Battery health, charge, fuel level, and electric, fuel and combined range estimates. Beneath the title, **Trip Started** shows how many minutes ago you shifted into Drive and **Traveled** shows the distance since that shift. The green charge bar is `#00C45C` in light mode and `#33FF00` in dark mode; the blue bar shows fuel. |
 | **Drive** | Speed, gear, parking brake status and pedal use. The gauge sits behind the top readings in a compact card. The blue outer arc shows accelerator input and the yellow inner arc shows brake input. The centre shows the percentage above the active pedal name and a smaller grey **Pedal** caption, with brake taking priority. Dots and figures mark the highest readings recorded while Dashboard was open that day. Peaks are saved across restarts and reset each day. |
-| **Tyres** | Pressure and status for each tyre. The card shows **OK** only when all four report normal status. |
+| **Tyres** | Pressure and status for each tyre. The supplied wheel photo represents full inflation at 40 PSI. Each tyre independently selects a flat image below 10 PSI, then the 10, 20 or 30 PSI image for readings below the next 10-PSI boundary, and the original image at 40 PSI or above. The pictures are illustrative, not a physical tyre model; the exact PSI remains visible. Unknown readings do not display an inflation image. Green/orange/red dots preserve each tyre's status without tinting the photo. The card shows **OK** only when all four report normal status. |
 | **Consumption** | Lifetime fuel economy, fuel used, electric consumption and energy charged. |
 | **Mileage** | EV and HEV distances, odometer, drive time and average speed. |
 | **Pitch / roll** | Separate gauges for front-to-back tilt and side-to-side tilt. The graphics stop at ±45°, but the numbers still show the measured angles. A dash means no reading. |
 | **Head unit** | CPU, memory and storage usage. |
-| **Engine** | Live RPM, power, oil level and a rolling one-hour RPM graph. The trace uses the same amber as the engine path on Power Flow. It records while Dashboard is open; gaps mean no readings were collected. The graph starts fresh when the app restarts. |
+| **Engine** | Live RPM, oil level and a rolling 10-second RPM graph. Tap the card for live graphs covering the last 10 seconds, 5 minutes and 30 minutes. The trace uses the same amber as the engine path on Power Flow. History records while Dashboard is open; gaps mean no readings were collected, and it starts fresh when the app restarts. |
 | **Chassis** | Outside temperature and steering angle. |
+
+### Card details and history
+
+Tap a card outside edit mode to open a large details popup. Battery & Fuel, Drive, Tyres, Consumption, Mileage, Pitch / roll, Head unit and Chassis show an enlarged, live version of the card beside current-day graphs of their numeric readings. The details/control column follows the configured sidebar side; the graph column is on the opposite side. Engine keeps its 10-second, 5-minute and 30-minute RPM graphs, with the enlarged card and Close button on the sidebar side. The fridge popup also places its controls and history-range selector on the sidebar side.
+
+The Power Flow preview scales as a whole to fit beside its graph and above the regen controls, without wrapping or scrolling. It adjusts when the available popup space or displayed values change. Tap outside a details popup, or use its Close/Back control, to return to Dashboard.
+
+Current-day dashboard history is sampled every 10 seconds while Dashboard is open, saved locally across restarts, and starts a new history at local midnight. It cannot reconstruct readings missed while Dashboard was closed. Unknown values and recording gaps remain gaps, not interpolated measurements. Storage errors are reported on screen. Static text such as vehicle identifiers is not graphed.
 
 ### Charge and fuel used on a trip
 
@@ -43,14 +51,14 @@ The starting levels stay fixed through stops, Dashboard navigation and app resta
 
 ### Optional cards
 
-Dashboard card titles have a soft grey glow in dark mode only. The Power Flow illustration keeps its proportions in a compact card, with readings layered over the image. The card scrolls with the Dashboard when it extends below the screen.
+The Power Flow illustration keeps its proportions in a compact card, with readings layered over the image. The card scrolls with the Dashboard when it extends below the screen. Its orange engine path runs to the right of the blue/green battery path so simultaneous flows remain visible, both on the card and in its details popup.
 
-- **Power Flow:** The green battery display shows current charge. The power reading appears at the top right, with engine RPM below it; **Regen today** appears at the bottom left. While the vehicle is moving, blue paths flow toward the wheels when the battery is supplying power, and green paths flow toward the battery when it is charging. An amber path shows that the engine is running. At 0 km/h the paths are hidden, but the power, charge and RPM readings remain visible. The animation shows overall flow, not which axle is active, and engine RPM alone does not mean the battery is charging. **Regen today** estimates the energy recovered in kWh from readings collected while Dashboard is open. It is saved across restarts and resets each day.
-- **EVAKOOL fridge:** Shows both compartment temperatures, supply voltage, Eco/Max mode, power state and how recently the fridge reported in. Use **Reconnect** if the card shows **Fridge disconnected**. Tap the connected card outside edit mode to open controls and history.
+- **Power Flow:** The green battery display shows current charge. **Regen today** appears at the top right; power and engine RPM appear at the bottom left. While the vehicle is moving, blue paths flow toward the wheels when the battery is supplying power, and green paths flow toward the battery when it is charging. An amber engine and path to the battery indicate the engine is running, not that the battery is necessarily charging. At 0 km/h the paths are hidden, but the power, charge and RPM readings remain visible. The animation shows overall flow, not which axle is active. **Regen today** estimates the energy recovered in kWh from readings collected while Dashboard is open. It is saved across restarts and resets each day. Tap for a larger animated illustration, today's accumulated-regen graph and the **Standard / Larger** regen-mode selector. These are the names in the bundled BYD API reference. Live changes require a readable mode, exported SDK constants and confirmed vehicle readback; unavailable or failed changes are displayed explicitly.
+- **EVAKOOL fridge:** Shows both compartment temperatures, supply voltage, Eco/Max mode, power state and how recently the fridge reported in. Use **Reconnect** if the card shows **Fridge disconnected**. Tap the card outside edit mode to open controls and history.
 
-The Drive speed and pedal readings refresh up to twenty times per second while Dashboard is open. The Power Flow power reading refreshes up to fifty times per second. Both depend on the vehicle supplying new data; other vehicle readings keep their own refresh rates.
+The Drive speed, pedals and engine RPM are polled every 50 ms while Dashboard is open. The Power Flow power reading is polled every 20 ms. Actual updates depend on read time and the vehicle supplying new data; other readings keep their own refresh rates.
 
-The debug app opens Dashboard with example readings, not live vehicle data. The sample fridge card is display-only.
+The debug app opens Dashboard with example readings and simulated daily graphs, not live vehicle data. Its regen selector is simulated and does not send vehicle commands or save preview history. The sample fridge card opens a simulated controls preview; changes there do not control a fridge.
 
 ## Camping Mode
 
@@ -69,8 +77,8 @@ The read-only **Actions** checklist runs down the left column first, then down t
 ### End a session
 
 1. Touch the centre screen to wake it and start restoration. Leaving **P** also ends Camping Mode automatically. If the vehicle is switched off during a session, restoration starts when it next confirms **READY**. A saved session recovered after the app restarts or the head unit resumes from suspension is also restored once READY is confirmed, rather than silently continuing Camping Mode. These safeguards work while Sharktooth is running, even if the Camp Mode page is closed. Reaching the battery cutoff also starts restoration; a missing battery reading does not trigger it, and the cutoff does **not** switch the vehicle off.
-2. Stay in **P** while Sharktooth restores the cluster brightness, HUD, media and DRLs and re-enables head-unit Bluetooth and connected DiKey lighting. Each resolved step unticks. A failed recovery stays red with its error below the left card, but the remaining recovery actions continue. If restoration is incomplete, tap **Retry restoring settings**; saved settings remain available for retry.
-3. When the **Headlight reminder** appears, turn the headlights back on and visually check that lighting is normal before driving. If anything failed, the popup also lists the recovery actions to perform manually. The windows remain closed, climate stays off, and CarPlay does not restart automatically. Turn climate back on and reconnect your phone normally if needed.
+2. Stay in **P** while Sharktooth restores the cluster brightness, HUD, media and DRLs and re-enables head-unit Bluetooth and connected DiKey lighting. Cluster brightness returns to its saved level; if no level was saved, it uses level 14 of 22 (approximately 60%). Each resolved step unticks. A failed recovery stays red with its error below the left card, but the remaining recovery actions continue. Camp Mode then turns off even if recovery failed, and the start button returns.
+3. When the **Headlight reminder** appears, turn the headlights back on and visually check that lighting is normal before driving. If anything failed, the popup also lists the recovery actions to perform manually. If Sharktooth cannot save the exit, it warns that the saved session might return after an app restart. The windows remain closed, climate stays off, and CarPlay does not restart automatically. Turn climate back on and reconnect your phone normally if needed.
 
 ### Save SoC
 

@@ -3,6 +3,7 @@ package com.sphy.airconcontroller.diagnostics
 import java.lang.reflect.Modifier
 
 private val CAMP_API_PATTERN = Regex("window|theme|night|day|display.?mode|light|beam|ambient|lux|lumin", RegexOption.IGNORE_CASE)
+internal val SAVE_SOC_API_PATTERN = Regex("soc|(?:charge|battery).*(?:save|hold|maintain)", RegexOption.IGNORE_CASE)
 internal val LIGHTING_API_PATTERN = Regex("light|beam|day.?night|ambient|lux|lumin", RegexOption.IGNORE_CASE)
 private val MUTATING_GETTER_PATTERN = Regex("^getAnd(Set|Reset|Clear)", RegexOption.IGNORE_CASE)
 
@@ -20,7 +21,11 @@ internal fun readLightingGetters(label: String, device: Any, read: (String, () -
     }
 }
 
-internal fun campModeApiInventory(classLoader: ClassLoader, classes: List<Pair<String, String>>): String =
+internal fun campModeApiInventory(
+    classLoader: ClassLoader,
+    classes: List<Pair<String, String>>,
+    pattern: Regex = CAMP_API_PATTERN,
+): String =
     buildString {
         appendLine("Read-only SDK metadata; no vehicle methods or settings are invoked.")
         for ((label, className) in classes) {
@@ -29,7 +34,7 @@ internal fun campModeApiInventory(classLoader: ClassLoader, classes: List<Pair<S
             try {
                 val type = Class.forName(className, false, classLoader)
                 val methods = type.methods
-                    .filter { CAMP_API_PATTERN.containsMatchIn(it.name) }
+                    .filter { pattern.containsMatchIn(it.name) }
                     .sortedWith(compareBy({ it.name }, { it.parameterTypes.joinToString { param -> param.name } }))
                 if (methods.isEmpty()) appendLine("  No matching public methods found.")
                 methods.forEach { method ->
@@ -40,7 +45,7 @@ internal fun campModeApiInventory(classLoader: ClassLoader, classes: List<Pair<S
                     owner.fields.filter { field ->
                         Modifier.isStatic(field.modifiers) && Modifier.isFinal(field.modifiers) &&
                             field.type == Int::class.javaPrimitiveType &&
-                            CAMP_API_PATTERN.containsMatchIn(field.name)
+                            pattern.containsMatchIn(field.name)
                     }.sortedBy { it.name }.forEach { field ->
                         appendLine("  constant ${owner.name}.${field.name}")
                     }

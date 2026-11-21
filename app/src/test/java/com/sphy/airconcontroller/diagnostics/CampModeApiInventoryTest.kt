@@ -11,12 +11,27 @@ class CampModeApiInventoryTest {
         fun getINSTheme(): Int = error("Must not invoke vehicle methods")
         fun setHeadlightControlMode(mode: Int): Int = error("Must not invoke vehicle methods: $mode")
         fun getAmbientLux(): Int = error("Must not invoke vehicle methods")
+        fun getSocSaveSwitch(): Int = error("Must not invoke vehicle methods")
+        fun setSocSaveSwitch(state: Int): Int = error("Must not invoke vehicle methods: $state")
         fun unrelated(): Int = error("Must not invoke vehicle methods")
 
         companion object {
             const val WINDOW_CLOSED = 1
+            const val SOC_ENABLED = 1
             const val UNRELATED = 2
         }
+    }
+
+    @Test fun saveSocInventoryListsOnlyMatchingMetadataWithoutInvokingMethods() {
+        val report = campModeApiInventory(
+            ExampleDevice::class.java.classLoader!!,
+            listOf("Example" to ExampleDevice::class.java.name),
+            SAVE_SOC_API_PATTERN,
+        )
+        assertTrue(report.contains("int getSocSaveSwitch()"))
+        assertTrue(report.contains("int setSocSaveSwitch(int)"))
+        assertTrue(report.contains("SOC_ENABLED"))
+        assertFalse(report.contains("getAmbientLux()"))
     }
 
     @Test fun reportsRelevantMetadataWithoutCallingVehicleMethods() {

@@ -11,6 +11,8 @@ import android.widget.ArrayAdapter
 import android.widget.Button
 import android.widget.CheckBox
 import android.widget.ListView
+import android.widget.LinearLayout
+import android.widget.ScrollView
 import android.widget.TextView
 import android.widget.Toast
 import androidx.activity.result.contract.ActivityResultContracts
@@ -20,9 +22,15 @@ import com.google.android.material.button.MaterialButtonToggleGroup
 import com.google.android.material.switchmaterial.SwitchMaterial
 import com.sphy.airconcontroller.OpenDiKeyApp
 import com.sphy.airconcontroller.R
+import com.sphy.airconcontroller.ui.DashboardSamples
+import com.sphy.airconcontroller.ui.DetailsColumns
+import com.sphy.airconcontroller.storage.AppSettings
+import com.sphy.airconcontroller.storage.SidebarSide
 
 /** The same fridge controls embedded in its page or shown over the dashboard. */
 class FridgeControlsFragment : AppCompatDialogFragment() {
+    private val isPreview get() = arguments?.getBoolean(ARG_PREVIEW) == true
+    private var previewStatus: EvakoolProtocol.Status? = null
     private class Card(root: View, val compartment: Int) {
         val label: TextView = root.findViewById(R.id.compartmentLabel)
         val current: TextView = root.findViewById(R.id.compartmentCurrent)
@@ -74,6 +82,11 @@ class FridgeControlsFragment : AppCompatDialogFragment() {
 
     override fun onViewCreated(view: View, savedInstanceState: Bundle?) {
         super.onViewCreated(view, savedInstanceState)
+        if (showsDialog) arrangePopup(view)
+        if (isPreview) {
+            setupPreview(view, savedInstanceState)
+            return
+        }
         controller = OpenDiKeyApp.from(requireContext()).fridge
         if (android.os.Build.VERSION.SDK_INT >= 33 &&
             requireContext().checkSelfPermission(android.Manifest.permission.POST_NOTIFICATIONS) != android.content.pm.PackageManager.PERMISSION_GRANTED
@@ -104,7 +117,7 @@ class FridgeControlsFragment : AppCompatDialogFragment() {
         }
         listOf(R.id.fridgeBack, R.id.backButtonEnd).forEach { id ->
             view.findViewById<View>(id).apply {
-                visibility = if (showsDialog) View.VISIBLE else View.GONE
+                if (!showsDialog) visibility = View.GONE
                 setOnClickListener { if (showsDialog) dismiss() else requireActivity().finish() }
             }
         }
@@ -157,12 +170,30 @@ class FridgeControlsFragment : AppCompatDialogFragment() {
         }
     }
 
+    private fun arrangePopup(view: View) {
+        val side = AppSettings(requireContext()).sidebarSide
+        val row = view.findViewById<LinearLayout>(R.id.fridgeDetailsColumns)
+        val controls = view.findViewById<ScrollView>(R.id.fridgeControlsPanel)
+        val graphs = view.findViewById<LinearLayout>(R.id.fridgeGraphPanel)
+        val ranges = view.findViewById<View>(R.id.fridgeRange)
+        graphs.removeView(ranges)
+        val controlsContent = controls.getChildAt(0) as LinearLayout
+        controlsContent.addView(ranges, 0, LinearLayout.LayoutParams(
+            ViewGroup.LayoutParams.MATCH_PARENT, ViewGroup.LayoutParams.WRAP_CONTENT,
+        ))
+        DetailsColumns.arrange(row, controls, graphs, side)
+        view.findViewById<View>(R.id.fridgeBack).visibility = if (side == SidebarSide.LEFT) View.VISIBLE else View.GONE
+        view.findViewById<View>(R.id.backButtonEnd).visibility = if (side == SidebarSide.RIGHT) View.VISIBLE else View.GONE
+    }
+
     override fun onStart() {
         super.onStart()
         if (showsDialog) {
             val bounds = resources.displayMetrics
+            dialog?.setCanceledOnTouchOutside(true)
             dialog?.window?.setLayout((bounds.widthPixels * 0.94).toInt(), (bounds.heightPixels * 0.92).toInt())
         }
+        if (isPreview) return
         controller.addListener(listener)
         controller.attach()
         handler.post(graphTick)
@@ -170,6 +201,10 @@ class FridgeControlsFragment : AppCompatDialogFragment() {
     }
 
     override fun onStop() {
+        if (isPreview) {
+            super.onStop()
+            return
+        }
         handler.removeCallbacks(graphTick)
         controller.removeListener(listener)
         actionDialog?.setOnDismissListener(null)
@@ -180,6 +215,112 @@ class FridgeControlsFragment : AppCompatDialogFragment() {
         renderPicker = null
         controller.detach()
         super.onStop()
+    }
+
+    override fun onSaveInstanceState(outState: Bundle) {
+        super.onSaveInstanceState(outState)
+        previewStatus?.let {
+            outState.putBoolean(STATE_PREVIEW_ON, it.on)
+            outState.putBoolean(STATE_PREVIEW_MAX, it.max)
+            outState.putInt(STATE_PREVIEW_LEFT, it.leftTarget)
+            outState.putInt(STATE_PREVIEW_RIGHT, it.rightTarget)
+            outState.putLong(STATE_PREVIEW_RANGE, rangeMs)
+        }
+    }
+
+    private fun setupPreview(view: View, savedInstanceState: Bundle?) {
+        val sample = DashboardSamples.fridge
+        previewStatus = sample.copy(
+            on = savedInstanceState?.getBoolean(STATE_PREVIEW_ON, sample.on) ?: sample.on,
+            max = savedInstanceState?.getBoolean(STATE_PREVIEW_MAX, sample.max) ?: sample.max,
+            leftTarget = savedInstanceState?.getInt(STATE_PREVIEW_LEFT, sample.leftTarget) ?: sample.leftTarget,
+            rightTarget = savedInstanceState?.getInt(STATE_PREVIEW_RIGHT, sample.rightTarget) ?: sample.rightTarget,
+        )
+        rangeMs = savedInstanceState?.getLong(STATE_PREVIEW_RANGE, FridgeHistory.DAY_MS) ?: FridgeHistory.DAY_MS
+        val previewCards = listOf(
+            Card(view.findViewById(R.id.fridgeLeftCard), 1),
+            Card(view.findViewById(R.id.fridgeRightCard), 2),
+        )
+        val previewPower = view.findViewById<SwitchMaterial>(R.id.fridgePower)
+        val previewMode = view.findViewById<MaterialButtonToggleGroup>(R.id.fridgeMode)
+        val previewGraph = view.findViewById<FridgeGraphView>(R.id.fridgeGraph)
+        val ranges = view.findViewById<MaterialButtonToggleGroup>(R.id.fridgeRange)
+        view.findViewById<TextView>(R.id.fridgeName).setText(R.string.fridge_unknown_name)
+        view.findViewById<TextView>(R.id.fridgeSubtitle).setText(R.string.fridge_preview_notice)
+        view.findViewById<TextView>(R.id.fridgeStatus).setText(R.string.fridge_preview_notice)
+        view.findViewById<View>(R.id.fridgeReconnect).visibility = View.GONE
+        view.findViewById<View>(R.id.fridgeMore).visibility = View.GONE
+        listOf(R.id.fridgeBack, R.id.backButtonEnd).forEach { id ->
+            view.findViewById<View>(id).setOnClickListener { dismiss() }
+        }
+        previewCards[0].label.setText(R.string.fridge_left)
+        previewCards[0].label.setTextColor(requireContext().getColor(R.color.classic_accent))
+        previewCards[1].label.setText(R.string.fridge_right)
+        previewCards[1].label.setTextColor(requireContext().getColor(R.color.gauge_charge))
+
+        fun renderPreview() {
+            val status = checkNotNull(previewStatus)
+            val unit = if (status.celsius) "C" else "F"
+            previewCards.forEach { card ->
+                val left = card.compartment == 1
+                card.current.text = "${if (left) status.left else status.right}°$unit"
+                card.target.text = "${if (left) status.leftTarget else status.rightTarget}°$unit"
+            }
+            view.findViewById<TextView>(R.id.fridgeInfo).text = getString(R.string.fridge_voltage, status.voltage)
+            renderingMode = true
+            previewPower.isChecked = status.on
+            previewMode.check(if (status.max) R.id.fridgeModeMax else R.id.fridgeModeEco)
+            renderingMode = false
+            previewPower.setText(if (status.on) R.string.fridge_on else R.string.fridge_off)
+            val now = System.currentTimeMillis()
+            val samples = listOf(now - rangeMs * 3 / 4, now).map {
+                FridgeHistory.Sample(it, status.left, status.right, status.leftTarget, status.rightTarget, status.celsius)
+            }
+            previewGraph.setData(samples, rangeMs, now, status.celsius)
+        }
+        previewCards.forEach { card ->
+            val side = card.label.text.toString()
+            card.up.contentDescription = getString(R.string.fridge_up, side)
+            card.down.contentDescription = getString(R.string.fridge_down, side)
+            for ((button, delta) in listOf(card.up to 1, card.down to -1)) {
+                button.setOnClickListener {
+                    val status = checkNotNull(previewStatus)
+                    val range = FridgeController.targetRange(status.celsius)
+                    previewStatus = if (card.compartment == 1) {
+                        status.copy(leftTarget = (status.leftTarget + delta).coerceIn(range))
+                    } else status.copy(rightTarget = (status.rightTarget + delta).coerceIn(range))
+                    renderPreview()
+                }
+            }
+        }
+        previewPower.setOnCheckedChangeListener { _, on ->
+            if (!renderingMode) {
+                previewStatus = checkNotNull(previewStatus).copy(on = on)
+                renderPreview()
+            }
+        }
+        previewMode.addOnButtonCheckedListener { _, id, checked ->
+            if (checked && !renderingMode) {
+                previewStatus = checkNotNull(previewStatus).copy(max = id == R.id.fridgeModeMax)
+                renderPreview()
+            }
+        }
+        ranges.check(when (rangeMs) {
+            FridgeHistory.HOUR_MS -> R.id.fridgeRangeHour
+            FridgeHistory.WEEK_MS -> R.id.fridgeRangeWeek
+            else -> R.id.fridgeRangeDay
+        })
+        ranges.addOnButtonCheckedListener { _, id, checked ->
+            if (checked) {
+                rangeMs = when (id) {
+                    R.id.fridgeRangeHour -> FridgeHistory.HOUR_MS
+                    R.id.fridgeRangeWeek -> FridgeHistory.WEEK_MS
+                    else -> FridgeHistory.DAY_MS
+                }
+                renderPreview()
+            }
+        }
+        renderPreview()
     }
 
     private fun render() {
@@ -376,5 +517,18 @@ class FridgeControlsFragment : AppCompatDialogFragment() {
         picker.getButton(AlertDialog.BUTTON_POSITIVE).setOnClickListener { client.scan() }
         client.scan()
         renderPicker?.invoke()
+    }
+
+    companion object {
+        private const val ARG_PREVIEW = "preview"
+        private const val STATE_PREVIEW_ON = "preview_on"
+        private const val STATE_PREVIEW_MAX = "preview_max"
+        private const val STATE_PREVIEW_LEFT = "preview_left"
+        private const val STATE_PREVIEW_RIGHT = "preview_right"
+        private const val STATE_PREVIEW_RANGE = "preview_range"
+
+        internal fun preview() = FridgeControlsFragment().apply {
+            arguments = Bundle().apply { putBoolean(ARG_PREVIEW, true) }
+        }
     }
 }

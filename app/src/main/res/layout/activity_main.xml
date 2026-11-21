@@ -202,7 +202,7 @@
                             android:id="@+id/homeModesButton"
                             style="@style/HomeNavigationItem"
                             android:contentDescription="@string/modes_title">
-                            <ImageView style="@style/HomeNavigationIcon" android:src="@drawable/ic_lucide_tent" />
+                            <ImageView style="@style/HomeNavigationIcon" android:src="@drawable/ic_modes_tent" />
                             <TextView style="@style/HomeNavigationLabel" android:text="@string/modes_title" />
                         </LinearLayout>
                     </LinearLayout>

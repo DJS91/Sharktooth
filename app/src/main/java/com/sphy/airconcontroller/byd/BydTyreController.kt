@@ -54,19 +54,24 @@ class BydTyreController(context: Context) {
         }
 
         fun temperatureLabel(): String {
-            if (temperature == null) return "—"
-            return "${temperature - TEMP_OFFSET_C}°C"
+            return temperatureC()?.let { "${it}°C" } ?: "—"
+        }
+
+        fun temperatureC(): Int? = temperature?.minus(TEMP_OFFSET_C)
+
+        fun pressurePsi(): Float? {
+            val byType = pressureByType?.takeIf { it.isFinite() && it >= 0f } ?: return null
+            if (byType == 0f) {
+                // Interpret zero as flat only when both pressure channels and live status agree.
+                return if (pressureKpa == 0 && signalState == "ok" && pressureState == "under") 0f else null
+            }
+            val kpa = pressureKpa
+            return if (kpa != null && kpa > 0) kpa * KPA_TO_PSI else byType / 10f
         }
 
         /** Compact psi label for the tyre strip (1 decimal + unit). */
         fun pressurePsiShort(): String {
-            val byType = pressureByType
-            if (byType == null || byType <= 0f) return "—"
-            val psi = if (pressureKpa != null && pressureKpa > 0) {
-                pressureKpa * KPA_TO_PSI
-            } else {
-                byType / 10f
-            }
+            val psi = pressurePsi() ?: return "—"
             return String.format("%.1f psi", psi)
         }
 
@@ -75,8 +80,7 @@ class BydTyreController(context: Context) {
          * (over-pressure, leak, signal error, or uncalibrated).
          */
         fun statusTone(): StatusTone {
-            val byType = pressureByType
-            if (byType == null || byType <= 0f) return StatusTone.FAULT
+            if (pressurePsi() == null) return StatusTone.FAULT
             if (signalState != "ok") return StatusTone.FAULT
             if (airLeakState != "ok") return StatusTone.FAULT
             if (pressureState == "over") return StatusTone.FAULT

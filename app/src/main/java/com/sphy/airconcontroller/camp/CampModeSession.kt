@@ -209,11 +209,7 @@ internal class CampModeSession(
         }
     }
 
-    private fun entryStoppedMessage(): String = if (restoreAfterEntry) {
-        "Entry interrupted. Automatically restoring saved settings."
-    } else {
-        "Entry stopped. Use Retry restoring settings to restore the saved settings."
-    }
+    private fun entryStoppedMessage(): String = "Entry stopped. Automatically restoring saved settings."
 
     suspend fun checkBatteryCutoff(soc: Double?, cutoff: Int) {
         if (state.value.awaitingWake && !state.value.busy && batteryAtCutoff(soc, cutoff)) exit()
@@ -237,7 +233,6 @@ internal class CampModeSession(
         )
         try {
             record("Exiting Camp Mode. Turn the headlights back on and verify normal lighting before driving.")
-            var restored = true
             val steps: List<Pair<CampStep, suspend () -> CampResult>> = listOf(
                 CampStep.CLUSTER to { actions.restoreCluster(original) },
                 CampStep.HUD to { actions.restoreHud(original) },
@@ -265,27 +260,22 @@ internal class CampModeSession(
                     )
                 }
                 record("$label: ${if (result.success) "OK" else "FAILED"} - ${result.detail}")
-                restored = restored && result.success
             }
-            if (restored) {
-                val report = state.value.report + "\nCamp Mode disabled. Windows remain closed; climate remains OFF."
-                saved = null
-                actions.persist(null, report, emptySet(), state.value.remindHeadlights,
-                    state.value.failedSteps, state.value.sessionError)
-                mutableState.value = state.value.copy(active = false, report = report, completedSteps = emptySet())
-            } else {
-                record("Restoration incomplete. Saved settings retained; use Retry restoring settings.")
-            }
+            val report = state.value.report + "\nCamp Mode disabled. Windows remain closed; climate remains OFF." +
+                if (state.value.failedSteps.isNotEmpty()) "\nPerform failed recovery actions manually." else ""
+            saved = null
+            mutableState.value = state.value.copy(active = false, report = report, completedSteps = emptySet())
+            persistState()
         } catch (e: IOException) {
-            saved = original
-            failure("Restoration failed", e)
+            saved = null
+            exitPersistenceFailure(e)
         } catch (e: SecurityException) {
-            saved = original
-            failure("Restoration failed", e)
+            saved = null
+            exitPersistenceFailure(e)
         } catch (e: IllegalStateException) {
             if (e is CancellationException) throw e
-            saved = original
-            failure("Restoration failed", e)
+            saved = null
+            exitPersistenceFailure(e)
         } finally {
             mutableState.value = state.value.copy(active = saved != null, busy = false, restoring = false, currentStep = null)
         }
@@ -293,6 +283,10 @@ internal class CampModeSession(
 
     suspend fun stopWindows() {
         stopping = true
+        if (state.value.busy && !state.value.restoring) {
+            entryNeedsRollback = true
+            restoreAfterEntry = true
+        }
         try {
             val result = attempt { actions.stopWindows() }
             if (!result.success) {
@@ -351,6 +345,13 @@ internal class CampModeSession(
     private fun recordPersistenceError(e: Exception) {
         val message = "Could not save restoration progress: ${e.javaClass.simpleName}: ${e.message}"
         mutableState.value = state.value.copy(sessionError = message, report = state.value.report + "\n$message")
+    }
+
+    private fun exitPersistenceFailure(e: Exception) {
+        val message = "Could not save Camp Mode exit: ${e.javaClass.simpleName}: ${e.message}. " +
+            "The saved session may return after an app restart; verify restoration manually."
+        mutableState.value = state.value.copy(active = false, completedSteps = emptySet(),
+            sessionError = message, report = state.value.report + "\n" + message)
     }
 
     private suspend fun failure(label: String, e: Exception) {

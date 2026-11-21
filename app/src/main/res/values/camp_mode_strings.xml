@@ -18,6 +18,7 @@
     <string name="camp_mode_battery_cutoff">Battery cutoff</string>
     <string name="camp_save_soc">Save SoC</string>
     <string name="camp_save_soc_help">Sets the battery level to maintain.</string>
+    <string name="camp_save_soc_switch_unavailable">Save SoC switch status is unavailable.</string>
     <string name="camp_save_soc_target">Save SoC battery target</string>
     <string name="camp_save_soc_unavailable">N/A</string>
     <string name="camp_save_soc_not_confirmed">The vehicle did not confirm the Save SoC change.</string>
@@ -36,8 +37,7 @@
     <string name="camp_mode_reminder_dismiss_failed">Could not save the reminder dismissal. It may appear again.</string>
     <string name="camp_mode_working">Updating settings. Please wait.</string>
     <string name="camp_mode_waiting">Camping Mode active. Touch the screen to wake it and automatically restore saved settings.</string>
-    <string name="camp_mode_session">Saved settings need restoration. Tap Retry restoring settings. Saved settings are kept until restoration succeeds.</string>
-    <string name="camp_mode_retry_restore">Retry restoring settings</string>
+    <string name="camp_mode_session">Saved settings are awaiting automatic restoration.</string>
     <string name="camp_mode_step_dikey">Turn Controls Bar Lights off</string>
     <string name="camp_mode_step_carplay">Disconnect Phone</string>
     <string name="camp_mode_step_bluetooth">Turn head-unit Bluetooth off</string>

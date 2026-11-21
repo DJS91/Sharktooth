@@ -109,8 +109,18 @@ class CampModeTest {
                 assertFalse(saveSoc.isEnabled)
                 assertEquals(activity.getString(R.string.camp_save_soc_unavailable), saveSocValue.text.toString())
                 activity.renderSaveSoc(CampModeController.SaveSocStatus(
+                    com.sphy.airconcontroller.byd.BydSaveSocController.Reading(null, 45, 100),
+                ))
+                assertFalse(saveSocSwitch.isEnabled)
+                assertFalse(saveSoc.isEnabled)
+                assertEquals(45, saveSoc.progress)
+                assertEquals(activity.getString(R.string.camp_save_soc_switch_unavailable),
+                    activity.findViewById<TextView>(R.id.campSaveSocHelp).text.toString())
+                activity.renderSaveSoc(CampModeController.SaveSocStatus(
                     com.sphy.airconcontroller.byd.BydSaveSocController.Reading(false, 45, 100),
                 ))
+                assertEquals(activity.getString(R.string.camp_save_soc_help),
+                    activity.findViewById<TextView>(R.id.campSaveSocHelp).text.toString())
                 assertTrue(saveSocSwitch.isEnabled)
                 assertFalse(saveSocSwitch.isChecked)
                 assertFalse(saveSoc.isEnabled)
@@ -186,8 +196,8 @@ class CampModeTest {
                 activity.renderControls(CampModeSession.State(true, false, "", remindHeadlights = true),
                     false, null, 10)
                 assertEquals(View.VISIBLE, enable.visibility)
-                assertTrue(enable.isEnabled)
-                assertEquals(activity.getString(R.string.camp_mode_retry_restore), enable.text.toString())
+                assertFalse(enable.isEnabled)
+                assertEquals(activity.getString(R.string.camp_mode_enable), enable.text.toString())
                 assertNull(activity.headlightReminderDialog)
                 activity.renderControls(CampModeSession.State(false, false, "", remindHeadlights = true),
                     false, null, 10)
@@ -386,17 +396,21 @@ class CampModeTest {
             Intent(context, CampModeActivity::class.java).addFlags(Intent.FLAG_ACTIVITY_NEW_TASK),
         ) as CampModeActivity
         val failed = CampModeSession.State(
-            active = true, busy = false, report = "", completedSteps = setOf(CampStep.HUD),
+            active = false, busy = false, report = "", completedSteps = emptySet(),
             remindHeadlights = true, failedSteps = mapOf(
                 CampStep.HUD to CampActionError("Restore HUD", "HUD read-back failed", true),
                 CampStep.WINDOWS to CampActionError("Close windows", "Window command timed out"),
             ),
+            sessionError = "The saved session may return after an app restart; verify restoration manually.",
         )
         try {
             instrumentation.waitForIdleSync()
             instrumentation.runOnMainSync {
                 activity.renderChecklist(failed)
                 activity.renderControls(failed, true, 76.0, 10)
+                val start = activity.findViewById<Button>(R.id.campModeEnable)
+                assertTrue(start.isEnabled)
+                assertEquals("Start Camping Mode", start.text.toString())
                 val errors = activity.findViewById<TextView>(R.id.campModeErrors)
                 assertEquals(View.VISIBLE, errors.visibility)
                 assertTrue(errors.text.contains("HUD read-back failed"))
@@ -424,6 +438,7 @@ class CampModeTest {
                 assertTrue(message.contains("perform these failed recovery actions manually"))
                 assertTrue(message.contains("Restore HUD"))
                 assertTrue(message.contains("Check that all windows are closed"))
+                assertTrue(message.contains("saved session may return after an app restart"))
             }
             instrumentation.waitForIdleSync()
             instrumentation.runOnMainSync {
@@ -432,7 +447,8 @@ class CampModeTest {
                 assertSame(overview.parent, errors.parent)
                 assertTrue("Errors should sit below the left card", errors.top >= overview.bottom)
                 activity.renderControls(failed.copy(busy = true, restoring = true), true, 76.0, 10)
-                val resolved = failed.copy(active = false, completedSteps = emptySet(), failedSteps = emptyMap())
+                val resolved = failed.copy(active = false, completedSteps = emptySet(), failedSteps = emptyMap(),
+                    sessionError = null)
                 activity.renderChecklist(resolved)
                 activity.renderControls(resolved, true, 76.0, 10)
                 assertEquals(View.GONE, errors.visibility)

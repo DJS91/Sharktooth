@@ -363,13 +363,8 @@ internal class CampModeController private constructor(context: Context) {
         override suspend fun restoreDrl(saved: CampSavedState): CampResult = setDrl(saved.drlOn)
 
         override suspend fun restoreCluster(saved: CampSavedState): CampResult {
-            val brightness = saved.clusterBrightness
-                ?: return CampResult(true, "Older session did not change instrument-cluster brightness.")
-            check(brightness in BydCabinDisplayController.MIN_BRIGHTNESS..BydCabinDisplayController.MAX_BRIGHTNESS) {
-                "Invalid saved instrument-cluster brightness: $brightness; no command sent."
-            }
             return io {
-                val result = cabinDisplays.setClusterBrightness(brightness, ::requirePark)
+                val result = cabinDisplays.restoreClusterBrightness(saved.clusterBrightness, ::requirePark)
                 CampResult(result.success, result.detail)
             }
         }

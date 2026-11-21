@@ -493,6 +493,66 @@ class HomeLayoutTest {
         }
     }
 
+    @Test fun campMetricsContrastWithOverviewInLightModeAndKeepDarkTheme() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            for (nightMode in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
+                val config = Configuration(instrumentation.targetContext.resources.configuration)
+                config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightMode
+                val base = instrumentation.targetContext.createConfigurationContext(config)
+                for (theme in listOf(R.style.Theme_OpenDiKey, R.style.Theme_OpenDiKey_Modern)) {
+                    val context = ContextThemeWrapper(base, theme)
+                    val page = LayoutInflater.from(context).inflate(R.layout.activity_camp_mode, null)
+                    val overview = page.findViewById<com.google.android.material.card.MaterialCardView>(R.id.campModeOverview)
+                    for (id in listOf(R.id.campModeGear, R.id.campModeSoc)) {
+                        val tile = page.findViewById<TextView>(id).parent as ViewGroup
+                        val background = (tile.background as GradientDrawable).color!!.defaultColor
+                        val label = tile.getChildAt(0) as TextView
+                        if (nightMode == Configuration.UI_MODE_NIGHT_NO) {
+                            assertTrue(ColorUtils.calculateContrast(background, overview.cardBackgroundColor.defaultColor) >= 1.4)
+                            assertTrue(ColorUtils.calculateContrast(label.currentTextColor, background) >= 4.5)
+                        } else {
+                            assertEquals(ContextCompat.getColor(context, R.color.bg_base), background)
+                            assertEquals(ContextCompat.getColor(context, R.color.text_muted), label.currentTextColor)
+                        }
+                    }
+                }
+            }
+        }
+    }
+
+    @Test fun controlsBarAndAdasCardsMatchDashboardInBothThemes() {
+        val instrumentation = InstrumentationRegistry.getInstrumentation()
+        instrumentation.runOnMainSync {
+            for (nightMode in listOf(Configuration.UI_MODE_NIGHT_NO, Configuration.UI_MODE_NIGHT_YES)) {
+                val config = Configuration(instrumentation.targetContext.resources.configuration)
+                config.uiMode = (config.uiMode and Configuration.UI_MODE_NIGHT_MASK.inv()) or nightMode
+                val base = instrumentation.targetContext.createConfigurationContext(config)
+                for (theme in listOf(R.style.Theme_OpenDiKey, R.style.Theme_OpenDiKey_Modern)) {
+                    val context = ContextThemeWrapper(base, theme)
+                    val expected = Color.parseColor(if (nightMode == Configuration.UI_MODE_NIGHT_NO)
+                        "#E9E9E9" else "#272E37")
+                    assertEquals(expected, context.getColor(R.color.dashboard_card_background))
+                    val controls = LayoutInflater.from(context).inflate(R.layout.activity_color_config, null)
+                    for (id in listOf(R.id.colorLeft, R.id.colorMiddle, R.id.colorRight, R.id.colorKeys)) {
+                        assertEquals(expected, controls.findViewById<ColorSettingCard>(id).cardBackgroundColor.defaultColor)
+                    }
+                    val adas = LayoutInflater.from(context).inflate(R.layout.activity_adas, null)
+                    val row = adas.findViewById<View>(R.id.adasElkaOffButton).parent as View
+                    val card = row.parent as View
+                    val image = Bitmap.createBitmap(100, 100, Bitmap.Config.ARGB_8888)
+                    try {
+                        card.background.setBounds(0, 0, image.width, image.height)
+                        card.background.draw(Canvas(image))
+                        assertEquals(expected, image.getPixel(50, 50))
+                    } finally {
+                        image.recycle()
+                    }
+                }
+            }
+        }
+    }
+
     @Test fun cardsAndSectionsAreBorderlessInBothStylesAndLightModes() {
         val instrumentation = InstrumentationRegistry.getInstrumentation()
         instrumentation.runOnMainSync {

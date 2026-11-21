@@ -88,4 +88,32 @@ class BydCabinDisplayControllerTest {
         assertTrue(instrument.writes.isEmpty())
         assertTrue(setting.writes.isEmpty())
     }
+
+    @Test fun restorationWritesSavedOrFallbackBrightnessFromAnyCurrentReading() = runBlocking {
+        for (current in listOf(1, 7, 22, 0, -999999999)) {
+            val instrument = Instrument(brightness = current)
+            val displays = controller(instrument, Setting())
+            var guarded = 0
+            assertTrue(displays.restoreClusterBrightness(16) { guarded++ }.success)
+            assertEquals(16, instrument.brightness)
+            assertEquals(listOf(16), instrument.writes)
+            assertEquals(1, guarded)
+        }
+        val instrument = Instrument(brightness = 3)
+        val fallback = controller(instrument, Setting()).restoreClusterBrightness(null) {}
+        assertTrue(fallback.success)
+        assertEquals(14, instrument.brightness)
+        assertTrue(fallback.detail.contains("fallback 14"))
+    }
+
+    @Test fun restorationStillChecksParkAndReadbackWhenCurrentBrightnessIsUnknown() = runBlocking {
+        val instrument = Instrument(brightness = 0)
+        val displays = controller(instrument, Setting())
+        val rejected = displays.restoreClusterBrightness(null) { error("Park not confirmed") }
+        assertFalse(rejected.success)
+        assertTrue(instrument.writes.isEmpty())
+        val ignored = Instrument(brightness = 0, applies = false)
+        assertFalse(controller(ignored, Setting()).restoreClusterBrightness(null) {}.success)
+        assertEquals(listOf(14), ignored.writes)
+    }
 }

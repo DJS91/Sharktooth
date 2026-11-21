@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<ripple xmlns:android="http://schemas.android.com/apk/res/android"
+    android:color="@color/accent_orange_soft">
+    <item>
+        <shape android:shape="rectangle">
+            <solid android:color="@color/dashboard_card_background" />
+            <corners android:radius="?attr/dkTileRadius" />
+            <stroke
+                android:width="?attr/dkOutlineWidth"
+                android:color="@color/surface_stroke" />
+        </shape>
+    </item>
+</ripple>

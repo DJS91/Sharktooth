@@ -1,7 +1,9 @@
 package com.sphy.airconcontroller
 
 import android.content.Intent
+import android.content.res.ColorStateList
 import android.content.pm.ApplicationInfo
+import android.database.sqlite.SQLiteException
 import android.graphics.Typeface
 import android.graphics.drawable.GradientDrawable
 import android.hardware.Sensor
@@ -16,27 +18,40 @@ import android.text.Spanned
 import android.text.TextUtils
 import android.text.style.ForegroundColorSpan
 import android.text.style.StyleSpan
+import android.util.TypedValue
+import android.util.Log
 import android.view.Gravity
 import android.view.LayoutInflater
 import android.view.View
 import android.widget.FrameLayout
+import android.widget.Button
 import android.widget.ImageView
 import android.widget.LinearLayout
 import android.widget.ScrollView
 import android.widget.TextView
+import android.widget.Toast
 import androidx.annotation.ColorRes
 import androidx.annotation.DrawableRes
+import androidx.appcompat.app.AlertDialog
 import androidx.core.content.ContextCompat
 import androidx.core.view.doOnNextLayout
 import androidx.activity.OnBackPressedCallback
 import androidx.lifecycle.Lifecycle
 import androidx.lifecycle.lifecycleScope
 import androidx.lifecycle.repeatOnLifecycle
+import com.google.android.material.button.MaterialButton
+import com.google.android.material.button.MaterialButtonToggleGroup
 import com.sphy.airconcontroller.byd.BydTyreController
 import com.sphy.airconcontroller.byd.BydVehicleInfoController
+import com.sphy.airconcontroller.byd.BydRegenController
 import com.sphy.airconcontroller.byd.TabletSocReader
 import com.sphy.airconcontroller.fridge.FridgeTile
 import com.sphy.airconcontroller.storage.AppSettings
+import com.sphy.airconcontroller.storage.DashboardHistoryStorage
+import com.sphy.airconcontroller.ui.DashboardDetailsDialog
+import com.sphy.airconcontroller.ui.DashboardHistory
+import com.sphy.airconcontroller.ui.DashboardHistoryGraph
+import com.sphy.airconcontroller.ui.DashboardMetrics
 import com.sphy.airconcontroller.ui.AttitudeHorizonView
 import com.sphy.airconcontroller.ui.DashboardCard
 import com.sphy.airconcontroller.ui.DashboardGrid
@@ -49,6 +64,7 @@ import com.sphy.airconcontroller.ui.PercentBar
 import com.sphy.airconcontroller.ui.PowerFlowView
 import com.sphy.airconcontroller.ui.RegenEnergySampler
 import com.sphy.airconcontroller.ui.PedalGauge
+import com.sphy.airconcontroller.ui.TyreInflation
 import com.sphy.airconcontroller.ui.EngineRpmGraph
 import com.sphy.airconcontroller.ui.EngineRpmHistory
 import kotlinx.coroutines.Dispatchers
@@ -58,6 +74,7 @@ import kotlinx.coroutines.launch
 import kotlinx.coroutines.withContext
 import java.time.LocalDate
 import java.text.NumberFormat
+import org.json.JSONException
 import kotlin.math.atan2
 import kotlin.math.sqrt
 import kotlin.math.roundToInt
@@ -94,6 +111,24 @@ open class VehicleInfoActivity : HomeActivity() {
 
     private lateinit var pedalGauge: PedalGauge
     private lateinit var rpmGraph: EngineRpmGraph
+    private var rpmDialog: AlertDialog? = null
+    private var rpmDialogGraphs = emptyList<EngineRpmGraph>()
+    private var detailsDialog: DashboardDetailsDialog? = null
+    private var cardViews = emptyMap<DashboardCard, View>()
+    private val historyStorage = lazy { DashboardHistoryStorage(this) }
+    private val dailyHistory by lazy { DashboardHistory(historyStorage.value) }
+    private var historySamples = emptyList<DashboardHistory.Sample>()
+    private var historyGraphs = emptyList<DashboardHistoryGraph>()
+    private var historyNote: TextView? = null
+    private var historyError: String? = null
+    private var dailyRegen = 0.0
+    private var latestPitch: Double? = null
+    private var latestRoll: Double? = null
+    private val regenController by lazy { BydRegenController(this) }
+    private var previewRegenMode = BydRegenController.Mode.STANDARD
+    private var lastLongGraphUpdate = 0L
+    private var hasLiveRpm = false
+    private val rpmHistory by lazy { if (showDashboardSamples) EngineRpmHistory() else sharedRpmHistory }
     private lateinit var driveHero: TextView
     private lateinit var driveSubtitle: TextView
     private lateinit var parkBrakeValue: TextView
@@ -166,6 +201,15 @@ open class VehicleInfoActivity : HomeActivity() {
             bindSnapshot(DashboardSamples.vehicle)
             bindTabletSoc(DashboardSamples.headUnit)
             bindDashboardAttitude(ax = 1.2, ay = -0.8, az = 9.7)
+            seedPreviewHistory()
+            lifecycleScope.launch {
+                repeatOnLifecycle(Lifecycle.State.STARTED) {
+                    while (isActive) {
+                        bindRpmLive(DashboardSamples.vehicle.dynamics.engineRpm)
+                        delay(RPM_POLL_INTERVAL_MS)
+                    }
+                }
+            }
             return
         }
 
@@ -176,10 +220,12 @@ open class VehicleInfoActivity : HomeActivity() {
                     val capturedAt = SystemClock.elapsedRealtime()
                     val captureDay = LocalDate.now().toEpochDay()
                     val recovered = regenSampler.sample(captureDay, capturedAt, snap.dynamics.enginePowerKw)
-                    showDailyRegen(settings.addDailyRegenKwh(captureDay, recovered))
+                    val totalRegen = settings.addDailyRegenKwh(captureDay, recovered)
+                    showDailyRegen(totalRegen)
                     val soc = withContext(Dispatchers.IO) { tabletSoc.snapshot() }
                     bindSnapshot(snap)
                     bindTabletSoc(soc)
+                    recordHistory(snap, soc, totalRegen)
                     delay(POLL_INTERVAL_MS)
                 }
             }
@@ -201,6 +247,15 @@ open class VehicleInfoActivity : HomeActivity() {
                     val power = withContext(Dispatchers.IO) { info.readEnginePowerKw() }
                     bindPowerLive(power)
                     delay(POWER_POLL_INTERVAL_MS)
+                }
+            }
+        }
+        lifecycleScope.launch {
+            repeatOnLifecycle(Lifecycle.State.STARTED) {
+                while (isActive) {
+                    val rpm = withContext(Dispatchers.IO) { info.readEngineRpm() }
+                    bindRpmLive(rpm)
+                    delay(RPM_POLL_INTERVAL_MS)
                 }
             }
         }
@@ -235,6 +290,7 @@ open class VehicleInfoActivity : HomeActivity() {
     fun enterDashboardEditMode() = setDashboardEditing(true)
 
     private fun setDashboardEditing(editing: Boolean) {
+        if (editing) detailsDialog?.dialog?.dismiss()
         swipeHost.pagingEnabled = !editing
         dashboardGrid.setEditing(editing)
         findViewById<View>(R.id.dashboardEditToolbar).visibility = if (editing) View.VISIBLE else View.GONE
@@ -283,6 +339,7 @@ open class VehicleInfoActivity : HomeActivity() {
     }
 
     private fun renderDashboardPage(page: Int, scrollY: Int = 0) {
+        detailsDialog?.dialog?.dismiss()
         val cards = settings.dashboardCardsForPage(page)
         val generation = ++pageRenderGeneration
         dashboardGrid.showLayout(DashboardLayout(cards))
@@ -319,6 +376,8 @@ open class VehicleInfoActivity : HomeActivity() {
     private fun dp(value: Int): Int = (value * resources.displayMetrics.density).toInt()
 
     override fun onStop() {
+        detailsDialog?.dialog?.dismiss()
+        rpmDialog?.dismiss()
         regenSampler.reset()
         swipeHost.resetSwipe()
         fridgeCard.stop()
@@ -341,7 +400,6 @@ open class VehicleInfoActivity : HomeActivity() {
         batteryHealthValue = batteryBlock.findViewById(R.id.infoBlockHero)
         batteryBlock.setHeroLabel(R.string.vehicle_info_row_soh)
         batterySubtitle = batteryBlock.findViewById(R.id.infoBlockSubtitle)
-        batterySubtitle.textSize = 16f
         val batteryTitle = batteryBlock.findViewById<TextView>(R.id.infoBlockTitle)
         val batteryHeader = batteryTitle.parent as LinearLayout
         val titleColumnParams = batteryTitle.layoutParams
@@ -360,6 +418,8 @@ open class VehicleInfoActivity : HomeActivity() {
         fuelBar = addPercentRow(
             batteryMetaHost, getString(R.string.vehicle_info_row_fuel), R.color.dashboard_accent_blue, glow = true,
         )
+        batterySubtitle.setTextSize(TypedValue.COMPLEX_UNIT_PX,
+            batteryMetaHost.getChildAt(0).findViewById<TextView>(R.id.percentRowLabel).textSize)
         blockHost.addView(batteryBlock)
 
         consumptionHost = addSimpleBlock(
@@ -435,7 +495,7 @@ open class VehicleInfoActivity : HomeActivity() {
             R.string.vehicle_info_row_rpm,
         )
         engineHost.addView(TextView(this).apply {
-            setText(R.string.dashboard_rpm_last_hour)
+            setText(R.string.dashboard_rpm_last_ten_seconds)
             setTextAppearance(com.google.android.material.R.style.TextAppearance_MaterialComponents_Caption)
             setTextColor(getColor(R.color.text_muted))
         })
@@ -443,6 +503,7 @@ open class VehicleInfoActivity : HomeActivity() {
         engineHost.addView(rpmGraph, LinearLayout.LayoutParams(
             LinearLayout.LayoutParams.MATCH_PARENT, dp(126),
         ))
+        (engineHost.parent as View).setOnClickListener { showRpmHistory() }
 
         val tyresBlock = inflater.inflate(R.layout.view_tyres_block, blockHost, false)
         tyresBlock.setDashboardTitle(R.string.vehicle_info_block_tyres, R.drawable.ic_card_tyres)
@@ -468,6 +529,7 @@ open class VehicleInfoActivity : HomeActivity() {
             TyreSlot(
                 root = slot,
                 icon = slot.findViewById(R.id.tyreIcon),
+                status = slot.findViewById(R.id.tyreStatusIndicator),
                 psi = slot.findViewById(R.id.tyrePsiText),
                 temp = slot.findViewById(R.id.tyreTempText),
             )
@@ -493,12 +555,12 @@ open class VehicleInfoActivity : HomeActivity() {
         val powerFlowBlock = inflater.inflate(R.layout.view_dashboard_power_flow, blockHost, false) as FrameLayout
         powerFlowBlock.setDashboardTitle(R.string.dashboard_power_flow, R.drawable.ic_card_engine)
         powerFlowBlock.findViewById<DashboardTitleView>(R.id.infoBlockTitle).enableSolidHalo()
-        powerFlowPower = powerFlowBlock.findViewById(R.id.infoBlockHero)
-        powerFlowPower.includeFontPadding = false
-        val powerFlowHeroLabel = powerFlowBlock.findViewById<TextView>(R.id.infoBlockHeroLabel).apply {
+        powerFlowRegen = powerFlowBlock.findViewById(R.id.infoBlockHero)
+        powerFlowRegen.includeFontPadding = false
+        powerFlowBlock.findViewById<TextView>(R.id.infoBlockHeroLabel).apply {
             includeFontPadding = false
         }
-        powerFlowBlock.setHeroLabel(R.string.vehicle_info_row_power)
+        powerFlowBlock.setHeroLabel(R.string.dashboard_flow_regen_today)
         val flowRows = powerFlowBlock.findViewById<LinearLayout>(R.id.infoBlockRows)
         powerFlowView = PowerFlowView(this).apply { id = R.id.dashboardPowerFlowDiagram }
         powerFlowBlock.addView(powerFlowView, 0, FrameLayout.LayoutParams(
@@ -506,14 +568,11 @@ open class VehicleInfoActivity : HomeActivity() {
         ))
         powerFlowRpm = TextView(this).apply {
             id = R.id.dashboardPowerFlowRpm
-            gravity = Gravity.END
+            gravity = Gravity.START
             setTextAppearance(com.google.android.material.R.style.TextAppearance_MaterialComponents_Caption)
             includeFontPadding = false
             setTextColor(getColor(R.color.text_primary))
         }
-        (powerFlowHeroLabel.parent as LinearLayout).addView(powerFlowRpm, LinearLayout.LayoutParams(
-            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
-        ).apply { topMargin = dp(4) })
         val flowFooter = LinearLayout(this).apply {
             orientation = LinearLayout.HORIZONTAL
             gravity = Gravity.BOTTOM
@@ -543,11 +602,14 @@ open class VehicleInfoActivity : HomeActivity() {
             flowFooter.addView(column, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
             return value
         }
-        powerFlowRegen = footerReading(R.id.dashboardRegenEnergy, R.string.dashboard_flow_regen_today, Gravity.START)
+        powerFlowPower = footerReading(R.id.dashboardFlowPower, R.string.vehicle_info_row_power, Gravity.START)
+        (powerFlowPower.parent as LinearLayout).addView(powerFlowRpm, LinearLayout.LayoutParams(
+            LinearLayout.LayoutParams.WRAP_CONTENT, LinearLayout.LayoutParams.WRAP_CONTENT,
+        ).apply { topMargin = dp(4) })
         flowRows.addView(flowFooter)
         showDailyRegen(if (showDashboardSamples) 1.275 else settings.dailyRegenKwh(LocalDate.now().toEpochDay()))
         bindPowerFlow(null, null, null, null)
-        dashboardGrid.initialize(DashboardLayout(settings.dashboardCardsForPage(dashboardPage)), mapOf(
+        cardViews = mapOf(
             DashboardCard.BATTERY to batteryBlock,
             DashboardCard.DRIVE to driveBlock,
             DashboardCard.TYRES to tyresBlock,
@@ -559,14 +621,20 @@ open class VehicleInfoActivity : HomeActivity() {
             DashboardCard.CHASSIS to chassisHost.parent as View,
             DashboardCard.EVAKOOL_FRIDGE to fridgeView,
             DashboardCard.POWER_FLOW to powerFlowBlock,
-        ))
+        )
+        cardViews.forEach { (card, view) ->
+            if (card != DashboardCard.ENGINE && card != DashboardCard.EVAKOOL_FRIDGE) {
+                view.setOnClickListener { showCardDetails(card) }
+            }
+        }
+        dashboardGrid.initialize(DashboardLayout(settings.dashboardCardsForPage(dashboardPage)), cardViews)
 
         dashboardReady = true
     }
 
     private fun limitDashboardGraphicHeight(card: View, graphic: PedalGauge) {
         val update = View.OnLayoutChangeListener { _, _, _, _, _, _, _, _, _ ->
-            if (swipeHost.measuredHeight > 0 && card.isAttachedToWindow) {
+            if (swipeHost.measuredHeight > 0 && card.isAttachedToWindow && detailsDialog == null) {
                 val surroundingHeight = card.measuredHeight - graphic.measuredHeight
                 val fullHeight = minOf(graphic.naturalHeight + surroundingHeight, swipeHost.measuredHeight / 2)
                 graphic.maxHeight = ((fullHeight * 0.9025f).roundToInt() - surroundingHeight).coerceAtLeast(0)
@@ -580,6 +648,8 @@ open class VehicleInfoActivity : HomeActivity() {
         // The installed head unit's accelerometer axes are swapped relative to the vehicle.
         val pitch = Math.toDegrees(atan2(ay, az))
         val roll = Math.toDegrees(atan2(-ax, sqrt(ay * ay + az * az)))
+        latestPitch = pitch
+        latestRoll = roll
         attitudePitchView.setAttitude(pitch, roll)
         attitudeRollView.setAttitude(pitch, roll)
     }
@@ -688,7 +758,7 @@ open class VehicleInfoActivity : HomeActivity() {
         bindPowerFlow(
             b.socPct,
             if (hasLivePower) powerFlowPowerKw else snap.dynamics.enginePowerKw,
-            snap.dynamics.engineRpm,
+            if (hasLiveRpm) powerFlowEngineRpm else snap.dynamics.engineRpm,
             if (live != null) live.speedKmh else snap.dynamics.speedKmh,
         )
         val mileage = SpannableString(TextUtils.expandTemplate(
@@ -724,18 +794,16 @@ open class VehicleInfoActivity : HomeActivity() {
         )
 
         val d = snap.dynamics
-        val rpm = d.engineRpm?.takeIf { it.isFinite() && it >= 0 }
-        engineHost.setHeroValue(fmt(rpm, " rpm"))
-        val now = SystemClock.elapsedRealtime()
         if (showDashboardSamples) {
-            val interval = 60_000L
-            rpmGraph.bind((0..60).map { minute ->
-                val value = rpm ?: 0.0
-                EngineRpmHistory.Sample(now - (60 - minute) * interval,
-                    if (minute == 60) value else value * (0.65 + 0.35 * kotlin.math.sin(minute / 3.0)))
-            }, now, interval)
-        } else {
-            rpmGraph.bind(rpmHistory.record(now, rpm), now, 10_000L)
+            val now = SystemClock.elapsedRealtime()
+            val rpm = d.engineRpm ?: 0.0
+            for (i in 0..36_000) {
+                rpmHistory.record(now - EngineRpmHistory.MAX_HISTORY_MS + i * 50L,
+                    if (i == 36_000) rpm else rpm * (0.65 + 0.35 * kotlin.math.sin(i / 60.0)))
+            }
+            updateRpm(rpm, now, record = false)
+        } else if (!hasLiveRpm) {
+            updateRpm(d.engineRpm, SystemClock.elapsedRealtime(), record = true)
         }
         chassisHost.setHeroValue(fmt(d.outsideTempC, "°C"))
         driveHero.visibility = View.VISIBLE
@@ -750,13 +818,16 @@ open class VehicleInfoActivity : HomeActivity() {
         parkBrakeValue.text = onOff(d.parkBrake)
 
         while (engineHost.childCount > 2) engineHost.removeViewAt(2)
-        appendTextRows(
-            engineHost,
-            listOf(
-                getString(R.string.vehicle_info_row_power) to fmt(d.enginePowerKw, " kW"),
-                getString(R.string.vehicle_info_row_oil) to fmt(d.oilLevel),
-            ),
-        )
+        val oilRow = inflateInfoRow(layoutInflater, engineHost,
+            getString(R.string.vehicle_info_row_oil) to fmt(d.oilLevel))
+        oilRow.findViewById<TextView>(R.id.infoRowLabel).apply {
+            layoutParams = (layoutParams as LinearLayout.LayoutParams).apply {
+                width = LinearLayout.LayoutParams.WRAP_CONTENT
+                weight = 0f
+                marginEnd = dp(8)
+            }
+        }
+        engineHost.addView(oilRow)
         replaceTextRows(
             chassisHost,
             listOf(
@@ -764,7 +835,10 @@ open class VehicleInfoActivity : HomeActivity() {
             ),
         )
 
-        val tyres = snap.tyres
+        bindDashboardTyres(snap.tyres)
+    }
+
+    internal fun bindDashboardTyres(tyres: BydTyreController.TyreSnapshot) {
         val byCorner = tyres.corners.associateBy { it.corner }
         val tones = BydTyreController.Corner.entries.map { byCorner[it]?.statusTone() }
         tyresHero.setText(when {
@@ -783,22 +857,26 @@ open class VehicleInfoActivity : HomeActivity() {
                 val slot = tyreSlots[i]
                 slot.root.visibility = View.VISIBLE
                 val reading = byCorner[corner]
-                if (reading == null) {
-                    slot.psi.text = "—"
-                    slot.temp.text = "—"
-                    slot.icon.setColorFilter(
-                        ContextCompat.getColor(this, R.color.tyre_fault),
-                    )
-                } else {
-                    slot.psi.text = reading.pressurePsiShort()
-                    slot.temp.text = reading.temperatureLabel()
-                    val color = when (reading.statusTone()) {
-                        BydTyreController.StatusTone.OK -> R.color.tyre_ok
-                        BydTyreController.StatusTone.UNDER -> R.color.tyre_under
-                        BydTyreController.StatusTone.FAULT -> R.color.tyre_fault
-                    }
-                    slot.icon.setColorFilter(ContextCompat.getColor(this, color))
+                val inflation = TyreInflation.fromPsi(reading?.pressurePsi())
+                slot.psi.text = reading?.pressurePsiShort() ?: "—"
+                slot.temp.text = reading?.temperatureLabel() ?: "—"
+                if (slot.inflation != inflation) {
+                    if (inflation == null) slot.icon.setImageDrawable(null)
+                    else slot.icon.setImageResource(inflation.image)
+                    slot.inflation = inflation
                 }
+                slot.icon.visibility = if (inflation == null) View.INVISIBLE else View.VISIBLE
+                slot.icon.contentDescription = if (inflation == null) {
+                    getString(R.string.tyre_inflation_unknown, corner.label)
+                } else getString(R.string.tyre_inflation_description, corner.label, slot.psi.text,
+                    getString(inflation.description))
+                val (color, status) = when (reading?.statusTone()) {
+                    BydTyreController.StatusTone.OK -> R.color.tyre_ok to R.string.tyre_status_ok
+                    BydTyreController.StatusTone.UNDER -> R.color.tyre_under to R.string.tyre_status_under
+                    else -> R.color.tyre_fault to R.string.tyre_status_fault
+                }
+                slot.status.backgroundTintList = ColorStateList.valueOf(getColor(color))
+                slot.status.contentDescription = getString(status)
             }
         }
     }
@@ -937,9 +1015,223 @@ open class VehicleInfoActivity : HomeActivity() {
         bindPowerFlow(powerFlowSoc, power, powerFlowEngineRpm, powerFlowSpeedKmh)
     }
 
+    internal fun bindRpmLive(rpm: Double?, now: Long = SystemClock.elapsedRealtime()) {
+        hasLiveRpm = true
+        if (dashboardReady) updateRpm(rpm, now, record = true)
+    }
+
+    private fun updateRpm(rpm: Double?, now: Long, record: Boolean) {
+        if (record) rpmHistory.record(now, rpm)
+        val hero = (engineHost.parent as View).findViewById<TextView>(R.id.infoBlockHero)
+        val text = fmt(rpm, " rpm")
+        if (hero.text.toString() != text) hero.text = text
+        bindPowerFlow(powerFlowSoc, powerFlowPowerKw, rpm, powerFlowSpeedKmh)
+        rpmGraph.bind(rpmHistory.since(now, EngineRpmHistory.TEN_SECONDS_MS), now, 500L)
+        rpmDialogGraphs.firstOrNull()?.bind(rpmHistory.since(now, EngineRpmHistory.TEN_SECONDS_MS), now, 500L)
+        if (rpmDialogGraphs.isNotEmpty() && now - lastLongGraphUpdate >= 1_000L) {
+            rpmDialogGraphs[1].bind(rpmHistory.since(now, EngineRpmHistory.FIVE_MINUTES_MS), now, 500L)
+            rpmDialogGraphs[2].bind(rpmHistory.since(now, EngineRpmHistory.MAX_HISTORY_MS), now, 500L)
+            lastLongGraphUpdate = now
+        }
+    }
+
+    private fun showRpmHistory() {
+        if (dashboardGrid.editing || detailsDialog != null) return
+        val content = LinearLayout(this).apply {
+            orientation = LinearLayout.VERTICAL
+            setPadding(dp(20), dp(12), dp(20), dp(12))
+        }
+        content.addView(TextView(this).apply {
+            setText(R.string.dashboard_rpm_history_title)
+            setTextAppearance(com.google.android.material.R.style.TextAppearance_MaterialComponents_Headline6)
+        })
+        val ranges = listOf(
+            Triple(EngineRpmHistory.TEN_SECONDS_MS, R.string.dashboard_rpm_last_ten_seconds, R.id.dashboardRpmTenSecondsGraph),
+            Triple(EngineRpmHistory.FIVE_MINUTES_MS, R.string.dashboard_rpm_last_five_minutes, R.id.dashboardRpmFiveMinutesGraph),
+            Triple(EngineRpmHistory.MAX_HISTORY_MS, R.string.dashboard_rpm_last_thirty_minutes, R.id.dashboardRpmThirtyMinutesGraph),
+        )
+        val now = SystemClock.elapsedRealtime()
+        rpmDialogGraphs = ranges.map { (range, label, graphId) ->
+            content.addView(TextView(this).apply {
+                setText(label)
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_MaterialComponents_Subtitle2)
+            })
+            EngineRpmGraph(this, range).apply {
+                id = graphId
+                bind(rpmHistory.since(now, range), now, 500L)
+                content.addView(this, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+            }
+        }
+        detailsDialog = DashboardDetailsDialog(this, cardViews.getValue(DashboardCard.ENGINE),
+            content, null, settings.sidebarSide) {
+            rpmDialogGraphs = emptyList()
+            rpmDialog = null
+            detailsDialog = null
+        }
+        rpmDialog = detailsDialog?.dialog
+        lastLongGraphUpdate = now
+    }
+
     private fun showDailyRegen(kwh: Double) {
+        dailyRegen = kwh
         val text = getString(R.string.dashboard_flow_kwh, regenFormat.format(kwh))
         if (powerFlowRegen.text != text) powerFlowRegen.text = text
+    }
+
+    private suspend fun recordHistory(
+        snapshot: BydVehicleInfoController.Snapshot,
+        tablet: TabletSocReader.Snapshot,
+        regen: Double,
+    ) {
+        val now = System.currentTimeMillis()
+        val values = DashboardMetrics.values(snapshot, tablet, regen, latestPitch, latestRoll,
+            settings.tripUsageState.distanceKm(snapshot.battery.odoKm), latestDriveLive)
+        try {
+            historySamples = withContext(Dispatchers.IO) {
+                try {
+                    dailyHistory.record(now, values)
+                    dailyHistory.samples(now)
+                } finally {
+                    if (historyStorage.isInitialized()) historyStorage.value.close()
+                }
+            }
+            historyError = null
+        } catch (e: SQLiteException) {
+            reportHistoryError(e)
+        } catch (e: JSONException) {
+            reportHistoryError(e)
+        }
+        refreshHistoryGraphs(now)
+    }
+
+    private fun reportHistoryError(error: Exception) {
+        Log.e("DashboardHistory", "Cannot record or load daily history", error)
+        val message = getString(R.string.dashboard_history_storage_error, error.message ?: error.javaClass.simpleName)
+        if (historyError == null) Toast.makeText(this, message, Toast.LENGTH_LONG).show()
+        historyError = message
+    }
+
+    private fun refreshHistoryGraphs(now: Long = System.currentTimeMillis()) {
+        historyGraphs.forEach { it.bind(historySamples, now) }
+        historyNote?.text = historyError ?: getString(if (showDashboardSamples)
+            R.string.dashboard_history_preview else R.string.dashboard_history_note)
+    }
+
+    private fun seedPreviewHistory() {
+        val now = System.currentTimeMillis()
+        val start = DashboardHistory.dayBounds(now).first
+        val values = DashboardMetrics.values(DashboardSamples.vehicle, DashboardSamples.headUnit,
+            dailyRegen, latestPitch, latestRoll,
+            DashboardSamples.tripUsage.distanceKm(DashboardSamples.vehicle.battery.odoKm), null)
+        historySamples = (0..120).map { index ->
+            val fraction = index / 120.0
+            DashboardHistory.Sample(start + ((now - start) * fraction).toLong(),
+                values.mapValues { (key, value) ->
+                    if (key == "regen") value?.times(fraction)
+                    else value?.times(0.95 + 0.05 * kotlin.math.cos(index / 8.0))
+                })
+        }
+    }
+
+    private fun showCardDetails(card: DashboardCard) {
+        if (dashboardGrid.editing || detailsDialog != null) return
+        val graphs = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        val metrics = if (card == DashboardCard.TYRES) BydTyreController.Corner.entries.flatMap { corner ->
+            listOf("pressure_${corner.name}" to getString(R.string.dashboard_history_metric,
+                getString(R.string.dashboard_history_tyre_pressure, corner.label), "psi"),
+                "temperature_${corner.name}" to getString(R.string.dashboard_history_metric,
+                    getString(R.string.dashboard_history_tyre_temperature, corner.label), "°C"))
+        } else DashboardMetrics.forCard(card).map { it.key to it.title(this) }
+        val graphList = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        historyGraphs = metrics.map { (key, label) ->
+            graphList.addView(TextView(this).apply {
+                text = getString(R.string.dashboard_history_today, label)
+                setTextAppearance(com.google.android.material.R.style.TextAppearance_MaterialComponents_Subtitle1)
+            })
+            DashboardHistoryGraph(this, key, label,
+                if (showDashboardSamples) 25 * 3_600_000L else DashboardHistory.GAP_MS).apply {
+                graphList.addView(this, LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT,
+                    if (metrics.size == 1) (resources.displayMetrics.heightPixels * 0.65f).toInt() else dp(200)))
+            }
+        }
+        graphs.addView(ScrollView(this).apply { addView(graphList) },
+            LinearLayout.LayoutParams(LinearLayout.LayoutParams.MATCH_PARENT, 0, 1f))
+        historyNote = TextView(this).apply {
+            setTextAppearance(com.google.android.material.R.style.TextAppearance_MaterialComponents_Caption)
+            graphs.addView(this)
+        }
+        refreshHistoryGraphs()
+        val controls = if (card == DashboardCard.POWER_FLOW) buildRegenControls() else null
+        detailsDialog = DashboardDetailsDialog(this, cardViews.getValue(card), graphs, controls, settings.sidebarSide,
+            fitPreview = card == DashboardCard.POWER_FLOW) {
+            historyGraphs = emptyList()
+            historyNote = null
+            detailsDialog = null
+        }
+    }
+
+    private fun buildRegenControls(): View {
+        val controls = LinearLayout(this).apply { orientation = LinearLayout.VERTICAL }
+        controls.addView(TextView(this).apply { setText(R.string.dashboard_regen_mode) })
+        val row = MaterialButtonToggleGroup(this).apply { isSingleSelection = true }
+        val status = TextView(this).apply {
+            id = R.id.dashboardRegenStatus
+            setText(if (showDashboardSamples) R.string.dashboard_history_preview else R.string.dashboard_regen_loading)
+        }
+        var busy = false
+        var current: BydRegenController.Mode? = if (showDashboardSamples) previewRegenMode else null
+        val buttons = BydRegenController.Mode.entries.associateWith { mode ->
+            MaterialButton(this, null, com.google.android.material.R.attr.materialButtonOutlinedStyle).apply {
+                id = if (mode == BydRegenController.Mode.STANDARD) R.id.dashboardRegenStandard else R.id.dashboardRegenLarger
+                setText(if (mode == BydRegenController.Mode.STANDARD)
+                    R.string.dashboard_regen_standard else R.string.dashboard_regen_larger)
+                row.addView(this, LinearLayout.LayoutParams(0, LinearLayout.LayoutParams.WRAP_CONTENT, 1f))
+            }
+        }
+        fun render() {
+            val checked = current?.let { buttons.getValue(it).id }
+            if (checked == null) row.clearChecked() else row.check(checked)
+            buttons.forEach { (mode, button) ->
+                button.isEnabled = !busy && current != null && current != mode
+                button.isSelected = current == mode
+            }
+        }
+        buttons.forEach { (mode, button) ->
+            button.setOnClickListener {
+                if (showDashboardSamples) {
+                    previewRegenMode = mode
+                    current = mode
+                    status.setText(R.string.dashboard_history_preview)
+                    render()
+                } else {
+                    busy = true
+                    render()
+                    lifecycleScope.launch {
+                        val result = withContext(Dispatchers.IO) { regenController.setMode(mode) }
+                        val reading = withContext(Dispatchers.IO) { regenController.read() }
+                        current = reading.mode
+                        busy = false
+                        status.text = if (result.success) "" else getString(R.string.dashboard_regen_failed, result.detail)
+                        render()
+                    }
+                }
+            }
+        }
+        controls.addView(row)
+        controls.addView(status)
+        render()
+        if (!showDashboardSamples) lifecycleScope.launch {
+            val reading = withContext(Dispatchers.IO) { regenController.read() }
+            current = reading.mode
+            status.text = if (current == null) getString(R.string.dashboard_regen_unavailable, reading.detail) else ""
+            render()
+        }
+        return controls
+    }
+
+    override fun onDestroy() {
+        detailsDialog?.dialog?.dismiss()
+        super.onDestroy()
     }
 
     private fun bindPedalPeaks(peaks: AppSettings.PedalPeaks) {
@@ -988,8 +1280,10 @@ open class VehicleInfoActivity : HomeActivity() {
     private data class TyreSlot(
         val root: View,
         val icon: ImageView,
+        val status: View,
         val psi: TextView,
         val temp: TextView,
+        var inflation: TyreInflation? = null,
     )
 
     companion object {
@@ -998,9 +1292,10 @@ open class VehicleInfoActivity : HomeActivity() {
         private const val STATE_EDITING = "dashboard_editing"
         private const val STATE_PAGE = "dashboard_page"
         private const val PAGE_COUNT = 5
-        private val rpmHistory = EngineRpmHistory()
+        private val sharedRpmHistory = EngineRpmHistory()
         private const val POLL_INTERVAL_MS = 2_000L
         private const val DRIVE_POLL_INTERVAL_MS = 50L
         private const val POWER_POLL_INTERVAL_MS = 20L
+        private const val RPM_POLL_INTERVAL_MS = 50L
     }
 }

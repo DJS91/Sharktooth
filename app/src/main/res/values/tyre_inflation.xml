@@ -1,0 +1,13 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <string name="tyre_inflation_flat">Flat appearance, below 10 PSI</string>
+    <string name="tyre_inflation_ten">10 PSI appearance</string>
+    <string name="tyre_inflation_twenty">20 PSI appearance</string>
+    <string name="tyre_inflation_thirty">30 PSI appearance</string>
+    <string name="tyre_inflation_full">Fully inflated appearance, 40 PSI</string>
+    <string name="tyre_inflation_description">%1$s tyre: %2$s. %3$s.</string>
+    <string name="tyre_inflation_unknown">%1$s tyre pressure unavailable</string>
+    <string name="tyre_status_ok">Tyre status OK</string>
+    <string name="tyre_status_under">Low tyre pressure</string>
+    <string name="tyre_status_fault">Tyre status fault or unavailable</string>
+</resources>

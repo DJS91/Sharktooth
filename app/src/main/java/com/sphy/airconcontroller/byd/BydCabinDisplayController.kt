@@ -32,6 +32,17 @@ internal class BydCabinDisplayController internal constructor(
         set(instrument, "getBacklightBrightness", "setBacklightBrightness",
             value, MIN_BRIGHTNESS..MAX_BRIGHTNESS, beforeWrite)
 
+    suspend fun restoreClusterBrightness(saved: Int?, beforeWrite: () -> Unit): Result {
+        val target = saved ?: DEFAULT_RESTORE_BRIGHTNESS
+        check(target in MIN_BRIGHTNESS..MAX_BRIGHTNESS) {
+            "Invalid saved instrument-cluster brightness: $target; no command sent."
+        }
+        val result = set(instrument, "getBacklightBrightness", "setBacklightBrightness",
+            target, MIN_BRIGHTNESS..MAX_BRIGHTNESS, beforeWrite, requireKnownBefore = false)
+        return if (saved == null) result.copy(detail = "No saved brightness; using fallback $target. ${result.detail}")
+            else result
+    }
+
     suspend fun setHudState(value: Int, beforeWrite: () -> Unit): Result =
         set(setting, "getHudState", "setHudState", value, HUD_ON..HUD_OFF, beforeWrite)
 
@@ -64,10 +75,11 @@ internal class BydCabinDisplayController internal constructor(
         value: Int,
         range: IntRange,
         beforeWrite: () -> Unit,
+        requireKnownBefore: Boolean = true,
     ): Result {
         require(value in range) { "Invalid $setter value: $value (expected $range)" }
         val before = read(device, getter, range)
-        if (before.value == null) return Result(false, "No command sent: ${before.detail}")
+        if (before.value == null && requireKnownBefore) return Result(false, "No command sent: ${before.detail}")
         if (before.value == value) return Result(true, "$getter already $value; no command sent.")
         val label = "$setter($value)"
         val problems = mutableListOf<String>()
@@ -116,6 +128,7 @@ internal class BydCabinDisplayController internal constructor(
     companion object {
         const val MIN_BRIGHTNESS = 1
         const val MAX_BRIGHTNESS = 22
+        const val DEFAULT_RESTORE_BRIGHTNESS = 14
         const val HUD_ON = 1
         const val HUD_OFF = 2
         private const val TAG = "BydCabinDisplay"

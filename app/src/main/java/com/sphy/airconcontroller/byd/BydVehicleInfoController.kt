@@ -348,6 +348,11 @@ class BydVehicleInfoController(context: Context) {
         return devices["Engine"]?.let { num(it, "getEnginePower") }
     }
 
+    fun readEngineRpm(): Double? {
+        if (devices.isEmpty()) bind()
+        return devices["Engine"]?.let { readEngineRpm(it) }
+    }
+
     /** Both gearbox getters, read independently so a caller can tell which one tracks the shifter. */
     data class GearReads(val gear: Int?, val autoMode: Int?) {
         val confirmedPark: Boolean
@@ -601,6 +606,7 @@ class BydVehicleInfoController(context: Context) {
                 "Engine" to "getEnginePower",
                 "Engine" to "getEngineSpeed",
                 "Charging" to "getChargingPower",
+                "Charging" to "getSocSaveSwitch",
                 "Charging" to "getChargeBatteryTemp",
                 "Charging" to "getChargingCapacity",
                 "AC" to "getAcSubBatteryTemperature",

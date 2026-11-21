@@ -176,6 +176,10 @@ class CampModeActivity : HomeActivity() {
 
     internal fun renderSaveSoc(status: CampModeController.SaveSocStatus) {
         val reading = status.reading
+        findViewById<TextView>(R.id.campSaveSocHelp).setText(
+            if (reading != null && reading.enabled == null) R.string.camp_save_soc_switch_unavailable
+            else R.string.camp_save_soc_help,
+        )
         findViewById<SwitchMaterial>(R.id.campSaveSocSwitch).apply {
             isChecked = reading?.enabled == true
             isEnabled = reading?.enabled != null && !status.saving
@@ -231,9 +235,8 @@ class CampModeActivity : HomeActivity() {
             }
         )
         findViewById<Button>(R.id.campModeEnable).apply {
-            isEnabled = !state.busy && !state.awaitingWake && (state.active || canStart)
+            isEnabled = !state.busy && !state.active && canStart
             setText(when {
-                state.active && !state.awaitingWake && !state.busy -> R.string.camp_mode_retry_restore
                 waitingForPark -> R.string.camp_mode_waiting_for_park
                 showPreview -> R.string.camp_mode_preview_start
                 else -> R.string.camp_mode_enable

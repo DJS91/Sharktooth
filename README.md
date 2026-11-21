@@ -70,6 +70,7 @@ DiLink 5 permission and SDK loading follow [BYD Trip Stats](https://github.com/a
 
 ### Icons
 
+- Modes tent: Vectors and icons by [Icooon Mono](https://icooon-mono.com/?ref=svgrepo.com) in PD License via [SVG Repo](https://www.svgrepo.com/).
 - [Wheel](https://thenounproject.com/icon/wheel-8052406/) by Asiah from [Noun Project](https://thenounproject.com/) (CC BY)
 - [Color wheel](https://thenounproject.com/icon/color-wheel-8403265/) by Fahad Hashmi from [Noun Project](https://thenounproject.com/) (CC BY)
 - [Button](https://thenounproject.com/icon/button-8215836/) by Larea from [Noun Project](https://thenounproject.com/) (CC BY)

@@ -33,12 +33,13 @@ class FridgeTile(
     private val refreshAge = Runnable { updateAge() }
 
     init {
-        if (sample == null) tile.setOnClickListener {
+        tile.setOnClickListener {
             if (activity.supportFragmentManager.findFragmentByTag(CONTROLS_TAG) == null) {
-                FridgeControlsFragment().showNow(activity.supportFragmentManager, CONTROLS_TAG)
+                val controls = if (sample == null) FridgeControlsFragment() else FridgeControlsFragment.preview()
+                controls.showNow(activity.supportFragmentManager, CONTROLS_TAG)
             }
         }
-        reconnect.setOnClickListener { controller.reconnect() }
+        if (sample == null) reconnect.setOnClickListener { controller.reconnect() }
         render()
     }
 

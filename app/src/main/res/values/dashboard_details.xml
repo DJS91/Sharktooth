@@ -1,0 +1,35 @@
+<?xml version="1.0" encoding="utf-8"?>
+<resources>
+    <item name="dashboardDetailsColumns" type="id" />
+    <item name="dashboardDetailsCard" type="id" />
+    <item name="dashboardDetailsControls" type="id" />
+    <item name="dashboardDetailsGraphs" type="id" />
+    <item name="dashboardDetailsClose" type="id" />
+    <item name="dashboardRegenStandard" type="id" />
+    <item name="dashboardRegenLarger" type="id" />
+    <item name="dashboardRegenStatus" type="id" />
+    <item name="fridgeDetailsColumns" type="id" />
+    <item name="fridgeGraphPanel" type="id" />
+    <item name="fridgeControlsPanel" type="id" />
+    <string name="dashboard_details_close">Close</string>
+    <string name="dashboard_history_today">Today · %1$s</string>
+    <string name="dashboard_history_note">Recorded while Dashboard is open. Missing readings and recording gaps are not estimated.</string>
+    <string name="dashboard_history_preview">Simulated history and controls · does not control the vehicle</string>
+    <string name="dashboard_history_empty">No recorded readings yet</string>
+    <string name="dashboard_history_description">%1$s. Today: %2$d recorded readings.</string>
+    <string name="dashboard_history_storage_error">Dashboard history could not be saved or loaded: %1$s</string>
+    <string name="dashboard_regen_mode">Regen mode</string>
+    <string name="dashboard_regen_loading">Checking regen mode…</string>
+    <string name="dashboard_regen_standard">Standard</string>
+    <string name="dashboard_regen_larger">Larger</string>
+    <string name="dashboard_regen_unavailable">Regen mode unavailable: %1$s</string>
+    <string name="dashboard_regen_failed">Regen mode change failed: %1$s</string>
+    <string name="dashboard_history_metric">%1$s (%2$s)</string>
+    <string name="dashboard_history_pitch">Pitch</string>
+    <string name="dashboard_history_roll">Roll</string>
+    <string name="dashboard_history_electric_average">Lifetime electric average</string>
+    <string name="dashboard_history_ev_distance">EV distance</string>
+    <string name="dashboard_history_hev_distance">HEV distance</string>
+    <string name="dashboard_history_tyre_pressure">%1$s pressure</string>
+    <string name="dashboard_history_tyre_temperature">%1$s temperature</string>
+</resources>
