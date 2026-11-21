@@ -34,11 +34,15 @@ jobs:
           cache: 'gradle'
 
       - name: Check for firmware changes
-        if: github.ref == 'refs/heads/main'
         id: firmware
         env:
           GH_TOKEN: ${{ github.token }}
         run: |
+          if [ "$GITHUB_REF" = "refs/heads/dev" ]; then
+            echo "Building firmware from this dev commit for ESP testing."
+            echo "build=true" >> "$GITHUB_OUTPUT"
+            exit 0
+          fi
           BIN=Sharktooth-usb-bridge-c3.bin
           PREV_TAG="$(gh release view --json tagName -q .tagName 2>/dev/null || true)"
           BUILD=true
@@ -127,11 +131,12 @@ jobs:
         working-directory: firmware
         run: pio run
 
-      - name: Package firmware and compatibility copy
-        if: github.ref == 'refs/heads/main'
+      - name: Package firmware
         run: |
           cp firmware/Sharktooth-usb-bridge-c3.bin dist/Sharktooth-usb-bridge-c3.bin
-          cp dist/Sharktooth-usb-bridge-c3.bin dist/dikey-usb-bridge-c3.bin
+          if [ "$GITHUB_REF" = "refs/heads/main" ]; then
+            cp dist/Sharktooth-usb-bridge-c3.bin dist/dikey-usb-bridge-c3.bin
+          fi
 
       - name: Create dev prerelease
         if: github.ref == 'refs/heads/dev'
@@ -144,8 +149,13 @@ jobs:
             Head-unit dev build from `${{ github.sha }}`. Uses real vehicle controls.
             Install `Sharktooth.apk` once to opt into dev updates, then use Settings → Updates → Check for updates.
             Signed with the public release key; keeps the same package and app data.
+            ESP test firmware from the same commit is included as `Sharktooth-usb-bridge-c3.bin`.
+            Flash the merged image manually at offset `0x0`; app updates do not flash the ESP.
+            See the [firmware guide](https://github.com/DJS91/Sharktooth/blob/dev/firmware/README.md) for flashing precautions.
             Public release builds do not offer these prereleases.
-          files: dist/Sharktooth.apk
+          files: |
+            dist/Sharktooth.apk
+            dist/Sharktooth-usb-bridge-c3.bin
           fail_on_unmatched_files: true
           draft: false
           prerelease: true

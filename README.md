@@ -64,9 +64,10 @@ The ESP32 bridge is also used for WiFi telemetry and the fridge connection featu
 
 ### Dev builds and public releases
 
-Work on `dev`, commit and push there. The [Release workflow](.github/workflows/release.yml) builds a signed head-unit APK and publishes a **prerelease** tagged `dev-vYYYY.MM.DD-HHMMSS-dev`. Merge `dev` into `main` when ready to publish a **stable** release. The workflow refuses to publish from other branches.
+Work on `dev`, commit and push there. The [Release workflow](.github/workflows/release.yml) builds a signed head-unit APK and ESP USB bridge firmware from the same commit, then publishes both in a **prerelease** tagged `dev-vYYYY.MM.DD-HHMMSS-dev`. Merge `dev` into `main` when ready to publish a **stable** release. The workflow refuses to publish from other branches.
 
 - **Dev APK:** Uses real vehicle/fridge controls, not debug simulation. Sideload its `Sharktooth.apk` once from [Releases](https://github.com/DJS91/Sharktooth/releases), then use **Settings -> Updates -> Check for updates** for subsequent dev builds. The installed version ends in `-dev`.
+- **Dev ESP firmware:** Each prerelease includes a freshly built `Sharktooth-usb-bridge-c3.bin` for ESP testing. Flash it manually using the [firmware guide](firmware/README.md); installing an APK does not update the ESP. Stable releases keep their existing unchanged-firmware reuse behaviour.
 - **Public APK:** Checks only the latest stable release. Dev prereleases never enter its update channel, even when they are newer. Prereleases remain publicly downloadable for anyone who deliberately opts in.
 - Checks are manual in both channels; Android still asks before installation. Updates preserve settings/data because dev and stable share the application ID and signing key. To return to stable, sideload a stable APK built after your installed dev build.
 - The emulator `debug` build remains separate from head-unit development behaviour and keeps its simulated controls.
