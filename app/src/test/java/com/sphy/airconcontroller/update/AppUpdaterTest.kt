@@ -26,4 +26,27 @@ class AppUpdaterTest {
     fun sameVersionIsNotNewer() {
         assertFalse(AppUpdater.isNewer("2026.09.12-0357", "v2026.09.12-0357"))
     }
+
+    @Test fun devTagsCompareAgainstInstalledDevVersions() {
+        assertTrue(AppUpdater.isNewer("dev-v2026.11.21-120031-dev", "2026.11.21-120030-dev"))
+        assertFalse(AppUpdater.isNewer("dev-v2026.11.21-120030-dev", "2026.11.21-120030-dev"))
+        assertTrue(AppUpdater.isNewer("v2026.11.21-120031", "2026.11.21-120030-dev"))
+        assertTrue(AppUpdater.isNewer("dev-v2026.11.21-120030-dev", "2026.11.21-1200"))
+    }
+
+    @Test fun stableChannelNeverAcceptsDevOrOtherPrereleases() {
+        assertTrue(AppUpdater.acceptsRelease("v2026.11.21-120030", false, false, dev = false))
+        assertFalse(AppUpdater.acceptsRelease("dev-v2026.11.21-120030-dev", false, true, dev = false))
+        assertFalse(AppUpdater.acceptsRelease("dev-v2026.11.21-120030-dev", false, false, dev = false))
+        assertFalse(AppUpdater.acceptsRelease("v2026.11.21-120030", true, false, dev = false))
+        assertFalse(AppUpdater.acceptsRelease("v2026.11.21-120030-beta", false, true, dev = false))
+    }
+
+    @Test fun devChannelOnlyAcceptsPublishedDevPrereleases() {
+        assertTrue(AppUpdater.acceptsRelease("dev-v2026.11.21-120030-dev", false, true, dev = true))
+        assertFalse(AppUpdater.acceptsRelease("v2026.11.21-120030", false, false, dev = true))
+        assertFalse(AppUpdater.acceptsRelease("dev-v2026.11.21-120030-dev", true, true, dev = true))
+        assertFalse(AppUpdater.acceptsRelease("dev-v2026.11.21-120030-dev", false, false, dev = true))
+        assertFalse(AppUpdater.acceptsRelease("v2026.11.21-120030-beta", false, true, dev = true))
+    }
 }

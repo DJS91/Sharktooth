@@ -51,8 +51,13 @@ android {
         }
     }
 
+    buildFeatures {
+        buildConfig = true
+    }
+
     buildTypes {
         release {
+            buildConfigField("boolean", "DEV_UPDATES", "false")
             isMinifyEnabled = false
             proguardFiles(
                 getDefaultProguardFile("proguard-android-optimize.txt"),
@@ -60,6 +65,15 @@ android {
             )
             // Required in CI via SIGNING_* env vars (see scripts/create-release-keystore.*).
             signingConfigs.findByName("release")?.let { signingConfig = it }
+        }
+        debug {
+            buildConfigField("boolean", "DEV_UPDATES", "false")
+        }
+        create("dev") {
+            initWith(getByName("release"))
+            matchingFallbacks += "release"
+            versionNameSuffix = "-dev"
+            buildConfigField("boolean", "DEV_UPDATES", "true")
         }
     }
     compileOptions {

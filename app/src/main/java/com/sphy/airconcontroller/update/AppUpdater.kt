@@ -7,8 +7,10 @@ import android.net.Uri
 import android.os.Build
 import android.provider.Settings
 import androidx.core.content.FileProvider
+import com.sphy.airconcontroller.BuildConfig
 import kotlinx.coroutines.Dispatchers
 import kotlinx.coroutines.withContext
+import org.json.JSONArray
 import org.json.JSONObject
 import java.io.File
 import java.net.HttpURLConnection
@@ -16,7 +18,7 @@ import java.net.URL
 
 /** Checks GitHub Releases and downloads/installs `open-dikey.apk`. */
 object AppUpdater {
-    const val REPO = "DJS91/Open-DiKey"
+    const val REPO = "DJS91/Sharktooth"
     const val APK_ASSET = "open-dikey.apk"
     private const val USER_AGENT = "OpenDiKey-Updater"
 
@@ -152,7 +154,7 @@ object AppUpdater {
         }
     }
 
-    /** Tag / versionName form `vYYYY.MM.DD-HHMM` or `YYYY.MM.DD-HHMM`; date stamps compare lexicographically. */
+    /** Timestamp versions compare lexicographically, including second-resolution dev tags. */
     fun isNewer(latestVersionName: String, currentVersionName: String): Boolean {
         val latest = normalizeVersion(latestVersionName)
         val current = normalizeVersion(currentVersionName)
@@ -162,10 +164,39 @@ object AppUpdater {
     }
 
     fun normalizeVersion(raw: String): String =
-        raw.trim().removePrefix("v").removePrefix("V")
+        raw.trim().removePrefix("dev-").removePrefix("v").removePrefix("V")
+
+    internal fun acceptsRelease(tag: String, draft: Boolean, prerelease: Boolean, dev: Boolean): Boolean =
+        !draft && if (dev) prerelease && tag.startsWith("dev-v")
+            else !prerelease && !tag.startsWith("dev-")
 
     private fun fetchLatestRelease(): LatestRelease {
-        val connection = (URL("https://api.github.com/repos/$REPO/releases/latest")
+        if (!BuildConfig.DEV_UPDATES) {
+            val json = JSONObject(fetchReleaseJson("latest"))
+            check(acceptsRelease(json.getString("tag_name"), json.getBoolean("draft"),
+                json.getBoolean("prerelease"), dev = false)) { "GitHub returned a non-stable release" }
+            return parseRelease(json)
+        }
+        var page = 1
+        var latest: LatestRelease? = null
+        // Releases are ordered by source commit date, not build date (including workflow reruns).
+        do {
+            val releases = JSONArray(fetchReleaseJson("?per_page=100&page=$page"))
+            for (i in 0 until releases.length()) {
+                val json = releases.getJSONObject(i)
+                if (!acceptsRelease(json.getString("tag_name"), json.getBoolean("draft"),
+                        json.getBoolean("prerelease"), dev = true)) continue
+                val candidate = parseRelease(json)
+                if (latest == null || isNewer(candidate.versionName, latest.versionName)) latest = candidate
+            }
+            page++
+        } while (releases.length() == 100)
+        return latest ?: error("No published dev build is available")
+    }
+
+    private fun fetchReleaseJson(endpoint: String): String {
+        val path = if (endpoint.startsWith("?")) endpoint else "/$endpoint"
+        val connection = (URL("https://api.github.com/repos/$REPO/releases$path")
             .openConnection() as HttpURLConnection).apply {
             connectTimeout = 15_000
             readTimeout = 15_000
@@ -178,30 +209,32 @@ object AppUpdater {
                 val err = connection.errorStream?.bufferedReader()?.readText().orEmpty()
                 error("GitHub API HTTP ${connection.responseCode}: ${err.take(200)}")
             }
-            val body = connection.inputStream.bufferedReader().readText()
-            val json = JSONObject(body)
-            val tag = json.getString("tag_name")
-            val versionName = normalizeVersion(tag)
-            val assets = json.getJSONArray("assets")
-            var apkUrl: String? = null
-            for (i in 0 until assets.length()) {
-                val asset = assets.getJSONObject(i)
-                if (asset.getString("name") == APK_ASSET) {
-                    apkUrl = asset.getString("browser_download_url")
-                    break
-                }
-            }
-            if (apkUrl.isNullOrBlank()) {
-                error("Release $tag has no $APK_ASSET asset")
-            }
-            return LatestRelease(
-                tag = tag,
-                versionName = versionName,
-                apkUrl = apkUrl,
-                publishedAt = json.optString("published_at").ifBlank { null },
-            )
+            return connection.inputStream.bufferedReader().use { it.readText() }
         } finally {
             connection.disconnect()
         }
+    }
+
+    private fun parseRelease(json: JSONObject): LatestRelease {
+        val tag = json.getString("tag_name")
+        val versionName = normalizeVersion(tag)
+        val assets = json.getJSONArray("assets")
+        var apkUrl: String? = null
+        for (i in 0 until assets.length()) {
+            val asset = assets.getJSONObject(i)
+            if (asset.getString("name") == APK_ASSET) {
+                apkUrl = asset.getString("browser_download_url")
+                break
+            }
+        }
+        if (apkUrl.isNullOrBlank()) {
+            error("Release $tag has no $APK_ASSET asset")
+        }
+        return LatestRelease(
+            tag = tag,
+            versionName = versionName,
+            apkUrl = apkUrl,
+            publishedAt = json.optString("published_at").ifBlank { null },
+        )
     }
 }

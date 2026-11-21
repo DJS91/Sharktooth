@@ -141,7 +141,7 @@ The fridge normally connects through the ESP32 USB bridge. In the fridge page's 
 
 Open Sharktooth once after powering on the head unit. The background listener keeps the DiKey connection active while the app is in the background. See the [autostart guide](../autostart.md) for head-unit settings and limitations.
 
-To update, open **Settings → Updates → Check for updates**. If an update is available, choose **Download & install** and follow Android's installer prompts. You can also download the APK from [GitHub Releases](https://github.com/DJS91/Sharktooth/releases).
+To update, open **Settings → Updates → Check for updates**. If an update is available, choose **Download & install** and follow Android's installer prompts. Public builds check only stable releases. Head-unit dev builds (installed version ending in `-dev`) check only dev prereleases; sideload the signed dev APK once to opt in. Both channels check manually and retain real vehicle controls. You can also download the APK from [GitHub Releases](https://github.com/DJS91/Sharktooth/releases). See [dev builds and public releases](../README.md#dev-builds-and-public-releases) for signing and switching back to stable.
 
 Under **Settings → Sentry**, use **Download & install** to install Strike for 360° recording. **Details** provides app and update information; **Open Strike** appears when it is installed.
 

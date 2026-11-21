@@ -3,7 +3,7 @@
 **Compatibility:** BYD Shark 6. Other vehicles are untested.
 **Disclaimer:** Not affiliated with BYD, DiKey or their sellers.
 
-[![GitHub release](https://img.shields.io/github/v/release/DJS91/Open-DiKey?label=release)](https://github.com/DJS91/Open-DiKey/releases/latest)
+[![GitHub release](https://img.shields.io/github/v/release/DJS91/Sharktooth?label=release)](https://github.com/DJS91/Sharktooth/releases/latest)
 
 Sharktooth is an open source and free app for the BYD Shark 6's head unit to display and control various vehicle onboard telemetary, statistics and controls and much more! It supports optional DiKey physical buttons for more control. Is a work-in-progress and activly developed.
 
@@ -27,7 +27,7 @@ For detailed setup, privacy, troubleshooting and safety information, see the [fe
 ## App installation
 
 1. Enable USB debugging on the DiLink 5 head unit.
-2. Download `open-dikey.apk` from the [latest release](https://github.com/DJS91/Open-DiKey/releases), sideload it onto the head unit and open it.
+2. Download `open-dikey.apk` from the [latest release](https://github.com/DJS91/Sharktooth/releases/latest), sideload it onto the head unit and open it.
 3. Accept **Allow USB debugging** and the hidden-API exemption; the app may restart.
 4. Allow Sharktooth in the DiLink **auto-start / run in background** settings if available.
 
@@ -41,7 +41,7 @@ The DiKey button bar connects to the app through an ESP32-C3 USB bridge via cust
 You need a DiKey button bar, an **ESP32-C3 Super Mini** ([AliExpress](https://www.aliexpress.com/item/1005012631245655.html) or [Amazon AU](https://www.amazon.com.au/dp/B0GR475MP4)), and a USB cable.
 
 Setting up the USB Bridge:
-1. Download `dikey-usb-bridge-c3.bin` from the [latest release](https://github.com/DJS91/Open-DiKey/releases).
+1. Download `dikey-usb-bridge-c3.bin` from the [latest release](https://github.com/DJS91/Sharktooth/releases/latest).
 2. On a PC, open [ESPWebTool](https://esptool.spacehuhn.com/) in Chrome or Edge and connect to **USB JTAG/serial debug unit**. If it is not listed, hold **BOOT** button while plugging in the board and try again.
 3. Delete any existing address slots, add one at **`0x0`**, select the downloaded firmware and click **Program**.
 4. Plug the esp32 bridge into the car's **USB-C port** and grant USB permission if prompted.
@@ -61,6 +61,19 @@ The ESP32 bridge is also used for WiFi telemetry and the fridge connection featu
 - [ESP32 bridge firmware](firmware/).
 - [DiKey protocol notes](assets/Docs/vendor-re/PROTOCOL.md), [offline vendor docs](assets/Docs/Offline/) and [BYD API documentation](assets/BYD%20API/).
 - [Diagnostics and troubleshooting](docs/diagnostics.md).
+
+### Dev builds and public releases
+
+Work on `dev`, commit and push there. The [Release workflow](.github/workflows/release.yml) builds a signed head-unit APK and publishes a **prerelease** tagged `dev-vYYYY.MM.DD-HHMMSS-dev`. Merge `dev` into `main` when ready to publish a **stable** release. The workflow refuses to publish from other branches.
+
+- **Dev APK:** Uses real vehicle/fridge controls, not debug simulation. Sideload its `open-dikey.apk` once from [Releases](https://github.com/DJS91/Sharktooth/releases), then use **Settings -> Updates -> Check for updates** for subsequent dev builds. The installed version ends in `-dev`.
+- **Public APK:** Checks only the latest stable release. Dev prereleases never enter its update channel, even when they are newer. Prereleases remain publicly downloadable for anyone who deliberately opts in.
+- Checks are manual in both channels; Android still asks before installation. Updates preserve settings/data because dev and stable share the application ID and signing key. To return to stable, sideload a stable APK built after your installed dev build.
+- The emulator `debug` build remains separate from head-unit development behaviour and keeps its simulated controls.
+
+Both channels require the existing repository Actions secrets: `SIGNING_KEYSTORE_BASE64`, `SIGNING_STORE_PASSWORD`, `SIGNING_KEY_ALIAS`, and `SIGNING_KEY_PASSWORD`. Keep the same keystore permanently; do not commit it or its passwords. A differently signed existing installation cannot be replaced in place. CI fails rather than publishing an unsigned APK.
+
+Build locally with `.\gradlew.bat :app:assembleDev` (unsigned unless `SIGNING_*` environment variables are configured). APK versions use UTC seconds in CI, with one shared increasing version-code scheme across dev and stable.
 
 ## Credits
 
