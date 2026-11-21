@@ -203,7 +203,7 @@ a compile-time guard rejects configurations below two. The selected C3 SDK
 provides six controller BLE activities; a second guard requires room for two
 connections plus scanning. Native C3 USB CDC is
 enabled. The repository post-build script merges bootloader, partition table,
-boot-app marker and application into `dikey-usb-bridge-c3.bin`. Flash that
+boot-app marker and application into `Sharktooth-usb-bridge-c3.bin`. Flash that
 merged image at `0x0` (4 MB DIO flash).
 
 Telemetry uses `min_spiffs.csv`: two 0x1E0000-byte app slots and 0x20000
@@ -241,7 +241,7 @@ environment. The build/merge script now uses esptool's supported Python-module
 entrypoint for image conversion and merging and propagates merge failures.
 The platform's additional, optional `firmware.factory.bin` hook still reports
 that launcher restriction; the repository's requested
-`dikey-usb-bridge-c3.bin` is successfully generated and verified instead.
+merged USB bridge image is successfully generated and verified instead.
 No SDK sources or system installations were modified. Upstream NimBLE /
 IDF 5.5.5 emits macro-redefinition warnings for MSYS/ACL buffer settings; these
 were not suppressed or patched.

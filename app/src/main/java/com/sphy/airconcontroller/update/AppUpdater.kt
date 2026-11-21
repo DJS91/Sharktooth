@@ -16,10 +16,11 @@ import java.io.File
 import java.net.HttpURLConnection
 import java.net.URL
 
-/** Checks GitHub Releases and downloads/installs `open-dikey.apk`. */
+/** Checks GitHub Releases and downloads/installs `Sharktooth.apk`. */
 object AppUpdater {
     const val REPO = "DJS91/Sharktooth"
-    const val APK_ASSET = "open-dikey.apk"
+    const val APK_ASSET = "Sharktooth.apk"
+    private const val LEGACY_APK_ASSET = "open-dikey.apk"
     private const val USER_AGENT = "OpenDiKey-Updater"
 
     data class LatestRelease(
@@ -215,19 +216,17 @@ object AppUpdater {
         }
     }
 
+    internal fun preferredApkAssetName(names: List<String>): String? =
+        listOf(APK_ASSET, LEGACY_APK_ASSET).firstOrNull { it in names }
+
     private fun parseRelease(json: JSONObject): LatestRelease {
         val tag = json.getString("tag_name")
         val versionName = normalizeVersion(tag)
         val assets = json.getJSONArray("assets")
-        var apkUrl: String? = null
-        for (i in 0 until assets.length()) {
-            val asset = assets.getJSONObject(i)
-            if (asset.getString("name") == APK_ASSET) {
-                apkUrl = asset.getString("browser_download_url")
-                break
-            }
-        }
-        if (apkUrl.isNullOrBlank()) {
+        val names = (0 until assets.length()).map { assets.getJSONObject(it).getString("name") }
+        val assetName = preferredApkAssetName(names) ?: error("Release $tag has no $APK_ASSET asset")
+        val apkUrl = assets.getJSONObject(names.indexOf(assetName)).getString("browser_download_url")
+        if (apkUrl.isBlank()) {
             error("Release $tag has no $APK_ASSET asset")
         }
         return LatestRelease(

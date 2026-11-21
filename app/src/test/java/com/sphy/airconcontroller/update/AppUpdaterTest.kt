@@ -1,10 +1,26 @@
 package com.sphy.airconcontroller.update
 
 import org.junit.Assert.assertFalse
+import org.junit.Assert.assertEquals
+import org.junit.Assert.assertNull
 import org.junit.Assert.assertTrue
 import org.junit.Test
 
 class AppUpdaterTest {
+    @Test fun renamedApkTakesPriorityOverCompatibilityCopy() {
+        assertEquals("Sharktooth.apk",
+            AppUpdater.preferredApkAssetName(listOf("open-dikey.apk", "Sharktooth.apk")))
+    }
+
+    @Test fun olderReleasesStillOfferAnApk() {
+        assertEquals("open-dikey.apk",
+            AppUpdater.preferredApkAssetName(listOf("dikey-usb-bridge-c3.bin", "open-dikey.apk")))
+    }
+
+    @Test fun firmwareOnlyReleaseDoesNotOfferAnApk() {
+        assertNull(AppUpdater.preferredApkAssetName(listOf("Sharktooth-usb-bridge-c3.bin")))
+    }
+
     @Test
     fun newerDateStampBeatsOlder() {
         assertTrue(AppUpdater.isNewer("2026.09.12-0357", "2026.09.12-0218"))

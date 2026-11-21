@@ -30,7 +30,7 @@ def merge_bin(source, target, env):
     bootloader = build_dir / "bootloader.bin"
     partitions = build_dir / "partitions.bin"
     boot_app0 = _boot_app0(env)
-    out = project_dir / "dikey-usb-bridge-c3.bin"
+    out = project_dir / "Sharktooth-usb-bridge-c3.bin"
 
     cmd = [
         env.subst("$PYTHONEXE"),
