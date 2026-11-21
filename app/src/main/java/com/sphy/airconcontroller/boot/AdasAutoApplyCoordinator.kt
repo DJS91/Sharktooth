@@ -263,7 +263,8 @@ object AdasAutoApplyCoordinator {
             log(
                 app,
                 "--- attempt $attempt (t+${elapsedMs}ms) target: elka=${profile.elka} " +
-                    "lda=${profile.laneDeparture} aeb=${profile.aeb} dms=${profile.dms} ---"
+                    "lda=${profile.laneDeparture} aeb=${profile.aeb} dms=${profile.dms} " +
+                    "fcw=${profile.forwardCollision ?: "unchanged"} ---"
             )
             val results = runBounded(ATTEMPT_TIMEOUT_MS) {
                 controller.applyCustomProfileVerified(profile) { line -> log(app, line) }

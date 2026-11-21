@@ -10,6 +10,7 @@ import com.sphy.airconcontroller.dikey.DiKeySession
 import com.sphy.airconcontroller.diagnostics.DiagnosticUpload
 import com.sphy.airconcontroller.fridge.FridgeController
 import com.sphy.airconcontroller.ui.ThemeManager
+import com.sphy.airconcontroller.ui.DashboardRecorder
 import com.sphy.airconcontroller.telemetry.TelemetrySender
 
 class OpenDiKeyApp : Application() {
@@ -22,6 +23,7 @@ class OpenDiKeyApp : Application() {
         private set
     lateinit var telemetry: TelemetrySender
         private set
+    internal val dashboardRecorder by lazy { DashboardRecorder(this) }
 
     override fun onCreate() {
         super.onCreate()

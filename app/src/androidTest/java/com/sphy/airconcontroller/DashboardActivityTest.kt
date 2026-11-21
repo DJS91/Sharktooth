@@ -57,6 +57,10 @@ import com.sphy.airconcontroller.ui.TripUsageTracker
 import com.sphy.airconcontroller.ui.DashboardHistory
 import com.sphy.airconcontroller.ui.DashboardHistoryGraph
 import com.sphy.airconcontroller.ui.FittedCardPreview
+import com.sphy.airconcontroller.ui.EngineRpmHistory
+import kotlinx.coroutines.flow.first
+import kotlinx.coroutines.runBlocking
+import kotlinx.coroutines.withTimeout
 import org.junit.After
 import org.junit.Assert.*
 import org.junit.Before
@@ -138,8 +142,9 @@ class DashboardActivityTest {
                 DashboardCard.POWER_FLOW, DashboardCard.ENGINE, DashboardCard.EVAKOOL_FRIDGE,
             )
             val page = open(samples = true)
-            val dbFile = context.getDatabasePath("dashboard_history.db")
-            val dbModified = dbFile.lastModified()
+            val recorder = OpenDiKeyApp.from(context).dashboardRecorder
+            val previewRpm = 99_999.0
+            instrumentation.runOnMainSync { page.bindRpmLive(previewRpm) }
             for (card in listOf(DashboardCard.POWER_FLOW, DashboardCard.ENGINE)) {
                 instrumentation.runOnMainSync {
                     val grid = page.findViewById<ViewGroup>(R.id.dashboardGrid)
@@ -155,6 +160,7 @@ class DashboardActivityTest {
                     assertEquals(side == SidebarSide.LEFT, controls.left < graphs.left)
                     if (card == DashboardCard.POWER_FLOW) {
                         val before = context.getSharedPreferences("aircon_settings", Context.MODE_PRIVATE).all.toMap()
+                        assertEquals("High", root.findViewById<TextView>(R.id.dashboardRegenLarger).text.toString())
                         root.findViewById<View>(R.id.dashboardRegenLarger).performClick()
                         assertTrue(root.findViewById<View>(R.id.dashboardRegenStandard).isEnabled)
                         assertFalse(root.findViewById<View>(R.id.dashboardRegenLarger).isEnabled)
@@ -164,8 +170,44 @@ class DashboardActivityTest {
                 onView(withId(R.id.dashboardDetailsClose)).inRoot(isDialog()).perform(click())
             }
             instrumentation.runOnMainSync {
-                assertEquals("Debug history must not modify real history", dbModified, dbFile.lastModified())
+                assertFalse("Preview RPM must not enter the live recorder",
+                    recorder.rpmHistory.since(SystemClock.elapsedRealtime(), EngineRpmHistory.MAX_HISTORY_MS)
+                        .any { it.rpm == previewRpm })
                 assertTrue((page.findViewById<View>(R.id.dashboardFridgeCard).parent as View).performClick())
+            }
+
+            @Test fun graphRecordingContinuesWithNoDashboardAndIsRetainedOnReturn() = runBlocking {
+                val recorder = OpenDiKeyApp.from(context).dashboardRecorder
+                val page = open(samples = false)
+                withTimeout(20_000L) { recorder.snapshot.first { it != null } }
+                instrumentation.runOnMainSync { page.finish() }
+                instrumentation.waitForIdleSync()
+                val awayAt = System.currentTimeMillis()
+                val awayElapsed = SystemClock.elapsedRealtime()
+
+                val recorded = checkNotNull(withTimeout(25_000L) {
+                    recorder.snapshot.first { reading ->
+                        reading != null && reading.history.any { it.time >= awayAt + DashboardHistory.INTERVAL_MS }
+                    }
+                })
+                assertNull("Background history must be saved successfully", recorded.historyError)
+                val rpmWhileAway = recorder.rpmHistory.since(
+                    SystemClock.elapsedRealtime(), EngineRpmHistory.FIVE_MINUTES_MS,
+                ).filter { it.timeMs >= awayElapsed }
+                assertTrue("RPM polling must continue without a dashboard", rpmWhileAway.size > 10)
+                assertTrue("RPM must still be collected at the end of the hidden interval",
+                    rpmWhileAway.last().timeMs >= awayElapsed + DashboardHistory.INTERVAL_MS)
+
+                open(samples = false)
+                val returnedRpm = recorder.rpmHistory.since(
+                    SystemClock.elapsedRealtime(), EngineRpmHistory.FIVE_MINUTES_MS,
+                )
+                assertTrue("Returning to Dashboard must retain the hidden interval", returnedRpm.containsAll(rpmWhileAway))
+                DashboardHistoryStorage(context).use { storage ->
+                    val (start, end) = DashboardHistory.dayBounds(recorded.time)
+                    assertTrue("Hidden-page samples must persist locally",
+                        storage.load(start, end).any { it.time >= awayAt + DashboardHistory.INTERVAL_MS })
+                }
             }
             instrumentation.waitForIdleSync()
             onView(withId(R.id.fridgeDetailsColumns)).inRoot(isDialog()).check { root, error ->
@@ -455,6 +497,55 @@ class DashboardActivityTest {
 
             }
         }
+    }
+
+    @Test fun batteryRangesShareOneRowAndDetailsShowTheLastFuelFillTimestamp() {
+        AppSettings(context).dashboardCards = listOf(DashboardCard.BATTERY)
+        val page = open(samples = true)
+        instrumentation.runOnMainSync {
+            page.bindDashboardBattery(BydVehicleInfoController.BatteryInfo(
+                bound = true, evRangeKm = 148.0, fuelRangeKm = 640.0, combinedRangeKm = 788.0,
+            ))
+        }
+        instrumentation.waitForIdleSync()
+        instrumentation.runOnMainSync {
+            val rows = page.findViewById<LinearLayout>(R.id.infoBlockRows)
+            assertEquals(3, rows.childCount)
+            val ranges = rows.getChildAt(2) as LinearLayout
+            assertEquals(LinearLayout.HORIZONTAL, ranges.orientation)
+            assertEquals(5, ranges.childCount)
+            val expected = listOf(
+                R.string.vehicle_info_row_ev_range to "148 km",
+                R.string.vehicle_info_row_fuel_range to "640 km",
+                R.string.vehicle_info_row_combined to "788 km",
+            )
+            expected.forEachIndexed { index, (label, value) ->
+                val range = ranges.getChildAt(index * 2)
+                assertEquals(page.getString(label), range.findViewById<TextView>(R.id.infoRowLabel).text.toString())
+                assertEquals(value, range.findViewById<TextView>(R.id.infoRowValue).text.toString())
+                if (index > 0) {
+                    val separator = ranges.getChildAt(index * 2 - 1)
+                    assertTrue(separator.width > 0)
+                    assertTrue(ranges.getChildAt((index - 1) * 2).right < range.left)
+                }
+            }
+            assertTrue((page.findViewById<View>(R.id.infoBlockRows).parent as View).performClick())
+        }
+        instrumentation.waitForIdleSync()
+        onView(withId(R.id.dashboardLastFuelFill)).inRoot(isDialog()).check { view, error ->
+            if (error != null) throw error
+            page.bindLastFuelFill(null)
+            assertEquals(page.getString(R.string.dashboard_last_fuel_fill,
+                page.getString(R.string.dashboard_fuel_fill_unknown)), (view as TextView).text.toString())
+            val timestamp = 1_700_000_000_000L
+            page.bindLastFuelFill(timestamp)
+            val date = java.util.Date(timestamp)
+            val formatted = "${android.text.format.DateFormat.getDateFormat(page).format(date)} " +
+                android.text.format.DateFormat.getTimeFormat(page).format(date)
+            assertEquals(page.getString(R.string.dashboard_last_fuel_fill, formatted), view.text.toString())
+        }
+        onView(withId(R.id.dashboardDetailsClose)).inRoot(isDialog()).perform(click())
+        onView(withId(R.id.dashboardLastFuelFill)).check(doesNotExist())
     }
 
     @Test fun batteryTripMarkersShowDepartureLevelsAndMutedNetUsage() {

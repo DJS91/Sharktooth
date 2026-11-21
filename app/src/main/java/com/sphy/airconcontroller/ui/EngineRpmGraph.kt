@@ -14,14 +14,14 @@ internal class EngineRpmHistory {
 
     private val readings = ArrayDeque<Sample>()
 
-    fun record(timeMs: Long, rpm: Double?) {
+    @Synchronized fun record(timeMs: Long, rpm: Double?) {
         while (readings.firstOrNull()?.let { it.timeMs < timeMs - MAX_HISTORY_MS } == true) {
             readings.removeFirst()
         }
         readings.addLast(Sample(timeMs, rpm?.takeIf { it.isFinite() && it >= 0 }))
     }
 
-    fun since(timeMs: Long, rangeMs: Long): List<Sample> =
+    @Synchronized fun since(timeMs: Long, rangeMs: Long): List<Sample> =
         readings.asReversed().takeWhile { it.timeMs >= timeMs - rangeMs }.asReversed()
 
     companion object {

@@ -10,6 +10,8 @@ import com.sphy.airconcontroller.dikey.LedPosition
 import com.sphy.airconcontroller.lighting.LightingPeriod
 import com.sphy.airconcontroller.ui.DashboardCard
 import com.sphy.airconcontroller.ui.TripUsageTracker
+import com.sphy.airconcontroller.ui.FuelFillTracker
+import com.sphy.airconcontroller.byd.BydAdasController
 
 /** Which ADAS editor mode is selected in the ADAS screen. */
 enum class AdasEditMode {
@@ -50,6 +52,8 @@ data class AdasCustomProfile(
     val laneDeparture: String = "BOTH",
     val aeb: Boolean = true,
     val dms: Boolean = true,
+    /** Null preserves the vehicle's FCW setting until the user opts into configuring it. */
+    val forwardCollision: BydAdasController.ForwardCollisionMode? = null,
 )
 
 data class PetModeProfile(
@@ -105,6 +109,19 @@ class AppSettings(context: Context) {
         }
 
     internal data class PedalPeaks(val accelerator: Float?, val brake: Float?)
+
+    internal var fuelFillState: FuelFillTracker.State
+        get() = FuelFillTracker.State(
+            baselinePct = Double.fromBits(prefs.getLong("fuel_fill_baseline", Double.NaN.toBits()))
+                .takeIf { it.isFinite() && it in 0.0..100.0 },
+            lastFillAtMs = prefs.getLong("fuel_fill_last_at", -1L).takeIf { it >= 0 },
+        )
+        set(value) {
+            prefs.edit()
+                .putLong("fuel_fill_baseline", (value.baselinePct ?: Double.NaN).toBits())
+                .putLong("fuel_fill_last_at", value.lastFillAtMs ?: -1L)
+                .apply()
+        }
 
     internal fun recordPedalPeaks(day: Long, accelerator: Double?, brake: Double?): PedalPeaks {
         val sameDay = prefs.getLong("pedal_peak_day", Long.MIN_VALUE) == day
@@ -459,6 +476,11 @@ class AppSettings(context: Context) {
             laneDeparture = prefs.getString(KEY_ADAS_CUSTOM_LDA, "BOTH") ?: "BOTH",
             aeb = prefs.getBoolean(KEY_ADAS_CUSTOM_AEB, true),
             dms = prefs.getBoolean(KEY_ADAS_CUSTOM_DMS, true),
+            forwardCollision = prefs.getString(KEY_ADAS_CUSTOM_FCW, null)?.let { name ->
+                BydAdasController.ForwardCollisionMode.entries.firstOrNull { it.name == name }.also {
+                    if (it == null) Log.w("AppSettings", "Ignoring unknown FCW mode: $name")
+                }
+            },
         )
     }
 
@@ -468,6 +490,7 @@ class AppSettings(context: Context) {
             .putString(KEY_ADAS_CUSTOM_LDA, profile.laneDeparture)
             .putBoolean(KEY_ADAS_CUSTOM_AEB, profile.aeb)
             .putBoolean(KEY_ADAS_CUSTOM_DMS, profile.dms)
+            .putString(KEY_ADAS_CUSTOM_FCW, profile.forwardCollision?.name)
             .apply()
     }
 
@@ -748,6 +771,7 @@ class AppSettings(context: Context) {
         private const val KEY_ADAS_CUSTOM_LDA = "adas_custom_lda"
         private const val KEY_ADAS_CUSTOM_AEB = "adas_custom_aeb"
         private const val KEY_ADAS_CUSTOM_DMS = "adas_custom_dms"
+        private const val KEY_ADAS_CUSTOM_FCW = "adas_custom_fcw"
         private const val KEY_ADAS_APPLY_ON_BOOT = "adas_apply_on_boot"
         private const val KEY_OPEN_APP_ON_BOOT = "open_app_on_boot"
         private const val KEY_WIFI_SSID = "wifi_ssid"

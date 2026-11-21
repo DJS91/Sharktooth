@@ -43,6 +43,7 @@ class DiKeyListenService : Service() {
         startAsForeground()
         OpenDiKeyApp.from(this).dikey.start()
         OpenDiKeyApp.from(this).telemetry.start(scope)
+        OpenDiKeyApp.from(this).dashboardRecorder.start(scope)
         BootAppLauncher.attach(this)
         CONNECT_RETRY_MS.forEach { delayMs ->
             main.postDelayed({ OpenDiKeyApp.from(this).dikey.ensureConnected() }, delayMs)

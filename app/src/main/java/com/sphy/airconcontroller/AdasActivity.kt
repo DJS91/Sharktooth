@@ -33,6 +33,8 @@ class AdasActivity : HomeActivity() {
     private lateinit var aebOn: Button
     private lateinit var dmsOff: Button
     private lateinit var dmsOn: Button
+    private lateinit var fcwButtons: Map<BydAdasController.ForwardCollisionMode, Button>
+    private lateinit var fcwHint: TextView
 
     private var bound = false
 
@@ -55,6 +57,13 @@ class AdasActivity : HomeActivity() {
         aebOn = findViewById(R.id.adasAebOnButton)
         dmsOff = findViewById(R.id.adasDmsOffButton)
         dmsOn = findViewById(R.id.adasDmsOnButton)
+        fcwHint = findViewById(R.id.adasFcwHint)
+        fcwButtons = mapOf(
+            BydAdasController.ForwardCollisionMode.LATE to R.id.adasFcwLateButton,
+            BydAdasController.ForwardCollisionMode.MODERATE to R.id.adasFcwModerateButton,
+            BydAdasController.ForwardCollisionMode.EARLY to R.id.adasFcwEarlyButton,
+            BydAdasController.ForwardCollisionMode.OFF to R.id.adasFcwOffButton,
+        ).mapValues { findViewById(it.value) }
 
         findViewById<android.widget.ImageButton>(R.id.adasBackButton).setOnClickListener {
             finish()
@@ -84,6 +93,7 @@ class AdasActivity : HomeActivity() {
         aebOn.setOnClickListener { onAeb(true) }
         dmsOff.setOnClickListener { onDms(false) }
         dmsOn.setOnClickListener { onDms(true) }
+        fcwButtons.forEach { (mode, button) -> button.setOnClickListener { onFcw(mode) } }
         applyButton.setOnClickListener { applyCustomProfile() }
     }
 
@@ -138,6 +148,15 @@ class AdasActivity : HomeActivity() {
         }
     }
 
+    private fun onFcw(mode: BydAdasController.ForwardCollisionMode) {
+        if (isCustom()) {
+            updateCustom { it.copy(forwardCollision = mode) }
+        } else {
+            markFcw(mode)
+            runLive(getString(R.string.adas_fcw_title)) { adas.setForwardCollisionWarning(mode) }
+        }
+    }
+
     private fun updateCustom(transform: (AdasCustomProfile) -> AdasCustomProfile) {
         settings.saveAdasCustomProfile(transform(settings.adasCustomProfile()))
         renderCustom(settings.adasCustomProfile())
@@ -167,7 +186,7 @@ class AdasActivity : HomeActivity() {
             getString(R.string.adas_lda_title),
             getString(R.string.adas_aeb_title),
             getString(R.string.adas_dms_title),
-        )
+        ) + if (profile.forwardCollision != null) listOf(getString(R.string.adas_fcw_title)) else emptyList()
         lifecycleScope.launch {
             applyButton.isEnabled = false
             val results = withContext(Dispatchers.IO) { adas.applyCustomProfile(profile) }
@@ -214,7 +233,7 @@ class AdasActivity : HomeActivity() {
             bound = snap.diPilotBound || snap.sdkInjected
             statusText.text = when {
                 !snap.sdkInjected -> getString(R.string.adas_status_no_sdk)
-                !snap.diPilotBound && snap.aeb == null && snap.driverMonitor == null ->
+                !snap.diPilotBound && snap.aeb == null && snap.driverMonitor == null && snap.forwardCollision == null ->
                     getString(R.string.adas_status_unbound, snap.bindError ?: "—")
                 else -> getString(R.string.adas_subtitle_default)
             }
@@ -223,6 +242,10 @@ class AdasActivity : HomeActivity() {
             markOnOff(aebOff, aebOn, snap.aeb)
             markOnOff(dmsOff, dmsOn, snap.driverMonitor)
             markLane(snap.laneDeparture)
+            markFcw(snap.forwardCollision)
+            fcwButtons.values.forEach { it.isEnabled = bound && snap.forwardCollision != null }
+            fcwHint.visibility = if (snap.forwardCollision == null) View.VISIBLE else View.GONE
+            fcwHint.setText(R.string.adas_fcw_unavailable)
         }
     }
 
@@ -231,6 +254,9 @@ class AdasActivity : HomeActivity() {
         markOnOff(aebOff, aebOn, profile.aeb)
         markOnOff(dmsOff, dmsOn, profile.dms)
         markLane(laneMode(profile.laneDeparture))
+        markFcw(profile.forwardCollision)
+        fcwHint.visibility = if (profile.forwardCollision == null) View.VISIBLE else View.GONE
+        fcwHint.setText(R.string.adas_fcw_unchanged)
     }
 
     private fun laneMode(name: String): BydAdasController.LaneDepartureMode =
@@ -242,6 +268,11 @@ class AdasActivity : HomeActivity() {
             elkaOff, elkaOn, ldaOff, ldaWarning, ldaPrevent, ldaBoth,
             aebOff, aebOn, dmsOff, dmsOn,
         ).forEach { it.isEnabled = enabled }
+        fcwButtons.values.forEach { it.isEnabled = enabled }
+    }
+
+    private fun markFcw(mode: BydAdasController.ForwardCollisionMode?) {
+        fcwButtons.forEach { (option, button) -> button.alpha = if (option == mode) 1f else 0.55f }
     }
 
     private fun markOnOff(off: Button, on: Button, enabled: Boolean?) {

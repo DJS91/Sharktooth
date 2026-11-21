@@ -56,6 +56,18 @@ class BydAdasController(context: Context) {
         }
     }
 
+    enum class ForwardCollisionMode(val readRaw: Int, val writeRaw: Int) {
+        // Confirmed against OEM Settings; the SDK's PREDICT_CRASH_ALERT_* constants differ.
+        LATE(1, 2),
+        MODERATE(2, 3),
+        EARLY(3, 4),
+        OFF(0, 1);
+
+        companion object {
+            fun fromRaw(raw: Int?): ForwardCollisionMode? = entries.firstOrNull { it.readRaw == raw }
+        }
+    }
+
     data class CommandResult(
         val success: Boolean,
         val method: String?,
@@ -74,7 +86,21 @@ class BydAdasController(context: Context) {
         val aebRaw: Int?,
         val driverMonitor: Boolean?,
         val driverMonitorRaw: Int?,
-    )
+        val forwardCollision: ForwardCollisionMode? = null,
+        val forwardCollisionRaw: Int? = null,
+    ) {
+        internal fun compareProfile(profile: AdasCustomProfile): ProfileCheck {
+            if (!diPilotBound) return ProfileCheck.UNKNOWN
+            val lda = LaneDepartureMode.entries.firstOrNull { it.name == profile.laneDeparture }
+                ?: LaneDepartureMode.BOTH
+            val pairs = mutableListOf<Pair<Any?, Any?>>(
+                elka to profile.elka, laneDeparture to lda, aeb to profile.aeb, driverMonitor to profile.dms,
+            )
+            profile.forwardCollision?.let { pairs += forwardCollision to it }
+            if (pairs.any { (actual, expected) -> actual != null && actual != expected }) return ProfileCheck.MISMATCH
+            return if (pairs.any { it.first == null }) ProfileCheck.UNKNOWN else ProfileCheck.MATCH
+        }
+    }
 
     fun bind(): Boolean {
         lastBindError = null
@@ -127,8 +153,9 @@ class BydAdasController(context: Context) {
         val aebRaw = readInt("getAiEmergencyBrakeState")
             ?: pollFeature(FEATURE_AEB_STATE)
         val dmsRaw = readDriverMonitorRaw()
+        val fcwRaw = readForwardCollisionRaw()
 
-        Log.i(TAG, "snapshot ELKA=$elkaRaw LDA=$laneRaw AEB=$aebRaw DMC=$dmsRaw")
+        Log.i(TAG, "snapshot ELKA=$elkaRaw LDA=$laneRaw AEB=$aebRaw DMC=$dmsRaw FCW=$fcwRaw")
 
         return Snapshot(
             sdkInjected = injected,
@@ -142,6 +169,8 @@ class BydAdasController(context: Context) {
             aebRaw = aebRaw,
             driverMonitor = dmsRaw?.let { decodeDms(it) },
             driverMonitorRaw = dmsRaw,
+            forwardCollision = ForwardCollisionMode.fromRaw(fcwRaw),
+            forwardCollisionRaw = fcwRaw,
         )
     }
 
@@ -149,12 +178,13 @@ class BydAdasController(context: Context) {
     fun applyCustomProfile(profile: AdasCustomProfile): List<CommandResult> {
         val lda = LaneDepartureMode.entries.firstOrNull { it.name == profile.laneDeparture }
             ?: LaneDepartureMode.BOTH
-        return listOf(
-            setEmergencyLaneKeepAssist(profile.elka),
-            setLaneDepartureAssist(lda),
-            setAutomaticEmergencyBraking(profile.aeb),
-            setDriverMonitoringCamera(profile.dms),
-        )
+        return buildList {
+            add(setEmergencyLaneKeepAssist(profile.elka))
+            add(setLaneDepartureAssist(lda))
+            add(setAutomaticEmergencyBraking(profile.aeb))
+            add(setDriverMonitoringCamera(profile.dms))
+            profile.forwardCollision?.let { add(setForwardCollisionWarning(it)) }
+        }
     }
 
     /**
@@ -178,20 +208,7 @@ class BydAdasController(context: Context) {
      * from an unreadable/unbound state, so callers don't treat a transient failed read as "the car
      * was reset".
      */
-    fun compareProfile(profile: AdasCustomProfile): ProfileCheck {
-        val snap = snapshot()
-        if (!snap.diPilotBound) return ProfileCheck.UNKNOWN
-        val lda = LaneDepartureMode.entries.firstOrNull { it.name == profile.laneDeparture }
-            ?: LaneDepartureMode.BOTH
-        val pairs = listOf(
-            snap.elka to profile.elka,
-            snap.laneDeparture to lda,
-            snap.aeb to profile.aeb,
-            snap.driverMonitor to profile.dms,
-        )
-        if (pairs.any { (actual, expected) -> actual != null && actual != expected }) return ProfileCheck.MISMATCH
-        return if (pairs.any { it.first == null }) ProfileCheck.UNKNOWN else ProfileCheck.MATCH
-    }
+    fun compareProfile(profile: AdasCustomProfile): ProfileCheck = snapshot().compareProfile(profile)
 
     /**
      * Auto-apply path for a freshly started process (app launch, cold boot, restart after standby).
@@ -208,12 +225,17 @@ class BydAdasController(context: Context) {
         onLog("awaitReady -> $ready (carAssist/DMS binder wait, timeout=${READY_WAIT_MS}ms)")
         val lda = LaneDepartureMode.entries.firstOrNull { it.name == profile.laneDeparture }
             ?: LaneDepartureMode.BOTH
-        val steps: List<Pair<() -> CommandResult, () -> Boolean?>> = listOf(
+        val steps = mutableListOf<Pair<() -> CommandResult, () -> Boolean?>>(
             { setEmergencyLaneKeepAssist(profile.elka) } to { readElkaEnabled()?.let { it == profile.elka } },
             { setLaneDepartureAssist(lda) } to { readLaneDeparture()?.let { it == lda } },
             { setAutomaticEmergencyBraking(profile.aeb) } to { readAebEnabled()?.let { it == profile.aeb } },
             { setDriverMonitoringCamera(profile.dms) } to { readDmsEnabled()?.let { it == profile.dms } },
         )
+        profile.forwardCollision?.let { mode ->
+            steps += { setForwardCollisionWarning(mode) } to {
+                ForwardCollisionMode.fromRaw(readForwardCollisionRaw())?.let { it == mode }
+            }
+        }
         val results = steps.map { it.first() }.toMutableList()
         results.forEach { onLog("initial write ${it.method}: success=${it.success} (${it.detail})") }
 
@@ -377,6 +399,34 @@ class BydAdasController(context: Context) {
         )
     }
 
+    private fun fcwGetMethods(): List<String> =
+        if (bodyworkHasMessage(BODY_MSG_FCW_138) == true) {
+            listOf("getPredictCrashAlert138Mode", "getPredictCrashAlert32DMode")
+        } else {
+            listOf("getPredictCrashAlert32DMode", "getPredictCrashAlert138Mode")
+        }
+
+    private fun readForwardCollisionRaw(): Int? {
+        // The SDK returns zero while its adapter connects; zero is also the real Off value.
+        if (carAssist() == null) return null
+        return fcwGetMethods().firstNotNullOfOrNull { readInt(it) }
+    }
+
+    fun setForwardCollisionWarning(mode: ForwardCollisionMode): CommandResult {
+        val method = "setPredictCrashAlertMode"
+        if (!ensureDiPilot()) return CommandResult(false, method, lastBindError ?: "unbound")
+        if (ForwardCollisionMode.fromRaw(readForwardCollisionRaw()) == null) {
+            return CommandResult(false, method, "FCW state unavailable; no command sent")
+        }
+        val result = invokeCarAssist(method, mode.writeRaw) ?: setInt(diPilot, method, mode.writeRaw)
+        if (!result.success) return result
+        val verified = verifyAfterWrite(
+            mode.writeRaw, fcwGetMethods(), attempts = 6, retryDelayMs = 150L,
+            matched = { ForwardCollisionMode.fromRaw(it) == mode },
+        )
+        return result.copy(success = verified.success, detail = "${result.detail}; ${verified.detail}")
+    }
+
     fun setDriverMonitoringCamera(enabled: Boolean): CommandResult {
         if (!ensureDiPilot()) {
             return CommandResult(false, "DMC", lastBindError ?: "unbound")
@@ -464,7 +514,7 @@ class BydAdasController(context: Context) {
                 }
                 val viaAssist = invokeCarAssist(setMethod, value)
                 if (viaAssist != null) {
-                    val verified = verifyAfterWrite(value, getMethods, featureGetId, valueMatched)
+                    val verified = verifyAfterWrite(value, getMethods, featureGetId, matched = valueMatched)
                     if (verified.success) {
                         return CommandResult(true, "CarAssist.$setMethod", "value=$value ${verified.detail}")
                     }
@@ -842,14 +892,16 @@ class BydAdasController(context: Context) {
         wrote: Int,
         getMethods: List<String>,
         featureGetId: Int? = null,
+        attempts: Int = 3,
+        retryDelayMs: Long = 70L,
         matched: (Int) -> Boolean,
     ): CommandResult {
         var after: Int? = null
-        // Immediate read, then two short retries — Shark getters often lag the real apply.
-        for (attempt in 0 until 3) {
+        // Retry because Shark getters often lag the real apply.
+        for (attempt in 0 until attempts) {
             if (attempt > 0) {
                 try {
-                    Thread.sleep(70L)
+                    Thread.sleep(retryDelayMs)
                 } catch (_: InterruptedException) {
                 }
             }
@@ -889,7 +941,7 @@ class BydAdasController(context: Context) {
         val before = featureGetId?.let { pollFeature(it) }
         val setResult = setFeature(featureSetId, value)
         if (!setResult.success) return setResult
-        val verified = verifyAfterWrite(value, emptyList(), featureGetId, matched)
+        val verified = verifyAfterWrite(value, emptyList(), featureGetId, matched = matched)
         return if (verified.success) {
             CommandResult(true, "set($featureSetId)", "before=$before ${verified.detail}")
         } else {
@@ -1030,6 +1082,7 @@ class BydAdasController(context: Context) {
 
         /** Bodywork hasMessage id Settings uses to pick the 2F0 ELKA getter over 32F. */
         private const val BODY_MSG_ELKA_2F0 = 143
+        private const val BODY_MSG_FCW_138 = 112
 
         private const val COMMAND_SUCCESS = 0
         private val COMMAND_ERRORS = setOf(

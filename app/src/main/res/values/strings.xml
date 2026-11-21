@@ -413,6 +413,12 @@
   <string name="adas_auto_apply_cancel">Cancel</string>
   <string name="adas_elka_title">Emergency lane keep assist</string>
   <string name="adas_lda_title">Lane departure assist</string>
+  <string name="adas_fcw_title">Forward collision warning</string>
+  <string name="adas_fcw_late">Late</string>
+  <string name="adas_fcw_moderate">Moderate</string>
+  <string name="adas_fcw_early">Early</string>
+  <string name="adas_fcw_unchanged">FCW is left unchanged until you select an option for this profile.</string>
+  <string name="adas_fcw_unavailable">FCW state unavailable. Live controls are disabled.</string>
   <string name="adas_lda_off">Off</string>
   <string name="adas_lda_warning">Warning</string>
   <string name="adas_lda_prevent">Prevent</string>
